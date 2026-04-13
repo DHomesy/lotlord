@@ -10,6 +10,7 @@
     "dev": "npm run dev:api & npm run dev:web",
     "migrate:up": "node src/config/migrate.js",
     "seed": "node seeds/dev_seed.js",
+    "create-admin": "node scripts/create-admin.js",
     "test": "cross-env NODE_ENV=test jest --runInBand --forceExit",
     "lint": "eslint src/**/*.js",
     "format": "prettier --write src/**/*.js"

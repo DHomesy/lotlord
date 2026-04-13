@@ -12,10 +12,15 @@ const COOKIE_NAME = 'refreshToken';
  * - path: scoped to auth routes only — not sent with every API request
  */
 function cookieOptions() {
+  const isProd = env.NODE_ENV === 'production';
   return {
     httpOnly: true,
-    secure:   env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    secure:   isProd,
+    // 'lax' allows the cookie to be sent from www.lotlord.app → api.lotlord.app
+    // (same registrable domain, different subdomains). 'strict' would block it.
+    sameSite: isProd ? 'lax' : 'lax',
+    // Scope cookie to the root domain so both subdomains can access it in production
+    domain:   isProd ? '.lotlord.app' : undefined,
     path:     '/api/v1/auth',
     maxAge:   30 * 24 * 60 * 60 * 1000, // 30 days in ms
   };
