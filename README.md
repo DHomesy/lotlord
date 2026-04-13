@@ -1,9 +1,8 @@
-# Property Manager
+# LotLord
 
-A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications — with an AI-powered agent for tenant interactions.
+A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.0.0 — see [CHANGELOG.md](CHANGELOG.md) for release history.  
-**Contributing:** see [CONTRIBUTING.md](CONTRIBUTING.md) for branching, commit conventions, and the release checklist.
+**Version:** 1.2.0 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -32,7 +31,6 @@ A full-stack property management platform built for landlords to manage tenants,
 - [SES Email Setup](#ses-email-setup)
 - [Cost Awareness](#cost-awareness)
 - [Environment Variables](#environment-variables)
-- [Contributing / Developer Notes](#contributing--developer-notes)
 - [Changelog](CHANGELOG.md)
 
 ---
@@ -48,8 +46,8 @@ A full-stack property management platform built for landlords to manage tenants,
 
 ```bash
 # 1. Clone and install
-git clone <your-repo-url>
-cd property-manager
+git clone https://github.com/DHomesy/lotlord
+cd lotlord
 npm install
 
 # 2. Set up environment
@@ -340,7 +338,7 @@ leases
   deposit_status  TEXT DEFAULT 'held' CHECK (deposit_status IN ('held', 'returned', 'partial'))
   status          TEXT DEFAULT 'pending' CHECK (status IN ('active', 'expired', 'terminated', 'pending'))
   signed_at       TIMESTAMPTZ
-  document_url    TEXT  -- Google Drive link (→ S3 key at scale)
+  document_url    TEXT  -- S3 key
   created_at      TIMESTAMPTZ DEFAULT NOW()
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 ```
@@ -454,7 +452,7 @@ maintenance_requests
 maintenance_attachments
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
   request_id      UUID REFERENCES maintenance_requests(id)
-  file_url        TEXT NOT NULL  -- Google Drive link (→ S3 key at scale)
+  file_url        TEXT NOT NULL  -- S3 key
   file_name       TEXT
   file_type       TEXT
   uploaded_by     UUID REFERENCES users(id)
@@ -471,7 +469,7 @@ documents
   owner_id        UUID REFERENCES users(id)
   related_id      UUID   -- polymorphic: lease_id, unit_id, request_id, etc.
   related_type    TEXT   -- 'lease' | 'unit' | 'maintenance_request' | 'tenant'
-  file_url        TEXT NOT NULL  -- Google Drive link (→ S3 key at scale)
+  file_url        TEXT NOT NULL  -- S3 key
   file_name       TEXT
   file_type       TEXT
   category        TEXT CHECK (category IN ('lease', 'id', 'insurance', 'inspection', 'receipt', 'other'))
@@ -653,14 +651,14 @@ See **[CHANGELOG.md](CHANGELOG.md)** for the full versioned release history.
 - [x] **1. Project scaffold** — Node.js + Express, folder structure, middleware, route stubs
 - [x] **2. DB migrations** — 8 migration files covering all tables; run with `npm run migrate:up`
 - [x] **3. Config layer** — `src/config/env.js` (env validation), `src/config/db.js` (pg Pool + helpers)
-- [x] **4. Integration stubs** — AWS SES, Google Drive, Twilio, Stripe, OpenAI all stubbed under `src/integrations/`
+- [x] **4. Integration stubs** — AWS SES, S3, Twilio, Stripe, OpenAI all stubbed under `src/integrations/`
 - [x] **5. Scheduled jobs skeleton** — `src/jobs/index.js` with node-cron placeholders for rent reminders, late fees, lease expiry
 - [x] **6. Dev seed** — `seeds/dev_seed.js` — run `npm run seed` to populate test data
 - [x] **7. Auth** — `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh` (JWT + bcrypt)
 - [x] **8. Properties + Units CRUD** — full CRUD with role guards, vacancy checks
 - [x] **9. Tenants + Leases CRUD** — lease creation marks unit occupied; termination frees it; deposit auto-ledgered
 - [x] **10. Ledger + Manual payment recording** — append-only ledger, cash/check recording, late fee + rent charge generation
-- [x] **11. Maintenance requests** — CRUD + attachment upload via Google Drive
+- [x] **11. Maintenance requests** — CRUD + attachment upload via AWS S3
 - [x] **12. Email notifications** — NotificationService, template rendering, Gmail send
 - [x] **13. Scheduled jobs** — wire up cron jobs to real service calls
 - [x] **14. Stripe ACH** — SetupIntent (bank account onboarding), PaymentIntent creation, webhook handler with ledger reconciliation, migration 009 for `stripe_customer_id`
@@ -952,13 +950,13 @@ Estimated monthly cost at MVP/small scale (1–3 properties, ~20–50 tenants):
 
 | Service | Est. Monthly | Notes |
 |---|---|---|
-| Railway (Hobby) | ~$5 | API + PostgreSQL + Redis |
+| Railway (Hobby) | ~$5 | API + PostgreSQL |
 | AWS SES | ~$0.10/1k emails | Practically free at this scale |
-| Google Drive API | Free | 15GB included with Google account |
+| AWS S3 | ~$0.50 | Storage + data transfer at small scale |
 | Twilio SMS | ~$3–10 | $1/mo per number + $0.008/SMS |
 | OpenAI (GPT-4o-mini) | ~$5–30 | Biggest variable — depends on AI use |
 | Stripe | 0.8% per ACH txn | No monthly fee; cap $5 per transaction |
-| **Total** | **~$13–50/mo** | **~$156–600/yr** |
+| **Total** | **~$14–50/mo** | **~$168–600/yr** |
 
 > The AI agent is the main cost wildcard. Rate-limit AI replies per tenant and monitor token usage via the `ai_messages.tokens_used` column.
 
@@ -974,9 +972,6 @@ NODE_ENV=development
 # PostgreSQL
 DATABASE_URL=postgresql://user:password@host:port/dbname
 
-# Redis (BullMQ)
-REDIS_URL=redis://localhost:6379
-
 # Auth
 JWT_SECRET=your_jwt_secret_here
 
@@ -989,11 +984,8 @@ SES_REPLY_TO_ADDRESS=reply@lotlord.app
 SES_CONFIGURATION_SET=lotlord-config-set
 SES_WEBHOOK_SECRET=             # shared secret for Lambda→API auth
 
-# Google Drive
-GOOGLE_DRIVE_CLIENT_ID=
-GOOGLE_DRIVE_CLIENT_SECRET=
-GOOGLE_DRIVE_REFRESH_TOKEN=
-GOOGLE_DRIVE_FOLDER_ID=
+# AWS S3
+S3_BUCKET_NAME=lotlord-files
 
 # Twilio
 TWILIO_ACCOUNT_SID=
@@ -1003,18 +995,18 @@ TWILIO_PHONE_NUMBER=
 # Stripe
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_ID=price_...       # pro plan monthly price
 
 # OpenAI
 OPENAI_API_KEY=
 
-# --- Future / Uncomment when scaling ---
-# AWS_S3_BUCKET=
-# AWS_S3_REGION=us-east-1
+# Error alerting (production only)
+ALERT_EMAIL=
 ```
 
 ---
 
-## Contributing / Developer Notes
+## Developer Notes
 
 ### Folder Structure (Recommended)
 
@@ -1029,7 +1021,7 @@ property-manager/
 │   ├── queues/          # BullMQ queue definitions and workers
 │   ├── jobs/            # node-cron scheduled job definitions
 │   ├── middleware/      # auth, error handling, validation
-│   ├── integrations/    # Gmail, Google Drive, Twilio, Stripe, OpenAI wrappers
+│   ├── integrations/    # AWS SES, S3, Twilio, Stripe, OpenAI wrappers
 │   └── utils/           # shared helpers (date formatting, template rendering, etc.)
 ├── migrations/          # SQL migration files
 ├── seeds/               # Dev seed data
@@ -1052,15 +1044,15 @@ property-manager/
 
 1. **Controllers never query the database directly** — always go through a service or dal module
 2. **The `ledger_entries` table is immutable** — no UPDATE or DELETE, ever
-3. **All file URLs stored in the DB** point to Google Drive links now — when migrating to S3, update the `integrations/storage` module only, not the schema
+3. **All file URLs stored in the DB** point to S3 keys — update the `integrations/storage` module if switching S3 buckets
 4. **All email sending goes through `integrations/email`** — swapping Gmail → SES means changing one file
 5. **Background jobs must log to `notifications_log`** — this is how you audit what was sent and when
 6. **AI agent conversations must be stored** — every inbound and outbound message goes into `ai_messages` before any reply is sent
 
 ### Scaling Checklist (When Ready)
 
-- [ ] Swap `integrations/email/gmail.js` → `integrations/email/ses.js`
-- [ ] Swap `integrations/storage/googledrive.js` → `integrations/storage/s3.js`
+- [x] Swap `integrations/email/gmail.js` → `integrations/email/ses.js` (done)
+- [x] Swap `integrations/storage/googledrive.js` → `integrations/storage/s3.js` (done)
 - [ ] Migrate Railway PostgreSQL → Supabase or AWS RDS (schema is compatible)
 - [ ] Add `organizations` table for multi-landlord SaaS support
 - [ ] Move Redis/BullMQ to dedicated instance (Upstash or ElastiCache)

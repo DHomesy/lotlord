@@ -1,40 +1,51 @@
 # Changelog
 
-All notable changes to this project are documented here.
-
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).  
-Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html):  
-`MAJOR.MINOR.PATCH` — breaking change / new feature / bug fix.
+All notable changes are documented here.  
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
 ## [Unreleased]
 
-> Staged work not yet cut into a release.
+---
+
+## [1.2.0] — 2026-04-13 — Deployment, error alerting & auth hardening
+
+### Added
+- Railway deployment config (`railway.toml` for backend and `frontend/railway.toml`)
+- `scripts/create-admin.js` — idempotent superadmin bootstrap; `npm run create-admin`
+- `src/middleware/errorAlerter.js` — lightweight error monitoring via SES email on 5xx errors and unhandled process rejections; 10-minute per-error cooldown; no-ops in dev/test
+- `ALERT_EMAIL` env var — recipient for error alert emails
+- Tenant empty state on `/my/dashboard` — friendly card with navigation CTAs when no active lease exists
+- Connect onboarding banner on `ProfilePage` — persistent warning for landlords who haven't completed Stripe Connect setup
+
+### Fixed
+- Auth cookie `sameSite: 'strict'` blocked refresh cookie cross-subdomain (`www.lotlord.app` → `api.lotlord.app`); changed to `sameSite: 'lax'` with `domain: '.lotlord.app'`
+- Token refresh in `axios.js` used hardcoded relative URL `/api/v1/auth/refresh`; now resolves via `VITE_API_URL` for production cross-origin requests
+- `phone` empty string from React Hook Form failed `isMobilePhone()` in express-validator v7; all four validators updated to `optional({ values: 'falsy' })`
 
 ---
 
-## [1.1.0] — 2026-04-07 — Security audit, integration tests & repo cleanup
+## [1.1.0] — 2026-04-07 — Security audit, integration tests & maintenance/documents rework
 
 ### Added
-- Integration test suite: 11 suites, 51 tests across all major API domains (`auth`, `properties`, `units`, `tenants`, `leases`, `charges`, `payments`, `maintenance`, `ledger`, `invitations`, `documents`)
-- `src/lib/pagination.js` — `parsePagination()` utility; eliminates NaN offset when query params are strings; applied to all 12 DAL files
+- Integration test suite: 11 suites, 51 tests (`auth`, `properties`, `units`, `tenants`, `leases`, `charges`, `payments`, `maintenance`, `ledger`, `invitations`, `documents`)
+- `src/lib/pagination.js` — `parsePagination()` utility; eliminates NaN offset on paginated queries; applied across all 12 DAL files
+- `MaintenanceDetailDrawer` — full-detail drawer with photo grid, camera-ready upload (`capture="environment"`), lightbox, inline status/priority editing, file download and remove
+- `DocumentsPage` — tabbed view (All / Properties / Tenants / Leases / Units / Unlinked), client-side search, upload dialog with entity-link pickers
+- `StatusChip` — added `completed` and `cancelled` maintenance statuses
+- `migrations/023_documents_extended_types.sql` — adds `'property'` to `documents.related_type`; adds `'photo'` and `'notice'` to `documents.category`
 
 ### Fixed
-- `middleware/auth.js` — `pool` was never imported, causing `ReferenceError` in `checkFreeTierLimit`; replaced with `query` from `../config/db`
-- `app.js` — added `trust proxy 1` so `req.ip` and the rate limiter see the real client IP behind a load balancer
-- `services/stripeService.js` — removed hardcoded `'0.0.0.0'` in ACH mandate `ip_address`; now uses the `ipAddress` param resolved from `req.ip`
-- `controllers/paymentController.js` — both admin and tenant payment-intent paths now pass `ipAddress: req.ip` to Stripe
-- `dal/documentRepository.js` — `findByIdForTenant` was more permissive than `findAll`; unified to `uploaded_by` check (IDOR fix)
-- `services/notificationService.js` — added `escapeHtml()` and channel-aware `renderTemplate`; all user-controlled values in email templates are HTML-escaped
-- `controllers/tenantController.js` — removed inline `require()` calls that shadowed top-level imports and re-required on every request
-- `routes/payments.js` — added `authorize('tenant')` to all three `/me` routes
-- `routes/tenants.js` — added `authorize('tenant')` to `GET /me` (previously a landlord received a confusing 404)
-- `controllers/authController.js` — exports `cookieOptions`/`COOKIE_NAME` so the existing import in `invitationController.js` resolves at runtime
+- 9 rounds of IDOR, multi-tenant data leak, and crash fixes across all API domains
+- `middleware/auth.js` — `pool` was never imported; replaced with `query` from `../config/db`
+- `app.js` — added `trust proxy 1` so `req.ip` reflects real client IP behind Railway's load balancer
+- `controllers/authController.js` — exports `cookieOptions`/`COOKIE_NAME` so `invitationController.js` import resolves at runtime
 - `dal/userRepository.js` — `findBillingStatus` now includes `AND deleted_at IS NULL`
+- `MaintenancePage` — `onRowClick` receives `GridRowParams`; was using whole object instead of `params.row`
 
 ### Removed
-- `IMPLEMENTATION-PLAN.md`, `Future-Changes.txt`, `MVP-CHECKLIST.md` — stale planning docs; superseded by ROADMAP.md and CHANGELOG.md
+- `IMPLEMENTATION-PLAN.md`, `Future-Changes.txt`, `MVP-CHECKLIST.md` — superseded by ROADMAP.md and CHANGELOG.md
 
 ---
 
@@ -42,129 +53,35 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
 
 ### Added
 
-#### Foundation
-- Node.js + Express API server with layered architecture (Routes → Controllers → Services → DAL)
-- 20 PostgreSQL migrations covering all tables (`users`, `properties`, `units`, `tenants`, `leases`, `rent_charges`, `rent_payments`, `ledger_entries`, `maintenance_requests`, `maintenance_attachments`, `documents`, `notification_templates`, `notifications_log`, `ai_conversations`, `ai_messages`, `tenant_invitations`, `audit_log`)
-- Environment validation via `src/config/env.js`; connection pool via `src/config/db.js`
-- Dev seed (`npm run seed`) — creates admin, landlord, and tenant test accounts with a full property/unit/lease/charge dataset
-- Scheduled jobs: rent reminders, late fee application, lease expiry warnings (node-cron)
+#### Backend
+- Node.js + Express API — layered architecture (Routes → Controllers → Services → DAL)
+- 22 PostgreSQL migrations covering all tables
+- Environment validation (`src/config/env.js`), connection pool (`src/config/db.js`), custom migration runner
+- Scheduled cron jobs: rent reminders (daily 8am), late fees (daily 9am), lease expiry warnings (weekly)
+- JWT auth — 15-minute access token (memory) + 30-day httpOnly refresh cookie; roles: `admin`, `landlord`, `tenant`
+- Tenant invitation system — crypto-random tokens, email + SMS delivery, 7-day expiry, pre-filled signup form
+- Full CRUD: properties, units, tenants, leases, charges, payments, maintenance requests, documents
+- Append-only financial ledger with running balance; portfolio analytics endpoint
+- Stripe ACH payments — setup intent, payment intent, webhook (`payment_intent.succeeded/failed`), duplicate-payment prevention
+- Stripe Connect — landlord bank account onboarding and payout routing (0.8%, capped $5)
+- Stripe Subscriptions — free vs pro tier; `requiresPro` middleware gates analytics and ACH
+- AWS SES email (outbound + inbound webhook parsing), Twilio SMS (outbound + inbound webhook)
+- Two-way messaging with notification templates, variable substitution, and per-tenant opt-in
+- Audit log — append-only, all key actions instrumented, admin-only query endpoint
+- Rate limiting — 20 req/15min on auth routes, 200 req/15min elsewhere
+- Helmet security headers, CORS origin whitelist, Stripe webhook signature validation
+- `GET /health` — DB connectivity check, version, uptime
 
-#### Authentication & Users
-- `POST /auth/register` — role-selection at signup (`landlord` or `tenant`); tenant self-signup auto-creates a `tenants` row
-- `POST /auth/login` / `POST /auth/refresh` — JWT access token (15 min, JS memory) + httpOnly refresh cookie (30 days)
-- `PATCH /users/:id` / `PATCH /users/me` — profile update (name, phone, avatar)
-- `POST /users/me/password` — password change (bcrypt, requires current password)
-- Three roles: `admin` (full access), `landlord` (scoped to own properties), `tenant` (scoped to own lease)
-
-#### Tenant Invitation System
-- Crypto-random invite tokens; `POST /invitations` → sends email + SMS with signup link
-- Public `GET /invitations/:token` pre-fills name/email/unit; `POST /invitations/:token/accept` auto-creates user + tenant, returns JWT
-- Admin `TenantsPage` shows pending invitations table with status chips
-
-#### Properties & Units
-- Full CRUD for properties and units with role guards (admin/landlord)
-- Unit status lifecycle: `vacant` → `occupied` (lease creation) → `vacant` (lease termination / expiry); `maintenance` blocks lease creation
-- `PropertyDetailPage` — per-unit Edit, vacancy summary chips, `sq_ft` column
-
-#### Tenant & Lease Management
-- Full CRUD for tenants and leases
-- Lease creation auto-marks unit occupied and appends deposit `ledger_entries` row
-- Lease termination frees the unit and appends a credit entry if deposit unreturned
-- `LeasesPage` — Active/Archived toggle; archived count badge
-- `EditLeasePage` — generates missing monthly rent charges; skips months that already exist (no duplicates)
-- Smart pickers: `UnitPicker`, `TenantPicker`, `LeasePicker` — searchable MUI Autocomplete components (no more raw UUID inputs)
-
-#### Financial Ledger
-- Append-only `ledger_entries` — source of truth for running tenant balance
-- `GET /ledger?leaseId=` — full journal with `balance_after` and actor name
-- `GET /ledger/portfolio` — income statement (admin sees all; landlord scoped to own properties)
-- `LedgerPage` — requires lease selection; current-balance chip with colour coding
-
-#### Charges
-- `GET /charges` — filterable by `leaseId`, `unitId`, `tenantId`, `propertyId`; computed `status` field: `voided` | `paid` | `pending` | `unpaid`
-- Charge status uses a `LATERAL` join to prioritise `completed` over `pending` payments — prevents double-payment display
-- `POST /charges/:id/void` — soft-delete; appends a `credit` ledger entry if lease-linked; blocks void if a completed payment exists
-- Tenant `ChargesPage` — Outstanding/All tabs; Pay button hidden for non-`unpaid` charges
-
-#### Stripe ACH Payments
-- `POST /payments/stripe/setup-intent` / `setup-intent/me` — bank account onboarding (Financial Connections)
-- `POST /payments/stripe/payment-intent` / `payment-intent/me` — charge a saved bank account (0.8%, capped at $5)
-- `GET /payments/stripe/payment-methods/me` — tenant lists own saved bank accounts
-- Duplicate payment prevention: `createMyPaymentIntent` returns HTTP 409 if a pending or completed payment already exists for the charge
-- Stripe webhook (`payment_intent.succeeded` / `payment_intent.payment_failed`) — updates `rent_payments.status` and appends `ledger_entries`
-- `ConnectBankDialog` — Stripe Elements + `<PaymentElement>` (`us_bank_account`); Begin → connect → Success flow
-
-#### Manual Payments
-- `POST /payments` — admin records cash/check payment; appends ledger entry
-
-#### Maintenance
-- Full CRUD for maintenance requests; `assigned_to` staff/contractor field
-- Tenant maintenance photo uploads — up to 5 files (20 MB each); `capture="environment"` for mobile rear camera; two-step submit (create → parallel upload)
-- Admin attachment upload via Google Drive
-
-#### Documents
-- `GET/POST/DELETE /documents` — polymorphic (lease, unit, maintenance, tenant); Google Drive storage
-
-#### Email & SMS Notifications
-- Gmail API outbound (`sendEmail`, `sendAllChannels`)
-- Twilio SMS outbound (`sendSmsAdhoc`); inbound webhook with signature verification
-- Gmail Push inbound (Google Cloud Pub/Sub → `POST /webhooks/gmail`); `gmailWatch` daily renewal job
-- Notification templates — full CRUD UI; variable picker with descriptions; RHF Controller selects (no stale-value bug)
-
-#### Unified Messaging
-- Conversation view (`GET/POST /notifications/messages`, `GET /notifications/messages/:tenantId`)
-- `MessagesPage` — split-pane conversation list + thread view + compose form (collapses to single-view on mobile)
-- New Message button + `NewConversationDialog` + `TenantPicker` for starting first contact
-- Tenant opt-in (`email_opt_in`, `sms_opt_in`) — set at invite acceptance; `sendMessage` gated on opt-in; warning shown in compose area if opted out
-
-#### Analytics
-- `GET /analytics/dashboard` — monthly income, unpaid dues, occupancy rate, last 5 payments, last 5 open maintenance requests
-- `DashboardPage` — 4 stat cards (Monthly Income, Unpaid Dues, Occupancy Rate, Open Maintenance) + two Recent Activity tables
-
-#### Audit Log
-- `audit_log` table (migration 020) — append-only; `user_id`, `action`, `resource_type`, `resource_id`, `metadata` JSONB, `ip_address`
-- Fire-and-forget `auditService.log()` — errors swallowed so audit never crashes the primary request
-- Instrumented: `user_registered`, `user_login`, `charge_created`, `charge_voided`, `payment_initiated`, `payment_succeeded`, `payment_failed`, `payment_manual_created`, `lease_created`, `lease_terminated`, `lease_status_changed`, `maintenance_request_created`
-- `GET /api/v1/audit` — admin-only; filterable by `resourceType`, `action`, `userId`, `resourceId`, `startDate`, `endDate`, `page`, `limit`
-- `AuditLogPage` — filter bar + DataTable + MetadataDialog (full JSON)
-
-#### Admin Portal (React SPA)
-- 14 pages: Dashboard, Properties, Property Detail, Tenants, Tenant Detail, Leases, Edit Lease, Ledger, Charges, Payments, Maintenance, Documents, Messages, Notification Templates, Audit Log, Users, Profile
-- `AdminShell` — permanent sidebar on desktop; hamburger drawer on mobile
-- `Sidebar` — role-aware nav entries (admin-only: Audit Log)
-- `AdminProfilePage` — edit name/phone, change password, connect bank account (ACH receive)
-
-#### Tenant Portal (React SPA)
-- 5 pages: Dashboard, Charges, Maintenance, Documents, Profile
-- `TenantShell` — scrollable tab bar (sm+); `BottomNavigation` on mobile (xs)
-- `TenantProfilePage` — profile edit, password change, bank account (ACH) connection (Billing section)
-- `ChargesPage` — Outstanding/All charge tabs + Payment History; duplicate-payment-safe Pay button
-
-#### Infrastructure & DX
-- Vite 7 dev proxy (`/api/v1/*` → Express) — no CORS config in development
-- TanStack Query v5 — one hook file per domain; `queryClient` invalidation after mutations
-- Zustand auth store — `{ user, token, setAuth, clearAuth }`
-- Axios instance — Bearer token injection + silent 401 → refresh → retry interceptor
-- React Hook Form + Zod — all create/edit dialogs
-- `<Bootstrap>` silent-refresh gate — no flash of login screen on reload
-- `<ProtectedRoute>` — role-based access guard with `allowedRoles` array
-- `StatusChip`, `DataTable`, `ConfirmDialog`, `LoadingOverlay`, `ErrorBoundary`, `PageContainer` shared components
-- `/health` endpoint — `{ status, version, env }`
-
-### Fixed (pre-1.0.0 issues resolved during development)
-- Tenant creation `userId` error — handled via invitation flow
-- `$NaN` amounts in payments and leases tables — number formatting corrected
-- Maintenance form `unitId` / `category` validation errors as tenant
-- Maintenance list showed raw UUID — now shows property address + unit number
-- `MessagesPage` empty on first use — added New Message button + `NewConversationDialog`
-- Template dialog showed stale form on reopen — `key` prop forces RHF remount
-- Template selects submitted wrong value — replaced with RHF `Controller`
-- Lease edit generated duplicate charges — now computes missing months only
-- Ledger page showed nothing — added `LeasePicker` requirement; corrected column field names
-- Tenant mobile nav didn't collapse — `BottomNavigation` on xs, scrollable tabs on sm+
-- `PropertyDetailPage` crash on unit click — `useMemo` called after early return (Rules of Hooks); moved above return
-- Tenant charges page showed nothing — default tab changed from Outstanding to All
-- Admin mobile horizontal scroll — `DataTable` wrapped in `overflowX: auto`; `AdminShell` gains `minWidth: 0`
+#### Frontend
+- React 19 + Vite 7 + MUI v6
+- Admin portal — 14 pages: Dashboard, Properties, Property Detail, Tenants, Tenant Detail, Leases, Edit Lease, Ledger, Charges, Payments, Maintenance, Documents, Messages, Notification Templates, Audit Log, Users, Profile
+- Tenant portal — 5 pages: Dashboard, Charges, Maintenance, Documents, Profile
+- Responsive layout — hamburger drawer on mobile (admin), bottom navigation on mobile (tenant)
+- TanStack Query v5, Zustand auth store, React Hook Form + Zod, Axios with silent 401 → refresh → retry
+- Stripe Elements — `ConnectBankDialog` for ACH bank account setup
+- Getting Started checklist on Dashboard — auto-hides when all setup steps complete
+- Forgot password / reset password flow
+- Terms of Service + Privacy Policy acceptance at registration and invitation acceptance
 
 ---
 
@@ -172,9 +89,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
 
 | Version | Date | Summary |
 |---|---|---|
-| 1.0.0 | 2026-03-23 | Initial MVP release |
+| 1.2.0 | 2026-04-13 | Deployment, error alerting & auth hardening |
+| 1.1.0 | 2026-04-07 | Security audit, integration tests & maintenance/documents rework |
+| 1.0.0 | 2026-03-23 | MVP release |
 
 ---
 
-[Unreleased]: https://github.com/your-org/property-manager/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/your-org/property-manager/releases/tag/v1.0.0
+[Unreleased]: https://github.com/DHomesy/lotlord/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/DHomesy/lotlord/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/DHomesy/lotlord/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/DHomesy/lotlord/releases/tag/v1.0.0
