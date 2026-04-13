@@ -1,0 +1,1852 @@
+{
+  "info": {
+    "name": "Property Manager API",
+    "description": "Complete API collection for the Property Manager platform.\n\n**Setup:**\n1. Set the `baseUrl` variable to your server (default: `http://localhost:3002`)\n2. Run **Auth / Login** — the `authToken` variable is set automatically via the test script\n3. All subsequent requests use `{{authToken}}` in the Bearer header automatically",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3002",
+      "type": "default"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "propertyId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "unitId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "tenantId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "leaseId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "paymentId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "chargeId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "setupIntentId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "paymentIntentId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "stripeCustomerId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "maintenanceId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "attachmentId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "notificationTemplateId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "notificationLogId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "conversationId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "invitationToken",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "invitationId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "webhookSecret",
+      "value": "",
+      "type": "default"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "default"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Verify the server is running. No auth required."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\",\n  \"firstName\": \"Admin\",\n  \"lastName\": \"User\",\n  \"phone\": \"+15550000001\",\n  \"role\": \"admin\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Register a new user. Role can be `admin`, `tenant`, or `staff`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const json = pm.response.json();",
+                  "  pm.collectionVariables.set('authToken', json.token);",
+                  "  pm.collectionVariables.set('userId', json.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Login and receive a JWT. The token is automatically saved to `{{authToken}}`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.collectionVariables.set('authToken', json.token);",
+                  "  pm.collectionVariables.set('userId', json.user.id);",
+                  "  console.log('Token saved to {{authToken}}');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "refresh"]
+            },
+            "description": "No Authorization header needed. Reads the httpOnly `refreshToken` cookie set by login. Returns a new short-lived access token and rotates the cookie. Call this at app boot (page refresh) and whenever a 401 is received."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.collectionVariables.set('authToken', json.token);",
+                  "  if (json.user) pm.collectionVariables.set('userId', json.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "logout"]
+            },
+            "description": "Clears the httpOnly refreshToken cookie. No body or Authorization header required. The client should also discard its in-memory access token."
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "forgot-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Public. Sends a password-reset email if the address is registered. Always returns 200 to prevent user enumeration.\n\nCheck the `notification_log` table or the notifications log endpoint for the reset token in local dev."
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "reset-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"<paste_token_from_email>\",\n  \"password\": \"NewSecurePass123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Public. Consumes the one-time reset token and sets the new password. Token expires after 1 hour. Returns 400 if the token is invalid or expired."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get Current User (me)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "me"]
+            },
+            "description": "Returns the profile of the currently authenticated user."
+          }
+        },
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users?page=1&limit=20&role=tenant",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "role", "value": "tenant", "description": "Filter by role: admin | tenant | staff" }
+              ]
+            },
+            "description": "Admin only. List all users with optional role filter."
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "{{userId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "{{userId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Smith\",\n  \"phone\": \"+15550001234\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Users can update their own profile. Admins can update any user."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Properties",
+      "item": [
+        {
+          "name": "List Properties",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/properties?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "properties"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Property",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/properties",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "properties"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Maple Apartments\",\n  \"addressLine1\": \"123 Maple Street\",\n  \"addressLine2\": \"\",\n  \"city\": \"Austin\",\n  \"state\": \"TX\",\n  \"zip\": \"78701\",\n  \"country\": \"US\",\n  \"propertyType\": \"multi\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only. `propertyType`: `single` | `multi` | `commercial`"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('propertyId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Property by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/properties/{{propertyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "properties", "{{propertyId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Property",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/properties/{{propertyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "properties", "{{propertyId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Maple Apartments (Updated)\",\n  \"city\": \"Austin\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only. Only include fields you want to change."
+          }
+        },
+        {
+          "name": "Delete Property",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/properties/{{propertyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "properties", "{{propertyId}}"]
+            },
+            "description": "Admin only. Will fail with 409 if the property still has units."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Units",
+      "item": [
+        {
+          "name": "List Units",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/units?propertyId={{propertyId}}&status=vacant&page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "units"],
+              "query": [
+                { "key": "propertyId", "value": "{{propertyId}}", "description": "Filter by property" },
+                { "key": "status", "value": "vacant", "description": "vacant | occupied | maintenance" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Unit",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/units",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "units"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"unitNumber\": \"101\",\n  \"floor\": 1,\n  \"bedrooms\": 2,\n  \"bathrooms\": 1,\n  \"sqFt\": 850,\n  \"rentAmount\": 1450.00,\n  \"depositAmount\": 1450.00,\n  \"status\": \"vacant\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('unitId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Unit by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/units/{{unitId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "units", "{{unitId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Unit",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/units/{{unitId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "units", "{{unitId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rentAmount\": 1500.00,\n  \"status\": \"maintenance\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only. `status`: `vacant` | `occupied` | `maintenance`"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tenants",
+      "item": [
+        {
+          "name": "List Tenants",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tenants"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "description": "Admin and staff only."
+          }
+        },
+        {
+          "name": "Create Tenant (internal)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tenants"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"emergencyContactName\": \"John Doe\",\n  \"emergencyContactPhone\": \"+15550000003\",\n  \"notes\": \"Preferred contact via email\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only. Links an already-existing user (role=tenant) to a tenant record. For the standard landlord workflow, use POST /invitations instead — that is the invite-based self-signup flow where the tenant sets their own password."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('tenantId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Tenant by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tenants", "{{tenantId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Tenant",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tenants", "{{tenantId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emergencyContactName\": \"Jane Doe\",\n  \"emergencyContactPhone\": \"+15550009999\",\n  \"notes\": \"Updated notes\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invitations",
+      "description": "Landlord-driven tenant invite flow.\n\n**Workflow:**\n1. Admin sends an invite (POST /) — email and/or SMS delivered automatically.\n2. Tenant clicks the link → validate token (GET /:token).\n3. Tenant completes signup (POST /:token/accept) → JWT returned, tenant auto-logged in.\n\nNo user or tenant record exists until step 3.",
+      "item": [
+        {
+          "name": "Send Invitation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invitations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invitations"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Smith\",\n  \"email\": \"jane.smith@example.com\",\n  \"phone\": \"+15550001234\",\n  \"unitId\": \"{{unitId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin/staff only. Creates a pending invitation and sends a signup link to the tenant via email and/or SMS.\n\nAt least one of `email` or `phone` is required. `unitId` is optional — if provided the tenant is automatically scoped to that unit after they sign up.\n\nNo user or tenant record is created at this point."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const json = pm.response.json();",
+                  "  pm.collectionVariables.set('invitationId', json.id);",
+                  "  pm.collectionVariables.set('invitationToken', json.token);",
+                  "  console.log('Invitation token saved. Signup URL: ' + pm.variables.get('baseUrl').replace(':3000', ':5173') + '/accept-invite/' + json.token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Invitations",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invitations?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invitations"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "description": "Admin/staff only. Returns all invitations (pending, accepted, expired) with property and unit context."
+          }
+        },
+        {
+          "name": "Validate Token (public)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invitations/{{invitationToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invitations", "{{invitationToken}}"]
+            },
+            "description": "Public — no auth required. Validates the token and returns pre-fill data (name, email, property, unit) for the signup form.\n\nReturns 404 if not found, 410 if already accepted or expired."
+          }
+        },
+        {
+          "name": "Accept Invitation — Tenant Signup (public)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invitations/{{invitationToken}}/accept",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invitations", "{{invitationToken}}", "accept"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Smith\",\n  \"email\": \"jane.smith@example.com\",\n  \"phone\": \"+15550001234\",\n  \"password\": \"SecurePass123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Public — no auth required. Tenant completes signup by providing their details and choosing a password.\n\nOn success: creates the user (role=tenant) and tenant record, marks the invitation accepted, and returns a JWT + user. The frontend uses this to auto-login the tenant.\n\nThe httpOnly refresh cookie is also set on the response — standard /auth/refresh flow works immediately after."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const json = pm.response.json();",
+                  "  pm.collectionVariables.set('authToken', json.token);",
+                  "  pm.collectionVariables.set('userId', json.user.id);",
+                  "  pm.collectionVariables.set('tenantId', json.tenant.id);",
+                  "  console.log('Tenant signed up. authToken, userId, tenantId saved.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resend Invitation",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invitations/{{invitationId}}/resend",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invitations", "{{invitationId}}", "resend"]
+            },
+            "description": "Admin/staff only. Re-sends the signup link for a pending invitation. The existing token is reused — no new token is generated. Returns 409 if the invitation is already accepted."
+          }
+        },
+        {
+          "name": "Delete Invitation",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invitations/{{invitationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invitations", "{{invitationId}}"]
+            },
+            "description": "Admin/staff only. Deletes a pending invitation. Returns 204 No Content. Returns 409 if the invitation has already been accepted."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Leases",
+      "item": [
+        {
+          "name": "List Leases",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/leases?status=active&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "leases"],
+              "query": [
+                { "key": "tenantId", "value": "{{tenantId}}", "disabled": true },
+                { "key": "unitId", "value": "{{unitId}}", "disabled": true },
+                { "key": "status", "value": "active", "description": "active | expired | terminated | pending" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Lease",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/leases",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "leases"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{unitId}}\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"startDate\": \"2026-03-01\",\n  \"endDate\": \"2027-02-28\",\n  \"monthlyRent\": 1450.00,\n  \"depositAmount\": 1450.00,\n  \"lateFeeAmount\": 75.00,\n  \"lateFeeGraceDays\": 5\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only. Automatically marks the unit as `occupied` and records the deposit charge in the ledger."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('leaseId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Lease by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/leases/{{leaseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "leases", "{{leaseId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Lease",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/leases/{{leaseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "leases", "{{leaseId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\",\n  \"signedAt\": \"2026-02-19T12:00:00Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only. Setting `status` to `terminated` or `expired` automatically marks the unit as `vacant`."
+          }
+        },
+        {
+          "name": "Terminate Lease",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/leases/{{leaseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "leases", "{{leaseId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"terminated\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Terminates the lease and marks the unit as vacant."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ledger",
+      "item": [
+        {
+          "name": "Portfolio Income Summary",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/portfolio",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ledger", "portfolio"],
+              "query": [
+                { "key": "propertyId", "value": "",             "description": "Limit to a single property/building", "disabled": true },
+                { "key": "fromDate",   "value": "2026-01-01",   "description": "Start of period (inclusive)", "disabled": true },
+                { "key": "toDate",     "value": "2026-01-31",   "description": "End of period (inclusive)", "disabled": true }
+              ]
+            },
+            "description": "Admin only. Income statement across your entire portfolio, or a single property/building.\n\nEach property row includes:\n- `totalCharged`   — total rent + fees billed\n- `totalCollected` — total payments actually received\n- `totalCredits`   — credits/adjustments issued\n- `netIncome`      — collected minus credits (what you kept)\n- `outstanding`    — billed but not yet paid\n- `units[]`        — per-unit breakdown of the same fields\n\nFilter by `fromDate`/`toDate` for a monthly or annual statement."
+          }
+        },
+        {
+          "name": "Get Ledger for Lease",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger?leaseId={{leaseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ledger"],
+              "query": [
+                { "key": "leaseId", "value": "{{leaseId}}" }
+              ]
+            },
+            "description": "Returns the full append-only ledger history and running balance for a lease. Read-only audit trail."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Charges",
+      "item": [
+        {
+          "name": "List Charges by Unit",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/charges?unitId={{unitId}}&unpaidOnly=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "charges"],
+              "query": [
+                { "key": "unitId",     "value": "{{unitId}}",    "description": "Filter by unit (all charges ever billed to this unit)" },
+                { "key": "tenantId",   "value": "",              "description": "Filter by tenant record", "disabled": true },
+                { "key": "leaseId",    "value": "",              "description": "Filter by lease period",  "disabled": true },
+                { "key": "propertyId", "value": "",              "description": "All units in a property", "disabled": true },
+                { "key": "unpaidOnly", "value": "false",         "description": "true = only charges with no completed payment" },
+                { "key": "chargeType", "value": "",              "description": "rent | late_fee | utility | other", "disabled": true }
+              ]
+            },
+            "description": "Returns charges with flexible filtering. Provide at least one of `unitId`, `tenantId`, `leaseId`, or `propertyId`.\n\nEach row includes `unit_number`, `property_name`, and completed payment details (`payment_id`, `amount_paid`, `payment_date`, `payment_method`, `payment_status`, `stripe_payment_intent_id`) — all NULL when unpaid.\n\nTip: use `?unpaidOnly=true` to see what still needs collecting."
+          }
+        },
+        {
+          "name": "List Unpaid Charges by Unit",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/charges?unitId={{unitId}}&unpaidOnly=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "charges"],
+              "query": [
+                { "key": "unitId",     "value": "{{unitId}}" },
+                { "key": "unpaidOnly", "value": "true" }
+              ]
+            },
+            "description": "All outstanding charges for a unit with no completed payment. Use these charge IDs in POST /payments/stripe/payment-intent."
+          }
+        },
+        {
+          "name": "List Charges by Tenant",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/charges?tenantId={{tenantId}}&unpaidOnly=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "charges"],
+              "query": [
+                { "key": "tenantId",   "value": "{{tenantId}}" },
+                { "key": "unpaidOnly", "value": "false" }
+              ]
+            },
+            "description": "All charges linked to a specific tenant across all units/leases."
+          }
+        },
+        {
+          "name": "Get Charge by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/charges/{{chargeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "charges", "{{chargeId}}"]
+            },
+            "description": "Returns a single rent_charge row."
+          }
+        },
+        {
+          "name": "Create Charge (with lease — rent/late fee)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/charges",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "charges"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{unitId}}\",\n  \"leaseId\": \"{{leaseId}}\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"dueDate\": \"2026-03-01\",\n  \"amount\": 1450.00,\n  \"chargeType\": \"rent\",\n  \"description\": \"March 2026 rent\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only. Creates a charge for a unit during an active lease. Because `leaseId` is provided, a `charge` ledger entry is also appended atomically — the tenant's running balance increases.\n\n`chargeType`: `rent` | `late_fee` | `utility` | `other`\n\n**Full flow:**\n1. POST /charges → get `charge.id`\n2. POST /payments/stripe/setup-intent (once per tenant bank account)\n3. POST /payments/stripe/payment-intent `{ leaseId, chargeId }`\n4. Stripe webhook → payment completed + ledger balance decreases"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('chargeId', pm.response.json().charge.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Charge (standalone — utility/vacancy)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/charges",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "charges"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{unitId}}\",\n  \"dueDate\": \"2026-03-01\",\n  \"amount\": 85.00,\n  \"chargeType\": \"utility\",\n  \"description\": \"February water usage\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only. Creates a standalone charge for a unit with no lease (utility bill, cleaning fee during vacancy, etc.). No ledger entry is created — the charge is a standalone billing item.\n\nThe charge response will have `ledgerEntry: null`. You can still collect payment via Stripe by passing `chargeId` in POST /payments/stripe/payment-intent (you'll need the unit's current active leaseId for that endpoint)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('chargeId', pm.response.json().charge.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "List Payments for Lease",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments?leaseId={{leaseId}}&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "payments"],
+              "query": [
+                { "key": "leaseId", "value": "{{leaseId}}" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Record Manual Payment (Cash / Check)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "payments"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leaseId\": \"{{leaseId}}\",\n  \"amountPaid\": 1450.00,\n  \"paymentDate\": \"2026-03-01\",\n  \"paymentMethod\": \"check\",\n  \"chargeId\": \"\",\n  \"notes\": \"March 2026 rent — check #1042\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only. Records a cash or check payment and appends to the ledger atomically. `paymentMethod`: `stripe_ach` | `stripe_card` | `check` | `cash` | `other`. Leave `chargeId` empty to record an unlinked payment."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('paymentId', pm.response.json().paymentId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Payment by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/{{paymentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "payments", "{{paymentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Stripe ACH",
+          "item": [
+            {
+              "name": "Create Setup Intent",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/payments/stripe/setup-intent",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "payments", "stripe", "setup-intent"]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenantId\": \"{{tenantId}}\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "description": "Admin only. Creates a Stripe SetupIntent so the tenant can add a bank account (ACH). Returns a `clientSecret` the frontend passes to `stripe.collectBankAccountForSetup()`. Call once per new bank account — the resulting PaymentMethod ID can be reused for all future rent payments."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  pm.collectionVariables.set('setupIntentId', pm.response.json().setupIntentId);",
+                      "  pm.collectionVariables.set('stripeCustomerId', pm.response.json().customerId);",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Create Payment Intent",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/payments/stripe/payment-intent",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "payments", "stripe", "payment-intent"]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"leaseId\": \"{{leaseId}}\",\n  \"chargeId\": \"\",\n  \"paymentMethodId\": \"\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "description": "Admin only. Creates a Stripe PaymentIntent for the lease rent amount (or a specific charge if `chargeId` provided). Returns a `clientSecret` for frontend confirmation, plus a pending `paymentId` in our DB.\n\nIf `paymentMethodId` is provided (tenant already has a verified bank account), the intent is confirmed immediately server-side.\n\nThe ledger is only updated after Stripe confirms payment via webhook — never here."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  pm.collectionVariables.set('paymentIntentId', pm.response.json().paymentIntentId);",
+                      "  pm.collectionVariables.set('paymentId', pm.response.json().paymentId);",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Maintenance",
+      "item": [
+        {
+          "name": "List Maintenance Requests",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/maintenance?status=open&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "maintenance"],
+              "query": [
+                { "key": "status", "value": "open", "description": "open | in_progress | completed | cancelled" },
+                { "key": "unitId", "value": "", "disabled": true },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Maintenance Request",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/maintenance",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "maintenance"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{unitId}}\",\n  \"category\": \"plumbing\",\n  \"priority\": \"high\",\n  \"title\": \"Leaking kitchen faucet\",\n  \"description\": \"The kitchen faucet has been dripping constantly for two days.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Tenants and admins can submit. `category`: `plumbing` | `electric` | `hvac` | `appliance` | `structural` | `other`. `priority`: `low` | `medium` | `high` | `emergency`"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('maintenanceId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Maintenance Request by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/maintenance/{{maintenanceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "maintenance", "{{maintenanceId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Maintenance Request",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/maintenance/{{maintenanceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "maintenance", "{{maintenanceId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_progress\",\n  \"assignedTo\": \"{{userId}}\",\n  \"priority\": \"medium\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin/staff: all fields. Tenants: may only set `status` to `cancelled` on their own open requests. `status`: `open` | `in_progress` | `completed` | `cancelled`"
+          }
+        },
+        {
+          "name": "List Attachments",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/maintenance/{{maintenanceId}}/attachments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "maintenance", "{{maintenanceId}}", "attachments"]
+            },
+            "description": "Returns all file attachments for the given request. Access-controlled — tenants see only their own requests' attachments."
+          }
+        },
+        {
+          "name": "Upload Attachment",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/maintenance/{{maintenanceId}}/attachments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "maintenance", "{{maintenanceId}}", "attachments"]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select a file to upload. Allowed types: JPEG, PNG, WEBP, GIF, PDF, MP4, MOV. Max size: 20 MB."
+                }
+              ]
+            },
+            "description": "Uploads a file to Google Drive and records the attachment. Send as `multipart/form-data` with field name `file`. Allowed MIME types: `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `application/pdf`, `video/mp4`, `video/quicktime`. Max 20 MB."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('attachmentId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Attachment",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/maintenance/{{maintenanceId}}/attachments/{{attachmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "maintenance", "{{maintenanceId}}", "attachments", "{{attachmentId}}"]
+            },
+            "description": "Deletes the file from Google Drive and removes the DB record. Admins/staff can delete any attachment. Tenants can only delete their own uploads. Returns 204 No Content."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "List Documents",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/documents?relatedType=lease&relatedId={{leaseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "documents"],
+              "query": [
+                { "key": "relatedType", "value": "lease", "description": "lease | unit | maintenance_request | tenant" },
+                { "key": "relatedId", "value": "{{leaseId}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Document",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/documents",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "documents"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"relatedId\": \"{{leaseId}}\",\n  \"relatedType\": \"lease\",\n  \"category\": \"lease\",\n  \"fileName\": \"lease_agreement_2026.pdf\",\n  \"fileType\": \"application/pdf\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Uploads metadata and triggers Google Drive upload. `category`: `lease` | `id` | `insurance` | `inspection` | `receipt` | `other`"
+          }
+        },
+        {
+          "name": "Delete Document",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/documents/:documentId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "documents", ":documentId"],
+              "variable": [{ "key": "documentId", "value": "" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Templates",
+          "item": [
+            {
+              "name": "List Templates",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/notifications/templates?channel=email&page=1&limit=20",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "notifications", "templates"],
+                  "query": [
+                    { "key": "channel", "value": "email", "description": "email | sms", "disabled": true },
+                    { "key": "triggerEvent", "value": "rent_due", "description": "rent_due | rent_overdue | late_fee_applied | lease_expiring | maintenance_update | payment_received | custom", "disabled": true },
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "20" }
+                  ]
+                },
+                "description": "Admin only. List all notification templates. Filter by channel or triggerEvent."
+              }
+            },
+            {
+              "name": "Create Template",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/notifications/templates",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "notifications", "templates"]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Rent Due Reminder\",\n  \"channel\": \"email\",\n  \"triggerEvent\": \"rent_due\",\n  \"subject\": \"Rent due on {{due_date}} — {{property}} Unit {{unit}}\",\n  \"bodyTemplate\": \"<p>Hi {{first_name}},</p><p>This is a reminder that your rent of <strong>{{amount}}</strong> is due on <strong>{{due_date}}</strong> for unit {{unit}} at {{property}}.</p><p>Please ensure payment is made on time to avoid late fees.</p><p>Thanks,<br>{{landlord_name}}</p>\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "description": "Admin only. Supported {{placeholders}}: `{{tenant_name}}`, `{{first_name}}`, `{{due_date}}`, `{{amount}}`, `{{unit}}`, `{{property}}`, `{{landlord_name}}`, `{{lease_start}}`, `{{lease_end}}`, `{{status}}`, `{{description}}`"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  pm.collectionVariables.set('notificationTemplateId', pm.response.json().id);",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get Template by ID",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/notifications/templates/{{notificationTemplateId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "notifications", "templates", "{{notificationTemplateId}}"]
+                }
+              }
+            },
+            {
+              "name": "Update Template",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/notifications/templates/{{notificationTemplateId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "notifications", "templates", "{{notificationTemplateId}}"]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"subject\": \"Updated: Rent due on {{due_date}} — {{property}} Unit {{unit}}\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send Ad-hoc Email",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "send"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientId\": \"{{userId}}\",\n  \"subject\": \"Important notice from your landlord\",\n  \"html\": \"<p>Hi there,</p><p>This is a direct message from property management. Please contact us if you have any questions.</p>\",\n  \"text\": \"Hi there, this is a direct message from property management.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only. Send a direct email — no template required. Provide `recipientId`, `subject`, `html`, and optional `text` fallback."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('notificationLogId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send From Template",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "send"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientId\": \"{{userId}}\",\n  \"templateId\": \"{{notificationTemplateId}}\",\n  \"variables\": {\n    \"first_name\": \"Jane\",\n    \"tenant_name\": \"Jane Smith\",\n    \"due_date\": \"2026-03-01\",\n    \"amount\": \"$1,500.00\",\n    \"unit\": \"4B\",\n    \"property\": \"Maple Court\",\n    \"landlord_name\": \"John Landlord\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only. Render a saved template with variable substitution and send. `variables` object replaces `{{placeholder}}` tokens in the template's subject and body. Works for both email and SMS channels — the correct deliver method is determined by the template's channel field."
+          }
+        },
+        {
+          "name": "Send Ad-hoc SMS",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/send-sms",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "send-sms"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientId\": \"{{userId}}\",\n  \"body\": \"Hi {{first_name}}, this is a message from your property manager. Please call us at your earliest convenience.\"}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Admin only. Send a direct SMS to a user — no template required. The user must have a `phone` number on file. Sends via Twilio and logs to notifications_log with channel='sms'."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('notificationLogId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Notification Log",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/log?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "log"],
+              "query": [
+                { "key": "recipientId", "value": "", "disabled": true },
+                { "key": "channel", "value": "email", "description": "email | sms", "disabled": true },
+                { "key": "status", "value": "sent", "description": "queued | sent | failed | bounced", "disabled": true },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "description": "Admin only. View all notification log entries. Filter by recipientId, channel, or status."
+          }
+        },
+        {
+          "name": "Get Log Entry by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/log/{{notificationLogId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "log", "{{notificationLogId}}"]
+            },
+            "description": "Admin only. View a single log entry including the fully rendered subject and body."
+          }
+        },
+        {
+          "name": "Conversations",
+          "description": "Two-way email conversations between landlord and tenants.\n\nEach email thread is grouped by tenant. The landlord replies via `/messages` with `replyToEmail` set to the tenant's original message ID to thread correctly in the tenant's email client.",
+          "item": [
+            {
+              "name": "List All Conversations",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/notifications/messages?page=1&limit=20",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "notifications", "messages"],
+                  "query": [
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "20" }
+                  ]
+                },
+                "description": "Admin only. Returns a summary of all email conversations grouped by tenant — one row per tenant showing the most recent message and unread count."
+              }
+            },
+            {
+              "name": "Get Conversation Thread (by Tenant)",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/notifications/messages/{{tenantId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "notifications", "messages", "{{tenantId}}"],
+                  "query": [
+                    { "key": "page", "value": "1", "disabled": true },
+                    { "key": "limit", "value": "50", "disabled": true }
+                  ]
+                },
+                "description": "Admin only. Returns the full message thread for a specific tenant in chronological order. Each message has `direction` (inbound | outbound) and `messageId` (SES Message-ID for threading)."
+              }
+            },
+            {
+              "name": "Send Reply to Tenant",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/notifications/messages",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "notifications", "messages"]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"subject\": \"Re: Your maintenance request\",\n  \"html\": \"<p>Hi,</p><p>We have received your request and a technician will visit on Thursday between 10am–12pm.</p><p>Thanks</p>\",\n  \"text\": \"Hi, we received your request and a technician will visit Thursday 10am-12pm. Thanks.\",\n  \"replyToEmail\": \"\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "description": "Admin only. Sends an email reply to a tenant.\n\nSet `replyToEmail` to the `messageId` of the tenant's inbound message to thread the reply in their email client (`In-Reply-To` / `References` headers are set automatically).\n\nLeave `replyToEmail` empty to start a new thread."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "  pm.collectionVariables.set('notificationLogId', pm.response.json().id);",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "Stripe Webhook",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "stripe-signature", "value": "t=...,v1=...", "description": "Generated by Stripe — do not set manually in production" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/stripe",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "webhooks", "stripe"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"evt_test_xxx\",\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"pi_test_xxx\",\n      \"amount\": 145000,\n      \"currency\": \"usd\",\n      \"metadata\": {\n        \"leaseId\": \"{{leaseId}}\",\n        \"tenantId\": \"{{tenantId}}\"\n      }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Called by Stripe. Signature verification required — do not call manually in production. Use the Stripe CLI (`stripe listen --forward-to localhost:3002/api/v1/webhooks/stripe`) for local testing.\n\nHandled events:\n- `payment_intent.succeeded` → marks payment completed, appends ledger entry, sends receipt email\n- `payment_intent.payment_failed` → marks payment failed\n- `payment_intent.canceled` → marks payment failed\n\nReturns 200 for all valid (even unhandled) events. Returns 400 only if the Stripe signature is invalid."
+          }
+        },
+        {
+          "name": "Twilio Inbound SMS Webhook",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/twilio/sms",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "webhooks", "twilio", "sms"]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "From", "value": "+15550000002" },
+                { "key": "To", "value": "+15550000001" },
+                { "key": "Body", "value": "Hi, when is my rent due?" },
+                { "key": "MessageSid", "value": "SMxxxxxxxxxxxx" }
+              ]
+            },
+            "description": "Called by Twilio when a tenant sends an inbound SMS. Validates the Twilio signature (when TWILIO_AUTH_TOKEN is set) and logs incoming messages from known users."
+          }
+        },
+        {
+          "name": "SES Inbound Email Webhook",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-webhook-secret", "value": "{{webhookSecret}}", "description": "Must match SES_WEBHOOK_SECRET in .env. Set the webhookSecret collection variable." }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/ses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "webhooks", "ses"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageId\": \"test-message-id-001\",\n  \"fromEmail\": \"tenant@example.com\",\n  \"fromName\": \"Test Tenant\",\n  \"toEmail\": \"reply@lotlord.app\",\n  \"subject\": \"Question about my lease\",\n  \"text\": \"Hi, I had a question about my lease renewal date. Can you let me know when it expires?\",\n  \"html\": \"<p>Hi, I had a question about my lease renewal date. Can you let me know when it expires?</p>\",\n  \"inReplyTo\": null,\n  \"references\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Called by the SES Lambda after it parses an inbound .eml from S3.\n\nAuthentication: `x-webhook-secret` header must match `SES_WEBHOOK_SECRET`. In local dev (no secret set), header is optional.\n\nThe server responds 200 immediately and processes the email asynchronously:\n- Matches `fromEmail` to a known tenant\n- Logs the message to the notification log (direction=inbound)\n- Identifies or creates a conversation thread\n\n**Tip:** Set `webhookSecret` collection variable to your `SES_WEBHOOK_SECRET` value."
+          }
+        },
+        {
+          "name": "SES Bounce / Complaint Webhook (SNS)",
+          "description": "SNS delivers two message types to this endpoint:\n- `SubscriptionConfirmation` — auto-confirmed; only sent once after CDK deploy\n- `Notification` — bounce or complaint from SES; marks affected email address(es) as bounced in DB\n\nAuthentication via `?secret=` query param (set by CDK in the SNS subscription URL).",
+          "item": [
+            {
+              "name": "SNS Bounce Notification",
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "x-amz-sns-message-type", "value": "Notification" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/webhooks/ses/bounce?secret={{webhookSecret}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "webhooks", "ses", "bounce"],
+                  "query": [{ "key": "secret", "value": "{{webhookSecret}}" }]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"Type\": \"Notification\",\n  \"MessageId\": \"test-sns-msg-001\",\n  \"TopicArn\": \"arn:aws:sns:us-east-1:075561877136:ses-bounce-complaints\",\n  \"Message\": \"{\\\"notificationType\\\":\\\"Bounce\\\",\\\"bounce\\\":{\\\"bounceType\\\":\\\"Permanent\\\",\\\"bounceSubType\\\":\\\"General\\\",\\\"bouncedRecipients\\\":[{\\\"emailAddress\\\":\\\"badaddress@example.com\\\"}],\\\"timestamp\\\":\\\"2026-01-01T00:00:00.000Z\\\"}}\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "description": "Simulates an SNS bounce notification. The server parses the inner `Message` JSON, extracts `bouncedRecipients[].emailAddress`, and marks those addresses as bounced in the users table.\n\nAlways returns 200 — SNS retries on any non-2xx.\n\nSet `webhookSecret` collection variable to your `SES_WEBHOOK_SECRET` value."
+              }
+            },
+            {
+              "name": "SNS Subscription Confirmation",
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "x-amz-sns-message-type", "value": "SubscriptionConfirmation" }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/webhooks/ses/bounce?secret={{webhookSecret}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "webhooks", "ses", "bounce"],
+                  "query": [{ "key": "secret", "value": "{{webhookSecret}}" }]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"Type\": \"SubscriptionConfirmation\",\n  \"MessageId\": \"test-confirmation-001\",\n  \"TopicArn\": \"arn:aws:sns:us-east-1:075561877136:ses-bounce-complaints\",\n  \"Token\": \"test-token\",\n  \"SubscribeURL\": \"https://sns.us-east-1.amazonaws.com/?Action=ConfirmSubscription&TopicArn=arn:aws:sns:us-east-1:075561877136:ses-bounce-complaints&Token=test-token\",\n  \"Timestamp\": \"2026-01-01T00:00:00.000Z\",\n  \"SignatureVersion\": \"1\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "description": "Simulates an SNS SubscriptionConfirmation. The server validates the SubscribeURL is an `*.amazonaws.com` host (SSRF guard) and then GETs it to confirm the subscription. In production, CDK handles this automatically on deploy."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AI Agent",
+      "item": [
+        {
+          "name": "List AI Conversations",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/conversations?status=active&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ai", "conversations"],
+              "query": [
+                { "key": "status", "value": "active", "description": "active | resolved | escalated" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "description": "Admin only."
+          }
+        },
+        {
+          "name": "Get Conversation Messages",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/conversations/{{conversationId}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ai", "conversations", "{{conversationId}}", "messages"]
+            },
+            "description": "Admin only. Returns the full message history for an AI conversation."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Billing",
+      "description": "Landlord subscription billing powered by Stripe. Landlords can subscribe, manage their subscription, and admins can view all landlord billing statuses.",
+      "item": [
+        {
+          "name": "Get Billing Status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/billing/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "billing", "status"]
+            },
+            "description": "Returns the current user's subscription status. Includes `plan`, `status` (active | trialing | past_due | canceled), `currentPeriodEnd`, and feature access flags."
+          }
+        },
+        {
+          "name": "Create Checkout Session",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/billing/checkout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "billing", "checkout"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceId\": \"price_xxx\",\n  \"successUrl\": \"http://localhost:5173/billing/success\",\n  \"cancelUrl\": \"http://localhost:5173/billing\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Creates a Stripe Checkout Session for the landlord to subscribe. Returns a `url` to redirect the user to Stripe's hosted checkout page.\n\n`priceId` is the Stripe Price ID for your subscription plan. Get it from the Stripe Dashboard."
+          }
+        },
+        {
+          "name": "Open Customer Portal",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/billing/portal",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "billing", "portal"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"returnUrl\": \"http://localhost:5173/billing\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Creates a Stripe Billing Portal session. Returns a `url` to redirect the landlord to Stripe's self-service portal where they can update payment methods, view invoices, and cancel their subscription."
+          }
+        },
+        {
+          "name": "List All Landlords (Admin)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/billing/admin/landlords?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "billing", "admin", "landlords"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "description": "Admin only. Returns all landlords with their Stripe subscription status, plan, and billing period details."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "description": "Portfolio-level analytics and KPIs for the dashboard.",
+      "item": [
+        {
+          "name": "Get Dashboard",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "analytics", "dashboard"],
+              "query": [
+                { "key": "propertyId", "value": "", "description": "Scope to a single property", "disabled": true }
+              ]
+            },
+            "description": "Admin only. Returns KPIs across the portfolio:\n- Occupancy rate and vacant unit count\n- Total monthly rent billed vs collected\n- Outstanding balance\n- Open maintenance requests by priority\n- Recent payment activity\n- Expiring leases in the next 30/60/90 days"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Audit Log",
+      "description": "Immutable audit trail of all admin actions (creates, updates, deletes).",
+      "item": [
+        {
+          "name": "List Audit Log",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit?page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "audit"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" },
+                { "key": "userId", "value": "", "description": "Filter by acting user", "disabled": true },
+                { "key": "entityType", "value": "", "description": "Filter by entity: user | property | unit | tenant | lease | charge | payment | maintenance | document | notification_template | invitation", "disabled": true },
+                { "key": "action", "value": "", "description": "Filter by action: create | update | delete", "disabled": true }
+              ]
+            },
+            "description": "Admin only. Returns the audit log across the platform. Each entry includes `userId`, `action`, `entityType`, `entityId`, `oldValue`, `newValue`, and `createdAt`."
+          }
+        }
+      ]
+    }
+  ]
+}
+
