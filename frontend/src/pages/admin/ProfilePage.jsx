@@ -72,7 +72,31 @@ export default function AdminProfilePage() {
   return (
     <PageContainer title="My Profile">
 
-      {/* ── Profile ── */}
+      {/* ── Connect onboarding prompt — shown until landlord completes payout setup ── */}
+      {isLandlord && connectStatus && !connectStatus.onboarded && (
+        <Alert
+          severity="warning"
+          icon={<AccountBalanceIcon />}
+          sx={{ mb: 3 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              variant="outlined"
+              onClick={handleStartOnboard}
+              disabled={onboarding}
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              {onboarding ? 'Redirecting…' : connectStatus.connected ? 'Continue Setup' : 'Set Up Payouts'}
+            </Button>
+          }
+        >
+          <strong>Action required: Set up your payout account.</strong>{' '}
+          Before tenants can pay rent online, you need to connect your bank account via Stripe.
+        </Alert>
+      )}
+
+
       <Typography variant="h6" sx={{ mb: 2 }}>Profile</Typography>
       {profileSaved && <Alert severity="success" sx={{ mb: 2 }}>Saved!</Alert>}
       <Stack component="form" onSubmit={profileForm.handleSubmit(updateMe)} spacing={2} sx={{ maxWidth: 440, mb: 5 }}>

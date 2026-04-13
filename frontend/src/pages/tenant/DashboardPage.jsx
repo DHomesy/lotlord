@@ -1,5 +1,9 @@
-import { Grid, Card, CardContent, Typography, Divider, Box } from '@mui/material'
+import { Grid, Card, CardContent, Typography, Divider, Box, Button } from '@mui/material'
 import HomeIcon from '@mui/icons-material/Home'
+import HouseIcon from '@mui/icons-material/House'
+import DescriptionIcon from '@mui/icons-material/Description'
+import BuildIcon from '@mui/icons-material/Build'
+import { useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/layout/PageContainer'
 import StatusChip from '../../components/common/StatusChip'
 import LoadingOverlay from '../../components/common/LoadingOverlay'
@@ -21,6 +25,49 @@ function daysUntil(dateStr) {
   if (!dateStr) return null
   const diff = Math.ceil((new Date(dateStr) - new Date()) / (1000 * 60 * 60 * 24))
   return diff
+}
+
+function NoLeaseEmptyState() {
+  const navigate = useNavigate()
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        textAlign: 'center',
+        py: 8,
+        px: 2,
+      }}
+    >
+      <HouseIcon sx={{ fontSize: 72, color: 'text.disabled', mb: 2 }} />
+      <Typography variant="h6" fontWeight={600} gutterBottom>
+        You're all set!
+      </Typography>
+      <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 380, mb: 1 }}>
+        Your landlord is finishing setting up your lease. It will appear here once it's active.
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+        You'll receive an email notification when everything is ready.
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <Button
+          variant="outlined"
+          startIcon={<DescriptionIcon />}
+          onClick={() => navigate('/my/documents')}
+        >
+          My Documents
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<BuildIcon />}
+          onClick={() => navigate('/my/maintenance')}
+        >
+          Maintenance
+        </Button>
+      </Box>
+    </Box>
+  )
 }
 
 export default function TenantDashboardPage() {
@@ -105,7 +152,7 @@ export default function TenantDashboardPage() {
           )}
         </Box>
       ) : (
-        <Typography color="text.secondary">No active lease found.</Typography>
+        <NoLeaseEmptyState />
       )}
     </PageContainer>
   )
