@@ -57,4 +57,7 @@ module.exports = {
 
   // OpenAI
   OPENAI_API_KEY: optional('OPENAI_API_KEY'),
+
+  // Error alerting — email address to notify on 5xx errors and unhandled rejections
+  ALERT_EMAIL: optional('ALERT_EMAIL'),
 };

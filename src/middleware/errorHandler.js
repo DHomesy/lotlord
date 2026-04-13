@@ -1,3 +1,5 @@
+const { sendAlert } = require('./errorAlerter');
+
 /**
  * Global error handler — must be the last middleware registered in app.js.
  * Catches anything passed via next(err).
@@ -8,6 +10,12 @@ function errorHandler(err, req, res, _next) {
 
   if (status >= 500) {
     console.error('[error]', err);
+    sendAlert(err, {
+      method: req.method,
+      route:  req.originalUrl || req.path,
+      userId: req.user?.sub,
+      role:   req.user?.role,
+    }).catch(() => {}); // sendAlert never throws, but guard anyway
   }
 
   res.status(status).json({
