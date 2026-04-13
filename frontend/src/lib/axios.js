@@ -1,10 +1,24 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
 
+// Resolve the API base URL:
+// 1. Use the build-time VITE_API_URL if available (set in Railway frontend service vars)
+// 2. In production (non-localhost), derive api.* from the current www.* hostname at runtime
+// 3. Fall back to relative /api/v1 for local dev (Vite proxy handles it)
+function resolveApiBase() {
+  if (import.meta.env.VITE_API_URL) return `${import.meta.env.VITE_API_URL}/api/v1`
+  const { hostname } = window.location
+  if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    const root = hostname.replace(/^www\./, '')
+    return `https://api.${root}/api/v1`
+  }
+  return '/api/v1'
+}
+
+const API_BASE = resolveApiBase()
+
 const http = axios.create({
-  baseURL: import.meta.env.VITE_API_URL
-    ? `${import.meta.env.VITE_API_URL}/api/v1`
-    : '/api/v1',
+  baseURL: API_BASE,
   withCredentials: true, // sends httpOnly refresh cookie automatically
 })
 
@@ -45,11 +59,8 @@ http.interceptors.response.use(
       isRefreshing = true
 
       try {
-        const refreshBase = import.meta.env.VITE_API_URL
-          ? `${import.meta.env.VITE_API_URL}/api/v1`
-          : '/api/v1'
         const { data } = await axios.post(
-          `${refreshBase}/auth/refresh`,
+          `${API_BASE}/auth/refresh`,
           {},
           { withCredentials: true },
         )

@@ -1,9 +1,17 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
 
-const apiBase = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api/v1`
-  : '/api/v1'
+function resolveApiBase() {
+  if (import.meta.env.VITE_API_URL) return `${import.meta.env.VITE_API_URL}/api/v1`
+  const { hostname } = window.location
+  if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    const root = hostname.replace(/^www\./, '')
+    return `https://api.${root}/api/v1`
+  }
+  return '/api/v1'
+}
+
+const apiBase = resolveApiBase()
 
 /**
  * Called once on app load (from Bootstrap component).
