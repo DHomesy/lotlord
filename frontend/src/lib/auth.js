@@ -1,6 +1,10 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
 
+const apiBase = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api/v1`
+  : '/api/v1'
+
 /**
  * Called once on app load (from Bootstrap component).
  * Attempts a silent refresh using the httpOnly cookie.
@@ -9,7 +13,7 @@ import { useAuthStore } from '../store/authStore'
 export async function boot() {
   try {
     const { data } = await axios.post(
-      '/api/v1/auth/refresh',
+      `${apiBase}/auth/refresh`,
       {},
       { withCredentials: true },
     )
