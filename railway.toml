@@ -1,0 +1,12 @@
+# Backend — Node.js API
+# Railway service root: / (repo root)
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "npm run migrate:up && npm start"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10

@@ -1,0 +1,9 @@
+# Frontend — React/Vite static site
+# Railway service root: /frontend
+
+[build]
+builder = "nixpacks"
+buildCommand = "npm install && npm run build"
+
+[deploy]
+startCommand = "npx serve -s dist -l $PORT --no-clipboard"
