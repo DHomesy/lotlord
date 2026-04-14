@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import LoadingOverlay from '../components/common/LoadingOverlay'
+import ChunkErrorBoundary from '../components/common/ChunkErrorBoundary'
 
 const DashboardPage       = lazy(() => import('../pages/admin/DashboardPage'))
 const PropertiesPage      = lazy(() => import('../pages/admin/PropertiesPage'))
@@ -21,7 +22,11 @@ const AdminProfilePage              = lazy(() => import('../pages/admin/ProfileP
 const SubscriptionsPage             = lazy(() => import('../pages/admin/SubscriptionsPage'))
 const AuditLogPage                  = lazy(() => import('../pages/admin/AuditLogPage'))
 
-const wrap = (el) => <Suspense fallback={<LoadingOverlay />}>{el}</Suspense>
+const wrap = (el) => (
+  <ChunkErrorBoundary>
+    <Suspense fallback={<LoadingOverlay />}>{el}</Suspense>
+  </ChunkErrorBoundary>
+)
 
 const adminRoutes = [
   { path: '/dashboard',         element: wrap(<DashboardPage />) },

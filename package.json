@@ -11,6 +11,7 @@
     "migrate:up": "node src/config/migrate.js",
     "seed": "node seeds/dev_seed.js",
     "create-admin": "node scripts/create-admin.js",
+    "update-admin": "node scripts/update-admin.js",
     "test": "cross-env NODE_ENV=test jest --runInBand --forceExit",
     "lint": "eslint src/**/*.js",
     "format": "prettier --write src/**/*.js"

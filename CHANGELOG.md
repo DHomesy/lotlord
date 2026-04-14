@@ -19,6 +19,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - **"Rendered fewer hooks than expected" crash on Charges page** — `useCharges`, `useCreateCharge`, `useUpdateCharge`, `useVoidCharge`, and `useMemo` were declared after an early return that fires when a landlord has no properties, violating React's Rules of Hooks; all hook calls moved above the conditional return
 - **Duplicate email registration shows generic error** — backend sends `{ error: '...' }` but `RegisterPage` was reading `data.message`; now reads `data.error` first so "Email already in use" is shown correctly
 - **Password reset "Something went wrong"** — two fixes: (1) `ForgotPasswordPage` and `ResetPasswordPage` now read `data.error` before `data.message` so real backend errors surface; (2) SES call in `authService.forgotPassword` wrapped in try/catch — AWS delivery failures are now logged server-side and returned as a user-friendly 503 instead of a raw 500
+- **"Failed to fetch dynamically imported module" crash after deployment** — Vite content-hashes every lazy-loaded page chunk; after a new deploy the old hashes no longer exist, causing `TypeError: Failed to fetch dynamically imported module` for users still holding a tab open; added `ChunkErrorBoundary` (class error boundary) that detects chunk-load errors and does a single `window.location.reload()` to fetch fresh HTML with the correct chunk URLs; a `sessionStorage` flag prevents infinite reload loops; applied to all lazy routes in `AdminRoutes.jsx` and `TenantRoutes.jsx`
 
 ---
 
