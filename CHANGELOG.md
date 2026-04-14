@@ -9,6 +9,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ---
 
+## [1.4.4] — 2026-04-14 — Marketing landing page redesign
+
+### Changed
+- **`LandingPage.jsx` full redesign** — rebuilt from scratch with a modern SaaS aesthetic:
+  - **Dark hero** with mesh dot-grid background, gradient headline, and three trust-signal chips
+  - **Sticky nav** with backdrop blur, in-page anchor links (How It Works, Pricing, FAQ), Log In and Get Started Free CTAs
+  - **"How It Works"** section — three numbered steps replacing the previous feature list in the hero area
+  - **Features grid** — 6 cards (Properties & Units, Rent Collection, Maintenance, Reminders, Documents, Tenant Portal) with hover lift animation
+  - **Revised 3-tier pricing** — Free ($0) / Starter ($19/mo, 5 props / 25 units) / Pro ($49/mo, 20 props / 100 units); replaces the previous 2-tier model to prevent resource abuse on unlimited plans
+  - **FAQ section** — 8-question MUI Accordion covering free plan, mobile support, security, cancellation, and plan limits
+  - **Final CTA banner** with dark gradient matching hero
+  - **Multi-column footer** with product nav links (scroll-to anchors), legal links, and brand tagline
+
+> **Note:** Backend plan enforcement (`auth.js` `checkFreeTierLimit`) still only knows Free vs Pro. A follow-up is needed to add Starter tier limits once the Stripe product is updated.
+
+---
+
 ## [1.4.3] — 2026-04-14 — Admin script cleanup
 
 ### Changed
