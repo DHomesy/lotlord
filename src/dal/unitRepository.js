@@ -4,7 +4,7 @@ const { parsePagination } = require('../lib/pagination');
 async function findAll({ propertyId, status, ownerId, page = 1, limit = 50 } = {}) {
   const { limit: lim, offset } = parsePagination(page, limit, 200, 50);
   const values = [lim, offset];
-  let where = 'WHERE 1=1';
+  let where = 'WHERE u.deleted_at IS NULL';
   if (propertyId) { where += ` AND u.property_id = $${values.push(propertyId)}`; }
   if (status)     { where += ` AND u.status = $${values.push(status)}`; }
   if (ownerId)    { where += ` AND p.owner_id = $${values.push(ownerId)}`; }
@@ -24,7 +24,7 @@ async function findAll({ propertyId, status, ownerId, page = 1, limit = 50 } = {
 }
 
 async function findById(id) {
-  const { rows } = await query('SELECT * FROM units WHERE id = $1 LIMIT 1', [id]);
+  const { rows } = await query('SELECT * FROM units WHERE id = $1 AND deleted_at IS NULL LIMIT 1', [id]);
   return rows[0] || null;
 }
 

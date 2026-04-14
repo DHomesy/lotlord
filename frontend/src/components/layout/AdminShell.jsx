@@ -46,7 +46,7 @@ export default function AdminShell() {
             </IconButton>
           )}
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            Property Manager
+            LotLord
           </Typography>
           {!isMobile && (
             <Typography variant="body2" sx={{ mr: 2 }}>

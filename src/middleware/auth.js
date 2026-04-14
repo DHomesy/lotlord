@@ -146,4 +146,26 @@ function checkFreeTierLimit(resource, max) {
   };
 }
 
-module.exports = { authenticate, authorize, requiresPro, requiresConnectOnboarded, checkFreeTierLimit };
+/**
+ * Blocks landlords whose email address has not yet been verified.
+ * Applies only to role='landlord'. Admins and tenants pass through.
+ *
+ * Synchronous — reads the emailVerified field baked into the JWT by signToken.
+ * Must run AFTER authenticate() so req.user is populated.
+ *
+ * Returns 403 FORBIDDEN with code 'EMAIL_UNVERIFIED' so the frontend
+ * can redirect to the "awaiting verification" page.
+ */
+function requiresVerified(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+  if (req.user.role !== 'landlord') return next();
+  if (!req.user.emailVerified) {
+    return res.status(403).json({
+      error: 'Please verify your email address before accessing this feature.',
+      code: 'EMAIL_UNVERIFIED',
+    });
+  }
+  next();
+}
+
+module.exports = { authenticate, authorize, requiresPro, requiresConnectOnboarded, checkFreeTierLimit, requiresVerified };

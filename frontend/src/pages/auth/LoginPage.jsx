@@ -41,7 +41,7 @@ export default function LoginPage() {
       <Card sx={{ width: '100%', maxWidth: 400 }}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h5" gutterBottom fontWeight={600}>
-            Property Manager
+            LotLord
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Sign in to your account

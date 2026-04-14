@@ -9,6 +9,45 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ---
 
+## [1.3.0] — 2026-04-14 — QA polish, onboarding, landing page & email verification
+
+### Added
+- **Email verification** — new landlords must click an emailed link before accessing the dashboard
+  - `migrations/024_email_verification.sql` — adds `email_verified_at`, `email_verify_token`, `email_verify_token_expires_at` to `users`; pre-verifies all existing users
+  - `src/dal/emailVerificationRepository.js` — `setVerifyToken`, `findValidToken`, `markVerified`
+  - `POST /api/v1/auth/verify-email` — validates token, stamps `email_verified_at`, returns a fresh token pair
+  - `POST /api/v1/auth/resend-verification` — issues a fresh 24-hour token and resends the SES email
+  - `emailVerified` claim baked into JWT by `signToken` — verification check is synchronous (no extra DB hit per request)
+  - Global email gate middleware in `app.js` — all `/api/v1/*` routes (except `/auth/*`) return 403 `EMAIL_UNVERIFIED` for unverified landlords
+  - `VerifyEmailPage` — click-through page at `/verify-email?token=...`; auto-fires on mount, shows spinner/success/error, auto-navigates on success
+  - `VerifyEmailPendingPage` — "check your inbox" page with resend button and logout link
+  - `ProtectedRoute` redirects unverified landlords to `/verify-email-pending`
+  - `useRegister` redirects new landlords directly to `/verify-email-pending` after signup
+- **Marketing landing page** at `/` — hero, feature cards, Free vs Pro pricing, sticky nav and footer; authenticated users are immediately redirected to `/dashboard`
+- **Onboarding wizard** (`OnboardingWizard`) — 3-step MUI dialog for new landlords (features overview → Stripe Connect → add first property); localStorage-gated via `ll_onboarding_done`; shown on Dashboard once
+- **Delete / archive property** — replaces hard-delete with a soft-delete cascade
+  - `migrations/023_archive_properties_units.sql` — adds `deleted_at` to `properties` and `units`
+  - `propertyRepository.cascadeArchive(id)` — terminates active/pending leases, soft-deletes units, soft-deletes property in three SQL statements
+  - All queries in `propertyRepository`, `unitRepository`, and `analyticsRepository` now filter `WHERE deleted_at IS NULL`
+  - `PropertyDetailPage` — "Delete" button in property card with two-step confirmation: (1) warning dialog, (2) type property name to unlock the archive button
+- **UpgradePromptDialog** — reusable 402 handler shown when a free-tier landlord hits a plan limit; "Upgrade to Pro" CTA launches Stripe Checkout
+- **Unit creation wizard** — after creating a multi-family or commercial property, a stepper dialog opens to bulk-create units (count ± stepper, optional prefix, live preview)
+- **UnitPicker** auto-disables with hint text when no units exist
+- **ChargesPage** redirects to Properties with an empty state when the landlord has no properties yet
+- `create-admin.js` default email changed to `admin@lotlord.app`; only `ADMIN_PASSWORD` is required
+
+### Changed
+- Branding: "Property Manager" renamed to **LotLord** throughout `LoginPage`, `RegisterPage`, `AdminShell`, `TermsPage`
+- `PropertyForm` field renamed from "Name" to **Property Nickname** with placeholder and helper text
+- API URL resolution moved fully to runtime (`resolveApiBase()`) — `VITE_API_URL` build var no longer required; derives `api.{root}` from `window.location.hostname`
+- `propertyService.deleteProperty` replaced hard-delete guard (409 if units exist) with `cascadeArchive`
+- `userRepository.create` and `findById` now return `email_verified_at`
+
+### Fixed
+- `DashboardPage` crash on first load after registration — added `if (isLoading || !data)` guard (was `if (isLoading)` only)
+
+---
+
 ## [1.2.0] — 2026-04-13 — Deployment, error alerting & auth hardening
 
 ### Added
@@ -89,13 +128,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 | Version | Date | Summary |
 |---|---|---|
+| 1.3.0 | 2026-04-14 | QA polish, onboarding, landing page & email verification |
 | 1.2.0 | 2026-04-13 | Deployment, error alerting & auth hardening |
 | 1.1.0 | 2026-04-07 | Security audit, integration tests & maintenance/documents rework |
 | 1.0.0 | 2026-03-23 | MVP release |
 
 ---
 
-[Unreleased]: https://github.com/DHomesy/lotlord/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/DHomesy/lotlord/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/DHomesy/lotlord/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/DHomesy/lotlord/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/DHomesy/lotlord/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/DHomesy/lotlord/releases/tag/v1.0.0

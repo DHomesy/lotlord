@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { TextField, Stack, Button, MenuItem } from '@mui/material'
 
 const schema = z.object({
-  name: z.string().min(1, 'Name is required'),
+  name: z.string().min(1, 'Property nickname is required'),
   addressLine1: z.string().min(1, 'Address line 1 is required'),
   addressLine2: z.string().optional(),
   city: z.string().optional(),
@@ -22,7 +22,13 @@ export default function PropertyForm({ onSubmit, defaultValues, loading }) {
 
   return (
     <Stack component="form" onSubmit={handleSubmit(onSubmit)} spacing={2} sx={{ pt: 1 }}>
-      <TextField label="Name" {...register('name')} error={!!errors.name} helperText={errors.name?.message} />
+      <TextField
+        label="Property Nickname"
+        placeholder="e.g. Maple Apartments, Downtown Duplex"
+        {...register('name')}
+        error={!!errors.name}
+        helperText={errors.name?.message || 'A short name to identify this property'}
+      />
       <TextField label="Address Line 1" {...register('addressLine1')} error={!!errors.addressLine1} helperText={errors.addressLine1?.message} />
       <TextField label="Address Line 2" {...register('addressLine2')} />
       <TextField label="City" {...register('city')} />

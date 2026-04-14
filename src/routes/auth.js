@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const controller = require('../controllers/authController');
+const { authenticate } = require('../middleware/auth');
 const { registerValidators, loginValidators, forgotPasswordValidators, resetPasswordValidators, validate } = require('../middleware/validators');
 
 // POST /api/v1/auth/register
@@ -24,5 +25,13 @@ router.post('/forgot-password', forgotPasswordValidators, validate, controller.f
 // POST /api/v1/auth/reset-password
 // Validates the one-time token and updates the password.
 router.post('/reset-password', resetPasswordValidators, validate, controller.resetPassword);
+
+// POST /api/v1/auth/verify-email
+// Confirms the token from the emailed verification link. Public — no auth required.
+router.post('/verify-email', controller.verifyEmail);
+
+// POST /api/v1/auth/resend-verification
+// Sends a fresh verification email. Requires a valid access token.
+router.post('/resend-verification', authenticate, controller.resendVerification);
 
 module.exports = router;

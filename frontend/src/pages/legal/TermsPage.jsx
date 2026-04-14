@@ -22,14 +22,14 @@ export default function TermsPage() {
           1. Acceptance of Terms
         </Typography>
         <Typography variant="body1" paragraph>
-          By accessing or using the Property Manager platform ("Service"), you agree to be bound by these Terms of Service. If you do not agree to these terms, do not use the Service.
+          By accessing or using the LotLord platform ("Service"), you agree to be bound by these Terms of Service. If you do not agree to these terms, do not use the Service.
         </Typography>
 
         <Typography variant="h6" gutterBottom fontWeight={600} sx={{ mt: 3 }}>
           2. Description of Service
         </Typography>
         <Typography variant="body1" paragraph>
-          Property Manager is a software-as-a-service (SaaS) platform that enables landlords to manage rental properties, units, leases, and tenants, and enables tenants to view lease information, pay rent, and submit maintenance requests.
+          LotLord is a software-as-a-service (SaaS) platform that enables landlords to manage rental properties, units, leases, and tenants, and enables tenants to view lease information, pay rent, and submit maintenance requests.
         </Typography>
 
         <Typography variant="h6" gutterBottom fontWeight={600} sx={{ mt: 3 }}>

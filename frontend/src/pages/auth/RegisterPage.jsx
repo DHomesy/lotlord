@@ -61,7 +61,7 @@ export default function RegisterPage() {
       <Card sx={{ width: '100%', maxWidth: 440 }}>
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
           <Typography variant="h5" gutterBottom fontWeight={600}>
-            Property Manager
+            LotLord
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Create a new account

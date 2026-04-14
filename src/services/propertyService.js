@@ -1,6 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
 const propertyRepo = require('../dal/propertyRepository');
-const unitRepo = require('../dal/unitRepository');
 
 async function listProperties({ user, page, limit }) {
   // Tenants only see properties they are assigned to (via active leases) — handled by future scope
@@ -41,14 +40,8 @@ async function deleteProperty(id, user) {
   if (user?.role === 'landlord' && property.owner_id !== user.sub) {
     const err = new Error('Forbidden'); err.status = 403; throw err;
   }
-  // Guard: don't delete if units exist
-  const units = await unitRepo.findAll({ propertyId: id, limit: 1 });
-  if (units.length) {
-    const err = new Error('Cannot delete a property that has units. Remove or reassign units first.');
-    err.status = 409;
-    throw err;
-  }
-  await propertyRepo.remove(id);
+  // Cascade archive: terminate active leases, soft-delete units, soft-delete property
+  await propertyRepo.cascadeArchive(id);
 }
 
 module.exports = { listProperties, getProperty, createProperty, updateProperty, deleteProperty };

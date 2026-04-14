@@ -12,7 +12,7 @@ async function findByEmail(email) {
 async function findById(id) {
   const { rows } = await query(
     `SELECT id, email, role, first_name, last_name, phone, avatar_url,
-            email_bounced, email_bounced_at, created_at
+            email_bounced, email_bounced_at, email_verified_at, created_at
      FROM users WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
     [id],
   );
@@ -24,7 +24,7 @@ async function create({ id, email, passwordHash, role, firstName, lastName, phon
   const { rows } = await fn(
     `INSERT INTO users (id, email, password_hash, role, first_name, last_name, phone, accepted_terms_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING id, email, role, first_name, last_name, phone, accepted_terms_at, created_at`,
+     RETURNING id, email, role, first_name, last_name, phone, accepted_terms_at, email_verified_at, created_at`,
     [id, email, passwordHash, role || 'tenant', firstName, lastName, phone || null, acceptedTermsAt || null],
   );
   return rows[0];

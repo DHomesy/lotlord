@@ -1,21 +1,6 @@
 import { Autocomplete, TextField, CircularProgress } from '@mui/material'
 import { useUnits } from '../../hooks/useUnits'
 
-/**
- * UnitPicker
- *
- * A searchable dropdown that lists all units with a human-readable label.
- * Designed to integrate with React Hook Form via the `Controller` wrapper.
- *
- * Props:
- *   value       – current UUID string (or null)
- *   onChange    – callback(uuidString | null)
- *   error       – boolean, drives red border
- *   helperText  – string, shown below field
- *   disabled    – bool, locks the field (used when unit is pre-filled for tenant)
- *   label       – optional override for field label (default "Unit")
- *   params      – optional query params forwarded to useUnits (e.g. { status: 'vacant' })
- */
 export default function UnitPicker({
   value,
   onChange,
@@ -34,6 +19,12 @@ export default function UnitPicker({
       .join(' — '),
   }))
 
+  const hasNoUnits = !isLoading && options.length === 0
+  const isDisabled = disabled || hasNoUnits
+  const resolvedHelperText = hasNoUnits
+    ? 'No units yet — add a property and units first'
+    : helperText
+
   const selected = options.find((o) => o.id === value) ?? null
 
   return (
@@ -42,20 +33,20 @@ export default function UnitPicker({
       value={selected}
       onChange={(_, opt) => onChange(opt?.id ?? null)}
       loading={isLoading}
-      disabled={disabled}
+      disabled={isDisabled}
       isOptionEqualToValue={(a, b) => a.id === b.id}
-      renderInput={(params) => (
+      renderInput={(inputParams) => (
         <TextField
-          {...params}
+          {...inputParams}
           label={label}
-          error={error}
-          helperText={helperText}
+          error={error && !hasNoUnits}
+          helperText={resolvedHelperText}
           InputProps={{
-            ...params.InputProps,
+            ...inputParams.InputProps,
             endAdornment: (
               <>
                 {isLoading ? <CircularProgress color="inherit" size={16} /> : null}
-                {params.InputProps.endAdornment}
+                {inputParams.InputProps.endAdornment}
               </>
             ),
           }}

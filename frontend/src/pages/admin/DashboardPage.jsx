@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Grid,
   Card,
@@ -32,6 +33,7 @@ import { useConnectStatus } from '../../hooks/useStripeSetup'
 import { useMySubscription, useCreateCheckoutSession } from '../../hooks/useBilling'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
+import OnboardingWizard from '../../components/common/OnboardingWizard'
 
 // ─── Formatters ─────────────────────────────────────────────────────────────
 const currency = new Intl.NumberFormat('en-US', {
@@ -204,13 +206,18 @@ export default function DashboardPage() {
   const { data: subscription } = useMySubscription()
   const { mutate: checkout, isPending: checkingOut } = useCreateCheckoutSession()
   const user = useAuthStore((s) => s.user)
+  const navigate = useNavigate()
   const isLandlord = user?.role === 'landlord'
+
+  const [wizardOpen, setWizardOpen] = useState(!localStorage.getItem('ll_onboarding_done') && isLandlord)
 
   if (isLoading) return <LoadingOverlay />
 
   const isPro = ['active', 'trialing'].includes(subscription?.status)
 
-  // Analytics is Pro-gated — show upgrade prompt for free-tier users
+  // Analytics is Pro-gated — show upgrade prompt for free-tier users.
+  // This check must come BEFORE the !data guard so free-tier landlords see the
+  // upgrade prompt instead of an infinite loading spinner (402 → isError=true, data=undefined).
   if (isError) {
     const is402 = error?.response?.status === 402
     return (
@@ -249,6 +256,12 @@ export default function DashboardPage() {
 
   return (
     <PageContainer title="Dashboard">
+      <OnboardingWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onAddProperty={() => navigate('/properties')}
+      />
+
       <SetupChecklist
         hasProperties={totalUnits > 0}
         connectOnboarded={connectOnboarded}

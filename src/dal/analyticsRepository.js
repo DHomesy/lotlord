@@ -22,8 +22,8 @@ async function getDashboardMetrics(ownerId = null) {
     db.query(`
       SELECT COALESCE(SUM(l.monthly_rent), 0)::NUMERIC AS monthly_income
       FROM   leases l
-      JOIN   units      u ON u.id = l.unit_id
-      JOIN   properties p ON p.id = u.property_id
+      JOIN   units      u ON u.id = l.unit_id AND u.deleted_at IS NULL
+      JOIN   properties p ON p.id = u.property_id AND p.deleted_at IS NULL
       WHERE  l.status = 'active'
       ${ownerWhere}
     `, p),
@@ -32,8 +32,8 @@ async function getDashboardMetrics(ownerId = null) {
     db.query(`
       SELECT COALESCE(SUM(rc.amount - COALESCE(paid.total, 0)), 0)::NUMERIC AS unpaid_dues
       FROM   rent_charges rc
-      JOIN   units      u ON u.id = rc.unit_id
-      JOIN   properties p ON p.id = u.property_id
+      JOIN   units      u ON u.id = rc.unit_id AND u.deleted_at IS NULL
+      JOIN   properties p ON p.id = u.property_id AND p.deleted_at IS NULL
       LEFT JOIN (
         SELECT charge_id, SUM(amount_paid) AS total
         FROM   rent_payments
@@ -53,7 +53,7 @@ async function getDashboardMetrics(ownerId = null) {
         COUNT(CASE WHEN u.status = 'occupied' THEN 1 END)  AS occupied_units
       FROM   units      u
       JOIN   properties p ON p.id = u.property_id
-      WHERE  TRUE
+      WHERE  u.deleted_at IS NULL AND p.deleted_at IS NULL
       ${ownerWhere}
     `, p),
 
@@ -73,8 +73,8 @@ async function getDashboardMetrics(ownerId = null) {
       JOIN   leases      l  ON l.id   = rp.lease_id
       JOIN   tenants     t  ON t.id   = l.tenant_id
       JOIN   users       u  ON u.id   = t.user_id
-      JOIN   units       un ON un.id  = l.unit_id
-      JOIN   properties  p  ON p.id   = un.property_id
+      JOIN   units       un ON un.id  = l.unit_id AND un.deleted_at IS NULL
+      JOIN   properties  p  ON p.id   = un.property_id AND p.deleted_at IS NULL
       WHERE  TRUE
       ${ownerWhere}
       ORDER  BY rp.created_at DESC
@@ -93,8 +93,8 @@ async function getDashboardMetrics(ownerId = null) {
         p.address_line1,
         un.unit_number
       FROM   maintenance_requests mr
-      JOIN   units       un ON un.id = mr.unit_id
-      JOIN   properties  p  ON p.id  = un.property_id
+      JOIN   units       un ON un.id = mr.unit_id AND un.deleted_at IS NULL
+      JOIN   properties  p  ON p.id  = un.property_id AND p.deleted_at IS NULL
       WHERE  mr.status IN ('open', 'in_progress')
       ${ownerWhere}
       ORDER  BY mr.created_at DESC

@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import {
   Box, Typography, Grid, Card, CardContent, Button, Chip, Stack,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
+  TextField,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
@@ -12,15 +13,19 @@ import LoadingOverlay from '../../components/common/LoadingOverlay'
 import DataTable from '../../components/common/DataTable'
 import StatusChip from '../../components/common/StatusChip'
 import UnitForm from '../../components/forms/UnitForm'
-import { useProperty } from '../../hooks/useProperties'
+import { useProperty, useDeleteProperty } from '../../hooks/useProperties'
 import { useUnits, useCreateUnit, useUpdateUnit, useDeleteUnit } from '../../hooks/useUnits'
 import { useLeases } from '../../hooks/useLeases'
 
 export default function PropertyDetailPage() {
   const { id } = useParams()
-  const [createOpen,   setCreateOpen]   = useState(false)
-  const [editingUnit,  setEditingUnit]   = useState(null)
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const navigate = useNavigate()
+  const [createOpen,      setCreateOpen]      = useState(false)
+  const [editingUnit,     setEditingUnit]      = useState(null)
+  const [confirmDelete,   setConfirmDelete]    = useState(false)
+  const [deleteStep1,     setDeleteStep1]      = useState(false)
+  const [deleteStep2,     setDeleteStep2]      = useState(false)
+  const [deleteNameInput, setDeleteNameInput]  = useState('')
 
   const { data: property, isLoading: propLoading } = useProperty(id)
   const { data: unitsData, isLoading: unitsLoading } = useUnits({ propertyId: id })
@@ -28,6 +33,7 @@ export default function PropertyDetailPage() {
   const { mutate: createUnit, isPending: creating } = useCreateUnit()
   const { mutate: updateUnit, isPending: updating } = useUpdateUnit(editingUnit?.id)
   const { mutate: deleteUnit, isPending: deleting } = useDeleteUnit()
+  const { mutate: deleteProperty, isPending: deletingProperty } = useDeleteProperty()
 
   // Must be above the early return to respect React's Rules of Hooks
   const tenantByUnit = useMemo(() => {
@@ -104,6 +110,12 @@ export default function PropertyDetailPage() {
     })
   }
 
+  const handleDeleteProperty = () => {
+    deleteProperty(id, {
+      onSuccess: () => navigate('/properties'),
+    })
+  }
+
   return (
     <PageContainer
       title={prop?.name ?? 'Property'}
@@ -128,7 +140,7 @@ export default function PropertyDetailPage() {
               <Typography variant="body2" color="text.secondary">Type</Typography>
               <Typography sx={{ textTransform: 'capitalize' }}>{prop?.property_type ?? '—'}</Typography>
             </Grid>
-            <Grid item xs={6} sm={5}>
+            <Grid item xs={6} sm={4}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Vacancy</Typography>
               <Stack direction="row" spacing={1} flexWrap="wrap">
                 <Chip size="small" color="info"    label={`${vacantCount} vacant`} />
@@ -137,6 +149,16 @@ export default function PropertyDetailPage() {
                   <Chip size="small" color="warning" label={`${maintenanceCount} maintenance`} />
                 )}
               </Stack>
+            </Grid>
+            <Grid item xs={12} sm={1} sx={{ display: 'flex', justifyContent: { sm: 'flex-end' } }}>
+              <Button
+                size="small"
+                color="error"
+                startIcon={<DeleteIcon />}
+                onClick={() => setDeleteStep1(true)}
+              >
+                Delete
+              </Button>
             </Grid>
           </Grid>
         </CardContent>
@@ -205,6 +227,57 @@ export default function PropertyDetailPage() {
           <Button onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</Button>
           <Button onClick={handleDeleteUnit} color="error" variant="contained" disabled={deleting}>
             {deleting ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete property — step 1: warning */}
+      <Dialog open={deleteStep1} onClose={() => setDeleteStep1(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Archive property?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will archive <strong>{prop?.name}</strong> along with all its units. Active leases will
+            be terminated and the property will be removed from your dashboard.
+            Financial records (payments, charges) are preserved.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteStep1(false)}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => { setDeleteStep1(false); setDeleteNameInput(''); setDeleteStep2(true) }}
+          >
+            Continue
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete property — step 2: type name to confirm */}
+      <Dialog open={deleteStep2} onClose={() => setDeleteStep2(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirm archive</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Type <strong>{prop?.name}</strong> to confirm.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Property name"
+            value={deleteNameInput}
+            onChange={(e) => setDeleteNameInput(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteStep2(false)} disabled={deletingProperty}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={deleteNameInput !== prop?.name || deletingProperty}
+            onClick={handleDeleteProperty}
+          >
+            {deletingProperty ? 'Archiving…' : 'Archive Property'}
           </Button>
         </DialogActions>
       </Dialog>

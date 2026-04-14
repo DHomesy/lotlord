@@ -93,4 +93,30 @@ async function resetPassword(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { register, login, refresh, logout, forgotPassword, resetPassword, cookieOptions, COOKIE_NAME };
+/**
+ * POST /auth/verify-email
+ * Confirms the token from the verification email link.
+ * Returns a fresh access token so the frontend can auto-login.
+ */
+async function verifyEmail(req, res, next) {
+  try {
+    const user = await authService.verifyEmail(req.body.token);
+    // Issue a fresh access token with emailVerified: true baked in
+    const { token, refreshToken } = await authService.issueTokensForUser(user.id);
+    res.cookie(COOKIE_NAME, refreshToken, cookieOptions());
+    res.json({ message: 'Email verified successfully.', token, user });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /auth/resend-verification
+ * Resends the verification email for the currently authenticated user.
+ */
+async function resendVerification(req, res, next) {
+  try {
+    await authService.resendVerificationEmail(req.user.sub);
+    res.json({ message: 'Verification email sent. Please check your inbox.' });
+  } catch (err) { next(err); }
+}
+
+module.exports = { register, login, refresh, logout, forgotPassword, resetPassword, verifyEmail, resendVerification, cookieOptions, COOKIE_NAME };

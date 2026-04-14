@@ -10,6 +10,7 @@ import {
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import BlockIcon from '@mui/icons-material/Block'
+import { useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/layout/PageContainer'
 import DataTable from '../../components/common/DataTable'
 import EmptyState from '../../components/common/EmptyState'
@@ -128,6 +129,7 @@ function EditChargeForm({ charge, onSubmit, loading, onCancel }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ChargesPage() {
+  const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const isLandlord = user?.role === 'landlord'
 
@@ -160,6 +162,7 @@ export default function ChargesPage() {
       }
     : undefined
 
+  // All hooks must be declared before any conditional return (React Rules of Hooks).
   const { data, isLoading } = useCharges(backendParams)
   const { mutate: create, isPending: creating } = useCreateCharge()
   const { mutate: update, isPending: updating } = useUpdateCharge()
@@ -173,6 +176,20 @@ export default function ChargesPage() {
     if (statusFilter === 'voided') return allRows.filter((r) => r.status === 'voided')
     return allRows
   }, [allRows, statusFilter])
+
+  // If the landlord has no properties yet, prompt them to add one first.
+  // This return is intentionally placed AFTER all hooks above.
+  if (isLandlord && propsData !== undefined && properties.length === 0) {
+    return (
+      <PageContainer title="Charges">
+        <EmptyState
+          message="You need to add a property before you can create charges."
+          onAdd={() => navigate('/properties')}
+          addLabel="Go to Properties"
+        />
+      </PageContainer>
+    )
+  }
 
   // ─── Columns ────────────────────────────────────────────────────────────────
   const columns = [

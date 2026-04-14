@@ -10,10 +10,12 @@ export function useRegister() {
   return useMutation({
     mutationFn: api.register,
     onSuccess: (data) => {
-      // Auto-login immediately after registration (backend returns token + sets refresh cookie)
       setAuth(data.user, data.token)
       if (data.user.role === 'tenant') {
         navigate('/my/dashboard', { replace: true })
+      } else if (!data.user.email_verified_at) {
+        // New landlord — send straight to the "check your inbox" page
+        navigate('/verify-email-pending', { replace: true })
       } else {
         navigate('/dashboard', { replace: true })
       }
@@ -64,4 +66,23 @@ export function useResetPassword() {
     mutationFn: api.resetPassword,
     onSuccess: () => navigate('/login', { replace: true }),
   })
+}
+
+export function useVerifyEmail() {
+  const { setAuth } = useAuthStore()
+  const navigate = useNavigate()
+  return useMutation({
+    mutationFn: api.verifyEmail,
+    onSuccess: (data) => {
+      // If the backend returns a new token after verification, update auth state
+      if (data?.user && data?.token) {
+        setAuth(data.user, data.token)
+      }
+      navigate('/dashboard', { replace: true })
+    },
+  })
+}
+
+export function useResendVerification() {
+  return useMutation({ mutationFn: api.resendVerification })
 }

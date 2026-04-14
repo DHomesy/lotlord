@@ -96,6 +96,28 @@ app.get('/health', async (req, res) => {
 
 // Routes
 app.use('/api/v1/auth', authRoutes);
+
+// Email verification gate — applied globally to all non-auth API routes.
+// Peeks at the Bearer token (already signed with emailVerified claim by signToken).
+// Auth routes are excluded so resend-verification and verify-email always work.
+// Unauthenticated requests pass through here and fail at the route-level authenticate middleware.
+const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('./config/env');
+app.use('/api/v1', (req, res, next) => {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return next();
+  try {
+    const payload = jwt.verify(header.split(' ')[1], JWT_SECRET);
+    if (payload.role === 'landlord' && !payload.emailVerified) {
+      return res.status(403).json({
+        error: 'Please verify your email address before accessing this feature.',
+        code: 'EMAIL_UNVERIFIED',
+      });
+    }
+  } catch { /* invalid/expired token — handled by authenticate() in the route handler */ }
+  next();
+});
+
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/properties', propertyRoutes);
 app.use('/api/v1/units', unitRoutes);

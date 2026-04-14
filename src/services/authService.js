@@ -6,6 +6,7 @@ const userRepo = require('../dal/userRepository');
 const { getClient } = require('../config/db');
 const tenantRepo = require('../dal/tenantRepository');
 const passwordResetRepo = require('../dal/passwordResetRepository');
+const emailVerifyRepo = require('../dal/emailVerificationRepository');
 const notificationRepo = require('../dal/notificationRepository');
 const { sendEmail } = require('../integrations/email');
 const { JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN, FRONTEND_URL } = require('../config/env');
@@ -22,7 +23,13 @@ function escapeHtml(str) {
 /** Short-lived access token — stored in memory on the client. */
 function signToken(user) {
   return jwt.sign(
-    { sub: user.id, email: user.email, role: user.role },
+    {
+      sub:           user.id,
+      email:         user.email,
+      role:          user.role,
+      // Include verification status so middleware can check without a DB query
+      emailVerified: !!user.email_verified_at,
+    },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN },
   );
@@ -71,6 +78,13 @@ async function register({ email, password, firstName, lastName, phone, role, acc
   if (normalizedRole === 'landlord') {
     seedDefaultTemplates().catch((err) =>
       console.warn('[auth] default template seed failed:', err.message),
+    );
+  }
+
+  // Send verification email to new landlords (fire-and-forget — don't block registration)
+  if (normalizedRole === 'landlord') {
+    sendVerificationEmail(user).catch((err) =>
+      console.warn('[auth] verification email failed:', err.message),
     );
   }
 
@@ -252,4 +266,72 @@ async function seedDefaultTemplates() {
   }
 }
 
-module.exports = { register, login, refreshFromCookie, forgotPassword, resetPassword };
+/**
+ * Generate and store a verification token, then send the confirmation email.
+ * Safe to call multiple times (resend flow) — issues a fresh 24-hour token each call.
+ */
+async function sendVerificationEmail(user) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+  await emailVerifyRepo.setVerifyToken(user.id, token, expiresAt);
+
+  const verifyUrl = `${FRONTEND_URL}/verify-email?token=${token}`;
+  const firstName = escapeHtml(user.first_name || 'there');
+
+  await sendEmail({
+    to: user.email,
+    subject: 'Verify your LotLord email address',
+    html: `
+      <p>Hi ${firstName},</p>
+      <p>Welcome to LotLord! Please verify your email address to activate your account:</p>
+      <p><a href="${verifyUrl}" style="font-size:16px;">Verify Email Address &rarr;</a></p>
+      <p>This link expires in <strong>24 hours</strong>.</p>
+      <p style="color:#888;font-size:12px;">If you did not create a LotLord account, you can safely ignore this email.</p>
+    `,
+    text: `Hi ${firstName}, verify your email here (expires in 24 hours): ${verifyUrl}`,
+  });
+}
+
+/**
+ * Confirm the token from the verification email link.
+ * Returns the user row for immediate auto-login if needed.
+ */
+async function verifyEmail(token) {
+  const user = await emailVerifyRepo.findValidToken(token);
+  if (!user) {
+    const err = new Error('This verification link is invalid or has expired. Please request a new one.');
+    err.status = 400;
+    throw err;
+  }
+  await emailVerifyRepo.markVerified(user.id);
+  return user;
+}
+
+/**
+ * Resend a verification email for the authenticated (but unverified) user.
+ */
+async function resendVerificationEmail(userId) {
+  const user = await userRepo.findById(userId);
+  if (!user) {
+    const err = new Error('User not found'); err.status = 404; throw err;
+  }
+  if (user.email_verified_at) {
+    const err = new Error('Email is already verified'); err.status = 400; throw err;
+  }
+  await sendVerificationEmail(user);
+}
+
+/**
+ * Issue a fresh access + refresh token pair for a user by ID.
+ * Used after email verification to hand the client a token with emailVerified: true.
+ */
+async function issueTokensForUser(userId) {
+  const user = await userRepo.findById(userId);
+  if (!user) {
+    const err = new Error('User not found'); err.status = 404; throw err;
+  }
+  return { token: signToken(user), refreshToken: signRefreshToken(user) };
+}
+
+module.exports = { register, login, refreshFromCookie, forgotPassword, resetPassword, verifyEmail, resendVerificationEmail, issueTokensForUser };

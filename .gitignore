@@ -28,3 +28,7 @@ coverage/
 
 # Migrations lock (keep migrations themselves, not lock files)
 .node-pg-migrate-lock
+
+# Local notes
+todo.txt
+

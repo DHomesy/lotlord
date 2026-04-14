@@ -22,16 +22,17 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const ADMIN_EMAIL    = process.env.ADMIN_EMAIL;
+const ADMIN_EMAIL    = process.env.ADMIN_EMAIL    || 'admin@lotlord.app';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 if (!DATABASE_URL) {
   console.error('[create-admin] ERROR: DATABASE_URL is required');
   process.exit(1);
 }
-if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
-  console.error('[create-admin] ERROR: ADMIN_EMAIL and ADMIN_PASSWORD must be set');
-  console.error('  Usage: ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=secret node scripts/create-admin.js');
+if (!ADMIN_PASSWORD) {
+  console.error('[create-admin] ERROR: ADMIN_PASSWORD must be set');
+  console.error('  Usage: ADMIN_PASSWORD=secret node scripts/create-admin.js');
+  console.error('  ADMIN_EMAIL defaults to admin@lotlord.app if not set');
   process.exit(1);
 }
 if (ADMIN_PASSWORD.length < 8) {
