@@ -67,7 +67,7 @@ export default function ResetPasswordPage() {
 
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
-              {error.response?.data?.message || error.response?.data?.errors?.[0]?.msg || 'This link is invalid or has expired.'}
+              {error.response?.data?.error || error.response?.data?.message || error.response?.data?.errors?.[0]?.msg || 'This link is invalid or has expired.'}
               {' '}
               <Link component={RouterLink} to="/forgot-password">Request a new link.</Link>
             </Alert>

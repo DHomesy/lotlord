@@ -9,6 +9,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ---
 
+## [1.4.0] — 2026-04-14 — Bug fixes & admin account management
+
+### Added
+- `scripts/update-admin.js` — update the email and/or password of an existing admin account directly against the production database; looks up by `OLD_EMAIL`, validates no email conflict, bcrypt-hashes the new password; all three fields (`OLD_EMAIL`, `NEW_EMAIL`, `NEW_PASSWORD`) are env-var driven with no hard-coded credentials
+
+### Fixed
+- **Dashboard infinite spinner for free-tier landlords** — analytics endpoint returns 402 for free accounts, leaving `data = undefined`; the previous `if (isLoading || !data)` guard caught this as a loading state forever; reordered to `if (isLoading)` → `if (isError)` so the upgrade prompt is shown immediately
+- **"Rendered fewer hooks than expected" crash on Charges page** — `useCharges`, `useCreateCharge`, `useUpdateCharge`, `useVoidCharge`, and `useMemo` were declared after an early return that fires when a landlord has no properties, violating React's Rules of Hooks; all hook calls moved above the conditional return
+- **Duplicate email registration shows generic error** — backend sends `{ error: '...' }` but `RegisterPage` was reading `data.message`; now reads `data.error` first so "Email already in use" is shown correctly
+- **Password reset "Something went wrong"** — two fixes: (1) `ForgotPasswordPage` and `ResetPasswordPage` now read `data.error` before `data.message` so real backend errors surface; (2) SES call in `authService.forgotPassword` wrapped in try/catch — AWS delivery failures are now logged server-side and returned as a user-friendly 503 instead of a raw 500
+
+---
+
 ## [1.3.0] — 2026-04-14 — QA polish, onboarding, landing page & email verification
 
 ### Added
@@ -128,6 +141,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 | Version | Date | Summary |
 |---|---|---|
+| 1.4.0 | 2026-04-14 | Bug fixes & admin account management |
 | 1.3.0 | 2026-04-14 | QA polish, onboarding, landing page & email verification |
 | 1.2.0 | 2026-04-13 | Deployment, error alerting & auth hardening |
 | 1.1.0 | 2026-04-07 | Security audit, integration tests & maintenance/documents rework |
@@ -135,7 +149,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ---
 
-[Unreleased]: https://github.com/DHomesy/lotlord/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/DHomesy/lotlord/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/DHomesy/lotlord/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/DHomesy/lotlord/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/DHomesy/lotlord/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/DHomesy/lotlord/compare/v1.0.0...v1.1.0

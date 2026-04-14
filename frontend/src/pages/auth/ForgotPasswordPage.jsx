@@ -49,7 +49,7 @@ export default function ForgotPasswordPage() {
             <>
               {error && (
                 <Alert severity="error" sx={{ mb: 2 }}>
-                  {error.response?.data?.message || 'Something went wrong. Please try again.'}
+                  {error.response?.data?.error || error.response?.data?.message || 'Something went wrong. Please try again.'}
                 </Alert>
               )}
 

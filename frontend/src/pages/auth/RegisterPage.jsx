@@ -91,7 +91,7 @@ export default function RegisterPage() {
 
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
-              {error.response?.data?.message || 'Registration failed. Please try again.'}
+              {error.response?.data?.error || error.response?.data?.message || 'Registration failed. Please try again.'}
             </Alert>
           )}
 

@@ -164,18 +164,25 @@ async function forgotPassword(email) {
   const resetUrl = `${FRONTEND_URL}/reset-password?token=${token}`;
   const firstName = escapeHtml(user.first_name || 'there');
 
-  await sendEmail({
-    to: email,
-    subject: 'Reset your password',
-    html: `
-      <p>Hi ${firstName},</p>
-      <p>We received a request to reset your password. Click the link below to choose a new one:</p>
-      <p><a href="${resetUrl}" style="font-size:16px;">Reset Password →</a></p>
-      <p>This link expires in <strong>1 hour</strong>. If you did not request a password reset, you can safely ignore this email.</p>
-      <p style="color:#888;font-size:12px;">For security, this link can only be used once.</p>
-    `,
-    text: `Hi ${firstName}, reset your password here (expires in 1 hour): ${resetUrl}`,
-  });
+  try {
+    await sendEmail({
+      to: email,
+      subject: 'Reset your password',
+      html: `
+        <p>Hi ${firstName},</p>
+        <p>We received a request to reset your password. Click the link below to choose a new one:</p>
+        <p><a href="${resetUrl}" style="font-size:16px;">Reset Password →</a></p>
+        <p>This link expires in <strong>1 hour</strong>. If you did not request a password reset, you can safely ignore this email.</p>
+        <p style="color:#888;font-size:12px;">For security, this link can only be used once.</p>
+      `,
+      text: `Hi ${firstName}, reset your password here (expires in 1 hour): ${resetUrl}`,
+    });
+  } catch (sesErr) {
+    console.error('[auth] forgotPassword: email delivery failed:', sesErr.message);
+    const err = new Error('We were unable to send the reset email. Please try again in a few minutes.');
+    err.status = 503;
+    throw err;
+  }
 }
 
 /**
