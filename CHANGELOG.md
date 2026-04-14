@@ -9,6 +9,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ---
 
+## [1.4.3] — 2026-04-14 — Admin script cleanup
+
+### Changed
+- **`scripts/update-admin.js`** — removed the `OLD_EMAIL` env-var requirement; the admin account is now looked up automatically by `role = 'admin'`, so only `NEW_EMAIL` and/or `NEW_PASSWORD` need to be supplied
+
+---
+
 ## [1.4.2] — 2026-04-14 — Landlord setup checklist, tenant empty states
 
 ### Added
