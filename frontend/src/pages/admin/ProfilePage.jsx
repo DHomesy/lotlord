@@ -226,7 +226,7 @@ export default function AdminProfilePage() {
         <Box>
           <Typography variant="h6">Subscription</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Your platform subscription gives you access to all PropertyMgr features.
+            Your platform subscription gives you access to all LotLord features.
             Manage your plan, update your payment method, or download invoices at any time.
           </Typography>
         </Box>

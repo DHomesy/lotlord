@@ -2,6 +2,8 @@ import { IconButton, Tooltip, Chip, Stack } from '@mui/material'
 import DownloadIcon from '@mui/icons-material/Download'
 import PageContainer from '../../components/layout/PageContainer'
 import DataTable from '../../components/common/DataTable'
+import LoadingOverlay from '../../components/common/LoadingOverlay'
+import EmptyState from '../../components/common/EmptyState'
 import { useDocuments, useDownloadDocument } from '../../hooks/useDocuments'
 
 export default function TenantDocumentsPage() {
@@ -32,9 +34,14 @@ export default function TenantDocumentsPage() {
     },
   ]
 
+  if (isLoading) return <LoadingOverlay />
+
   return (
     <PageContainer title="My Documents">
-      <DataTable rows={rows} columns={columns} loading={isLoading} />
+      {rows.length === 0
+        ? <EmptyState message="No documents have been shared with you yet." />
+        : <DataTable rows={rows} columns={columns} loading={false} />
+      }
     </PageContainer>
   )
 }

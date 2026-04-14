@@ -324,12 +324,18 @@ export default function TenantsPage() {
       )}
 
       {/* Active tenants */}
-      {!loadingTenants && tenants.length === 0 ? (
+      {!loadingTenants && tenants.length === 0 && acceptedInvites.length === 0 ? (
         <EmptyState
           message="No tenants yet. Invite your first tenant to get started."
           onAdd={() => setOpen(true)}
           addLabel="Invite Tenant"
         />
+      ) : !loadingTenants && tenants.length === 0 && acceptedInvites.length > 0 ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {acceptedInvites.length === 1
+            ? 'Your tenant has accepted their invitation. Create a lease to activate their account.'
+            : `${acceptedInvites.length} tenants have accepted their invitations. Create a lease for each to activate their accounts.`}
+        </Alert>
       ) : (
         <DataTable
           rows={tenants}

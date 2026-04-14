@@ -1,13 +1,16 @@
-import { Grid, Card, CardContent, Typography, Divider, Box, Button } from '@mui/material'
+import { Grid, Card, CardContent, Typography, Divider, Box, Button, Alert } from '@mui/material'
 import HomeIcon from '@mui/icons-material/Home'
 import HouseIcon from '@mui/icons-material/House'
 import DescriptionIcon from '@mui/icons-material/Description'
 import BuildIcon from '@mui/icons-material/Build'
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import { useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/layout/PageContainer'
 import StatusChip from '../../components/common/StatusChip'
 import LoadingOverlay from '../../components/common/LoadingOverlay'
 import { useMyLease } from '../../hooks/useTenants'
+import { useMyPaymentMethods } from '../../hooks/useStripeSetup'
 import { useAuthStore } from '../../store/authStore'
 
 function InfoCard({ label, value, children }) {
@@ -73,12 +76,17 @@ function NoLeaseEmptyState() {
 export default function TenantDashboardPage() {
   const user = useAuthStore((s) => s.user)
   const { activeLease, leases, isLoading } = useMyLease()
+  const { data: paymentMethods } = useMyPaymentMethods()
   const days = daysUntil(activeLease?.end_date)
+  const navigate = useNavigate()
+
+  const displayName = user?.firstName || user?.email || 'Tenant'
+  const hasPaymentMethod = Array.isArray(paymentMethods) && paymentMethods.length > 0
 
   if (isLoading) return <LoadingOverlay />
 
   return (
-    <PageContainer title={`Welcome, ${user?.name || user?.email || 'Tenant'}`}>
+    <PageContainer title={`Welcome, ${displayName}`}>
       {activeLease ? (
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
@@ -154,6 +162,48 @@ export default function TenantDashboardPage() {
       ) : (
         <NoLeaseEmptyState />
       )}
+
+      {/* ── Bank account setup prompt ── */}
+      {!hasPaymentMethod && (
+        <Alert
+          severity="info"
+          sx={{ mt: 3 }}
+          action={
+            <Button size="small" variant="outlined" onClick={() => navigate('/my/profile')}>
+              Set up now
+            </Button>
+          }
+        >
+          Add a bank account to pay rent online directly from your dashboard.
+        </Alert>
+      )}
+
+      {/* ── Quick navigation cards ── */}
+      <Divider sx={{ my: 3 }} />
+      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+        Quick access
+      </Typography>
+      <Grid container spacing={2}>
+        {[
+          { label: 'Charges & Payments', icon: <ReceiptLongIcon color="primary" />, path: '/my/charges' },
+          { label: 'Maintenance',        icon: <BuildIcon       color="primary" />, path: '/my/maintenance' },
+          { label: 'Documents',          icon: <DescriptionIcon color="primary" />, path: '/my/documents' },
+          { label: 'My Profile',         icon: <AccountBalanceIcon color="primary" />, path: '/my/profile' },
+        ].map(({ label, icon, path }) => (
+          <Grid item xs={6} sm={3} key={path}>
+            <Card
+              variant="outlined"
+              onClick={() => navigate(path)}
+              sx={{ cursor: 'pointer', '&:hover': { borderColor: 'primary.main', boxShadow: 1 }, transition: 'box-shadow 0.15s, border-color 0.15s' }}
+            >
+              <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 2 }}>
+                {icon}
+                <Typography variant="body2" fontWeight={500} textAlign="center">{label}</Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
     </PageContainer>
   )
 }

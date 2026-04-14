@@ -27,6 +27,7 @@ function signToken(user) {
       sub:           user.id,
       email:         user.email,
       role:          user.role,
+      firstName:     user.first_name || null,
       // Include verification status so middleware can check without a DB query
       emailVerified: !!user.email_verified_at,
     },

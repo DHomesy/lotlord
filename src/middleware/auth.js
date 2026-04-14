@@ -108,7 +108,7 @@ function checkFreeTierLimit(resource, max) {
 
       let countQuery, countParams;
       if (resource === 'properties') {
-        countQuery = 'SELECT COUNT(*)::int AS cnt FROM properties WHERE owner_id = $1';
+        countQuery = 'SELECT COUNT(*)::int AS cnt FROM properties WHERE owner_id = $1 AND deleted_at IS NULL';
         countParams = [req.user.sub];
       } else if (resource === 'units') {
         // units are owned transitively through properties
@@ -117,6 +117,8 @@ function checkFreeTierLimit(resource, max) {
           FROM units u
           JOIN properties p ON p.id = u.property_id
           WHERE p.owner_id = $1
+            AND u.deleted_at IS NULL
+            AND p.deleted_at IS NULL
         `;
         countParams = [req.user.sub];
       } else {

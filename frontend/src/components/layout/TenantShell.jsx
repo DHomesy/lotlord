@@ -48,7 +48,7 @@ export default function TenantShell() {
       <AppBar position="static">
         <Toolbar sx={{ gap: 1 }}>
           <Typography variant="h6" sx={{ whiteSpace: 'nowrap', mr: isMobile ? 'auto' : 2 }}>
-            PropertyMgr
+            LotLord
           </Typography>
 
           {/* Scrollable tabs — visible on sm+ only */}

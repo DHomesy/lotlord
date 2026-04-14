@@ -14,20 +14,15 @@ import {
   Box,
   Stack,
   Alert,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
   Button,
 } from '@mui/material'
 import TrendingUpIcon    from '@mui/icons-material/TrendingUp'
 import WarningAmberIcon  from '@mui/icons-material/WarningAmber'
 import ApartmentIcon     from '@mui/icons-material/Apartment'
 import BuildIcon         from '@mui/icons-material/Build'
-import CheckCircleIcon   from '@mui/icons-material/CheckCircle'
-import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import PageContainer     from '../../components/layout/PageContainer'
 import LoadingOverlay    from '../../components/common/LoadingOverlay'
+import LandlordSetupCard from '../../components/common/LandlordSetupCard'
 import { useDashboard }  from '../../hooks/useAnalytics'
 import { useConnectStatus } from '../../hooks/useStripeSetup'
 import { useMySubscription, useCreateCheckoutSession } from '../../hooks/useBilling'
@@ -133,73 +128,6 @@ function ActivityTable({ head, children, empty }) {
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
-function SetupChecklist({ hasProperties, connectOnboarded, isPro, isLandlord }) {
-  const navigate = useNavigate()
-  const checkout = useCreateCheckoutSession()
-
-  const steps = [
-    {
-      label: 'Add your first property',
-      done: hasProperties,
-      action: () => navigate('/properties'),
-      actionLabel: 'Go to Properties',
-    },
-    // Stripe Connect payout and subscription are landlord-only features
-    isLandlord && {
-      label: 'Complete Stripe Connect payout setup',
-      done: connectOnboarded,
-      action: () => navigate('/profile'),
-      actionLabel: 'Open Profile',
-    },
-    isLandlord && {
-      label: 'Upgrade to Pro for portfolio analytics & no limits',
-      done: isPro,
-      action: () => checkout.mutate(),
-      actionLabel: 'Upgrade Now',
-    },
-  ].filter(Boolean)
-
-  const allDone = steps.every((s) => s.done)
-  if (allDone) return null
-
-  return (
-    <Card variant="outlined" sx={{ mb: 3, borderColor: 'primary.light', bgcolor: 'primary.50' }}>
-      <CardContent>
-        <Typography variant="subtitle1" fontWeight={700} gutterBottom>
-          Getting Started
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Complete these steps to make the most of PropertyManager.
-        </Typography>
-        <List dense disablePadding>
-          {steps.map((step) => (
-            <ListItem key={step.label} disableGutters sx={{ py: 0.5 }}>
-              <ListItemIcon sx={{ minWidth: 32 }}>
-                {step.done
-                  ? <CheckCircleIcon fontSize="small" color="success" />
-                  : <RadioButtonUncheckedIcon fontSize="small" color="disabled" />}
-              </ListItemIcon>
-              <ListItemText
-                primary={step.label}
-                primaryTypographyProps={{
-                  variant: 'body2',
-                  color: step.done ? 'text.disabled' : 'text.primary',
-                  sx: { textDecoration: step.done ? 'line-through' : 'none' },
-                }}
-              />
-              {!step.done && (
-                <Button size="small" variant="text" onClick={step.action} disabled={checkout.isPending}>
-                  {step.actionLabel}
-                </Button>
-              )}
-            </ListItem>
-          ))}
-        </List>
-      </CardContent>
-    </Card>
-  )
-}
-
 export default function DashboardPage() {
   const { data, isLoading, isError, error } = useDashboard()
   const { data: connectStatus } = useConnectStatus()
@@ -222,6 +150,7 @@ export default function DashboardPage() {
     const is402 = error?.response?.status === 402
     return (
       <PageContainer title="Dashboard">
+        <LandlordSetupCard />
         {is402 ? (
           <Alert
             severity="info"
@@ -262,12 +191,7 @@ export default function DashboardPage() {
         onAddProperty={() => navigate('/properties')}
       />
 
-      <SetupChecklist
-        hasProperties={totalUnits > 0}
-        connectOnboarded={connectOnboarded}
-        isPro={isPro}
-        isLandlord={isLandlord}
-      />
+      <LandlordSetupCard />
 
       {/* ── Stat cards ────────────────────────────────────────────────────── */}
       <Grid container spacing={3}>

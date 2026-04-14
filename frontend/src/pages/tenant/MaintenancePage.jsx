@@ -6,6 +6,7 @@ import DataTable from '../../components/common/DataTable'
 import StatusChip from '../../components/common/StatusChip'
 import MaintenanceForm from '../../components/forms/MaintenanceForm'
 import LoadingOverlay from '../../components/common/LoadingOverlay'
+import EmptyState from '../../components/common/EmptyState'
 import { useMaintenance, useCreateMaintenanceRequest } from '../../hooks/useMaintenance'
 import { useMyLease } from '../../hooks/useTenants'
 import * as maintenanceApi from '../../api/maintenance'
@@ -58,7 +59,10 @@ export default function TenantMaintenancePage() {
       title="My Maintenance Requests"
       actions={<Button variant="contained" startIcon={<AddIcon />} onClick={() => { setUploadError(''); setOpen(true) }}>New Request</Button>}
     >
-      <DataTable rows={rows} columns={columns} loading={isLoading} />
+      {!isLoading && rows.length === 0
+        ? <EmptyState message="You haven't submitted any maintenance requests yet." />
+        : <DataTable rows={rows} columns={columns} loading={isLoading} />
+      }
       {uploadError && <Alert severity="warning" sx={{ mt: 2 }}>{uploadError}</Alert>}
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Submit Maintenance Request</DialogTitle>

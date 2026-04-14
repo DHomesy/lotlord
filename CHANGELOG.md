@@ -9,6 +9,36 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ---
 
+## [1.4.2] — 2026-04-14 — Landlord setup checklist, tenant empty states
+
+### Added
+- **`LandlordSetupCard` component** — persistent, self-contained getting-started checklist for new landlords (role `landlord` only, never shown to admin); tracks four milestones: first property, first unit, first tenant invite, and Stripe Connect bank setup; progress bar shows `n / 4` steps complete; dismissable via × button (persisted to `localStorage`); auto-dismisses when all steps are done; rendered on both the Pro analytics dashboard and the free-tier (402) upgrade prompt so it's always visible on first login
+- **Tenant maintenance empty state** — `tenant/MaintenancePage` now shows a friendly "You haven't submitted any maintenance requests yet." empty state (using `EmptyState`) instead of an empty table when there are no rows
+- **Tenant documents loading & empty state** — `tenant/DocumentsPage` now shows `LoadingOverlay` while fetching and an "No documents have been shared with you yet." empty state when the document list is empty
+
+### Changed
+- **`DashboardPage` cleanup** — removed the old inline `SetupChecklist` function and its exclusive MUI imports (`List`, `ListItem`, `ListItemIcon`, `ListItemText`, `CheckCircleIcon`, `RadioButtonUncheckedIcon`); replaced with the new `<LandlordSetupCard />` which is also inserted above the 402 upgrade-prompt path
+
+---
+
+## [1.4.1] — 2026-04-14 — QA patch: free-tier limit, property form UX & tenant portal polish
+
+### Added
+- **Tenant dashboard quick-nav cards** — four tappable cards (Charges & Payments, Maintenance, Documents, My Profile) below the lease summary for fast navigation
+- **Tenant bank account setup prompt** — persistent `Alert` with "Set up now" CTA on the tenant dashboard when no payment method is linked
+
+### Changed
+- **Property form: type selector moved to top** — landlords now choose Single-family / Multi-family / Commercial first; Address Line 2 is hidden for multi-family and commercial (units are added via the unit wizard after creation)
+- **Tenant dashboard greeting uses first name** — `firstName` claim added to JWT in `authService.signToken`; tenant greeting now reads "Welcome, Aston" instead of falling back to the email address
+- **Tenant shell branding** — `PropertyMgr` → `LotLord` in `TenantShell` AppBar
+- **Admin profile page branding** — remaining `PropertyMgr` reference in subscription section replaced with `LotLord`
+
+### Fixed
+- **Free-tier limit fires after property deletion** — `checkFreeTierLimit` counted all properties/units regardless of `deleted_at`; queries now include `AND deleted_at IS NULL` so a landlord who deletes their property can immediately create a new one on the free plan
+- **"No tenants yet" shown when accepted invitation exists** — the Tenants page empty state fired whenever `tenants.length === 0`, even when an accepted invitation was present (tenant accepted but no lease yet); now shows a contextual info banner instead: "Your tenant has accepted their invitation. Create a lease to activate their account."
+
+---
+
 ## [1.4.0] — 2026-04-14 — Bug fixes & admin account management
 
 ### Added
@@ -142,6 +172,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 | Version | Date | Summary |
 |---|---|---|
+| 1.4.1 | 2026-04-14 | QA patch: free-tier limit, property form UX & tenant portal polish |
 | 1.4.0 | 2026-04-14 | Bug fixes & admin account management |
 | 1.3.0 | 2026-04-14 | QA polish, onboarding, landing page & email verification |
 | 1.2.0 | 2026-04-13 | Deployment, error alerting & auth hardening |
@@ -150,7 +181,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ---
 
-[Unreleased]: https://github.com/DHomesy/lotlord/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/DHomesy/lotlord/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/DHomesy/lotlord/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/DHomesy/lotlord/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/DHomesy/lotlord/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/DHomesy/lotlord/compare/v1.1.0...v1.2.0
