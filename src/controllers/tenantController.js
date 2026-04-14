@@ -3,9 +3,14 @@ const leaseRepo = require('../dal/leaseRepository');
 
 async function listTenants(req, res, next) {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, includePending } = req.query;
     const ownerId = req.user.role === 'landlord' ? req.user.sub : undefined;
-    const tenants = await tenantService.listTenants({ page: Number(page), limit: Number(limit), ownerId });
+    const tenants = await tenantService.listTenants({
+      page: Number(page),
+      limit: Number(limit),
+      ownerId,
+      includePending: includePending === 'true',
+    });
     res.json(tenants);
   } catch (err) { next(err); }
 }

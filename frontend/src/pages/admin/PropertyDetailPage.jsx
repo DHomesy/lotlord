@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  Box, Typography, Grid, Card, CardContent, Button, Chip, Stack,
+  Box, Typography, Grid, Card, CardContent, Button, Chip, Stack, Tooltip,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
   TextField,
 } from '@mui/material'
@@ -71,18 +71,31 @@ export default function PropertyDetailPage() {
     {
       field: '_edit',
       headerName: '',
-      width: 80,
+      width: 160,
       sortable: false,
       filterable: false,
       valueGetter: () => '',
       renderCell: ({ row }) => (
-        <Button
-          size="small"
-          startIcon={<EditIcon />}
-          onClick={(e) => { e.stopPropagation(); setEditingUnit(row) }}
-        >
-          Edit
-        </Button>
+        <Stack direction="row" spacing={0.5}>
+          <Button
+            size="small"
+            startIcon={<EditIcon />}
+            onClick={(e) => { e.stopPropagation(); setEditingUnit(row) }}
+          >
+            Edit
+          </Button>
+          {row.status === 'vacant' && (
+            <Tooltip title="Go to Tenants to invite a tenant and create a lease for this unit">
+              <Button
+                size="small"
+                color="success"
+                onClick={(e) => { e.stopPropagation(); navigate('/tenants') }}
+              >
+                Lease
+              </Button>
+            </Tooltip>
+          )}
+        </Stack>
       ),
     },
   ]
@@ -94,6 +107,7 @@ export default function PropertyDetailPage() {
   const handleUpdateUnit = (values) => {
     // Never send status: 'occupied' from the form — only vacant/maintenance are editable
     const payload = {
+      unitNumber:  values.unitNumber,
       rentAmount:  values.rentAmount,
       bedrooms:    values.bedrooms,
       bathrooms:   values.bathrooms,

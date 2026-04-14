@@ -42,9 +42,7 @@ export default function UnitForm({ onSubmit, defaultValues, loading, isEdit = fa
         label="Unit Number"
         {...register('unitNumber')}
         error={!!errors.unitNumber}
-        helperText={errors.unitNumber?.message}
-        InputProps={{ readOnly: isEdit }}
-        disabled={isEdit}
+        helperText={errors.unitNumber?.message ?? (isEdit ? 'Changing the unit number updates it everywhere it appears.' : undefined)}
       />
       <Stack direction="row" spacing={2}>
         <TextField label="Bedrooms" type="number" {...register('bedrooms')} fullWidth />

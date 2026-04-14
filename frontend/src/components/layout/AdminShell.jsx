@@ -17,7 +17,7 @@ import Sidebar from './Sidebar'
 import { useLogout } from '../../hooks/useAuth'
 import { useAuthStore } from '../../store/authStore'
 
-const DRAWER_WIDTH = 240
+const DRAWER_WIDTH = 260
 
 export default function AdminShell() {
   const theme = useTheme()
@@ -26,7 +26,7 @@ export default function AdminShell() {
   const { mutate: logout } = useLogout()
   const user = useAuthStore((s) => s.user)
 
-  const drawerContent = <Sidebar role={user?.role} onNavClick={() => setMobileOpen(false)} />
+  const drawerContent = <Sidebar role={user?.role} user={user} onNavClick={() => setMobileOpen(false)} />
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -48,11 +48,6 @@ export default function AdminShell() {
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
             LotLord
           </Typography>
-          {!isMobile && (
-            <Typography variant="body2" sx={{ mr: 2 }}>
-              {user?.name || user?.email}
-            </Typography>
-          )}
           <Tooltip title="Logout">
             <IconButton color="inherit" onClick={() => logout()} size="small">
               <LogoutIcon fontSize="small" />

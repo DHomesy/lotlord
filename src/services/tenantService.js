@@ -2,8 +2,8 @@ const { v4: uuidv4 } = require('uuid');
 const tenantRepo = require('../dal/tenantRepository');
 const userRepo = require('../dal/userRepository');
 
-async function listTenants({ page, limit, ownerId }) {
-  return tenantRepo.findAll({ page, limit, ownerId });
+async function listTenants({ page, limit, ownerId, includePending = false }) {
+  return tenantRepo.findAll({ page, limit, ownerId, includePending });
 }
 
 async function getTenant(id) {

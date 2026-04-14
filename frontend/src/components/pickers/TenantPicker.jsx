@@ -22,8 +22,9 @@ export default function TenantPicker({
   helperText,
   disabled = false,
   label = 'Tenant',
+  includePending = false,
 }) {
-  const { data, isLoading } = useTenants()
+  const { data, isLoading } = useTenants(includePending ? { includePending: 'true' } : undefined)
 
   const options = (Array.isArray(data) ? data : (data?.tenants ?? data?.data ?? [])).map((t) => ({
     id: t.id,

@@ -95,7 +95,7 @@ function PortfolioTab() {
           severity="info"
           action={
             <Button
-              color="inherit"
+              variant="contained"
               size="small"
               onClick={() => checkout.mutate()}
               disabled={checkout.isPending}

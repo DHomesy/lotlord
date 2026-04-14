@@ -42,6 +42,7 @@ export default function PropertiesPage() {
   const [unitWizardPropertyId, setUnitWizardPropertyId] = useState(null)
   const [unitCount, setUnitCount] = useState(4)
   const [unitPrefix, setUnitPrefix] = useState('')
+  const [unitStartNumber, setUnitStartNumber] = useState(1)
   const { data, isLoading } = useProperties()
   const { mutateAsync: create, isPending: isCreating } = useCreateProperty()
   const { mutateAsync: createUnit, isPending: isCreatingUnit } = useCreateUnit()
@@ -79,8 +80,9 @@ export default function PropertiesPage() {
 
   const handleAddUnits = async () => {
     const prefix = unitPrefix.trim()
+    const start = Number(unitStartNumber) || 1
     const jobs = Array.from({ length: unitCount }, (_, i) => {
-      const num = prefix ? `${prefix} ${i + 1}` : String(i + 1)
+      const num = prefix ? `${prefix} ${start + i}` : String(start + i)
       return createUnit({
         propertyId: unitWizardPropertyId,
         unitNumber: num,
@@ -94,6 +96,7 @@ export default function PropertiesPage() {
     setUnitWizardPropertyId(null)
     setUnitCount(4)
     setUnitPrefix('')
+    setUnitStartNumber(1)
   }
 
   return (
@@ -165,9 +168,32 @@ export default function PropertiesPage() {
               placeholder="e.g. Apt, Unit, Suite"
               value={unitPrefix}
               onChange={(e) => setUnitPrefix(e.target.value)}
-              helperText={`Creates: ${unitPrefix.trim() ? `${unitPrefix.trim()} 1` : '1'}, ${unitPrefix.trim() ? `${unitPrefix.trim()} 2` : '2'}…`}
               size="small"
             />
+            <Stack direction="row" spacing={2}>
+              <TextField
+                label="Starting number"
+                type="number"
+                value={unitStartNumber}
+                onChange={(e) => setUnitStartNumber(Math.max(0, Number(e.target.value)))}
+                size="small"
+                sx={{ width: 140 }}
+                inputProps={{ min: 0 }}
+              />
+            </Stack>
+            {(() => {
+              const prefix = unitPrefix.trim()
+              const start = Number(unitStartNumber) || 1
+              const preview = Array.from({ length: Math.min(unitCount, 3) }, (_, i) =>
+                prefix ? `${prefix} ${start + i}` : String(start + i)
+              )
+              const suffix = unitCount > 3 ? ` … ${prefix ? `${prefix} ${start + unitCount - 1}` : String(start + unitCount - 1)}` : ''
+              return (
+                <Typography variant="caption" color="text.secondary">
+                  Creates: {preview.join(', ')}{suffix}
+                </Typography>
+              )
+            })()}
           </Stack>
         </DialogContent>
         <DialogActions>

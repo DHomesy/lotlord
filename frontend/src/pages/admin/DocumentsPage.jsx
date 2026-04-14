@@ -96,7 +96,7 @@ function UploadDialog({ open, file, onClose, onConfirm, uploading }) {
             <PropertySelect value={relatedId} onChange={setRelatedId} />
           )}
           {relatedType === 'tenant' && (
-            <TenantPicker value={relatedId} onChange={setRelatedId} label="Tenant" />
+            <TenantPicker value={relatedId} onChange={setRelatedId} label="Tenant" includePending />
           )}
           {relatedType === 'lease' && (
             <LeasePicker value={relatedId} onChange={setRelatedId} onlyActive={false} label="Lease" />

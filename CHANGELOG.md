@@ -9,6 +9,32 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ---
 
+## [1.4.6] — 2026-04-14 — Sidebar polish & tenant picker fix
+
+### Added
+- **Sidebar user info card** — the navigation sidebar now shows the logged-in user's initials avatar, display name, and role badge (Admin / Landlord / Tenant) at the top above the nav items
+- **Sidebar section group labels** — nav items are now grouped under "Core", "Finance", and "Admin" overline headings with dividers between sections so the hierarchy is immediately clear
+
+### Changed
+- **Sidebar width** — increased from 240 px to 260 px to accommodate the group labels and remove visual cramping
+- **Sidebar nav items** — removed `dense` mode; items use slightly more vertical padding and have rounded-corner selected-state highlighting (filled primary background)
+- **AppBar username removed** — the user's name/email is no longer repeated in the AppBar on desktop since it's now visible in the sidebar card
+- **Document tenant picker now includes leaseless tenants** — `GET /tenants?includePending=true` uses a `LEFT JOIN` on `leases` plus an `OR` check against `tenant_invitations`; the document upload dialog passes this flag automatically when `Related type = Tenant`, so tenants who accepted an invitation but don't yet have a lease appear in the picker
+
+---
+
+## [1.4.5] — 2026-04-14 — Unit management UX & ledger polish
+
+### Added
+- **Unit wizard: starting number field** — the "Add Units" wizard after creating a multi-family/commercial property now includes a "Starting number" input (default `1`); unit numbers are generated as `${prefix} ${start + i}` so users can create `101, 102, 103, 104` directly; the live preview line updates instantly as prefix, count, or start number changes
+- **Vacant unit lease guidance** — the unit table on `PropertyDetailPage` now shows a green **Lease** button next to **Edit** for any vacant unit; hovering shows the tooltip *"Go to Tenants to invite a tenant and create a lease for this unit"*; clicking navigates to `/tenants`
+
+### Changed
+- **Unit number is now editable** — the unit number field in `UnitForm` was locked (`readOnly`/`disabled`) when editing; both locks removed and `unitNumber` is now included in the `PATCH /units/:id` payload; a helper text note informs the user that the change updates the number everywhere
+- **Ledger "Upgrade to Pro" button** — changed from `color="inherit"` (nearly invisible text) to `variant="contained"` to match the dashboard upgrade prompt styling
+
+---
+
 ## [1.4.4] — 2026-04-14 — Marketing landing page redesign
 
 ### Changed

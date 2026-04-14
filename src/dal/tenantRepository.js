@@ -1,21 +1,31 @@
 const { query } = require('../config/db');
 const { parsePagination } = require('../lib/pagination');
 
-async function findAll({ page = 1, limit = 20, ownerId } = {}) {
+async function findAll({ page = 1, limit = 20, ownerId, includePending = false } = {}) {
   const { limit: lim, offset } = parsePagination(page, limit);
 
   if (ownerId) {
-    // Scope to tenants who have at least one lease on a property owned by the given landlord
+    // Default: only tenants with at least one lease on this landlord's properties.
+    // includePending=true: also include tenants who accepted an invitation but have no lease yet.
+    const joinType = includePending ? 'LEFT JOIN' : 'JOIN';
     const { rows } = await query(
       `SELECT DISTINCT t.*, u.email, u.first_name, u.last_name, u.phone
        FROM tenants t
        JOIN users u ON u.id = t.user_id
-       JOIN leases l ON l.tenant_id = t.id
-       JOIN units un ON un.id = l.unit_id
-       JOIN properties p ON p.id = un.property_id
-       WHERE t.deleted_at IS NULL AND p.owner_id = $3
+       ${joinType} leases l ON l.tenant_id = t.id
+       ${joinType} units un ON un.id = l.unit_id
+       ${joinType} properties p ON p.id = un.property_id
+       WHERE t.deleted_at IS NULL
+         AND (p.owner_id = $3 OR (
+           $4 AND EXISTS (
+             SELECT 1 FROM tenant_invitations ti
+             WHERE ti.tenant_id = t.id
+               AND ti.accepted_at IS NOT NULL
+               AND ti.invited_by = $3
+           )
+         ))
        ORDER BY u.last_name ASC LIMIT $1 OFFSET $2`,
-      [lim, offset, ownerId],
+      [lim, offset, ownerId, includePending],
     );
     return rows;
   }
