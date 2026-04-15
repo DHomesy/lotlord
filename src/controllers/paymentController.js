@@ -80,6 +80,7 @@ async function createStripePaymentIntent(req, res, next) {
       paymentMethodId,
       createdBy: req.user.sub,
       ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
     });
     res.status(201).json(result);
   } catch (err) { next(err); }
@@ -155,6 +156,7 @@ async function createMyPaymentIntent(req, res, next) {
       paymentMethodId,
       createdBy:       req.user.sub,
       ipAddress:       req.ip,
+      userAgent:       req.get('user-agent'),
     });
     res.status(201).json(result);
   } catch (err) { next(err); }

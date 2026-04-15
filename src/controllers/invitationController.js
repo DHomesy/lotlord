@@ -1,5 +1,5 @@
 const invitationService = require('../services/invitationService');
-const { cookieOptions, COOKIE_NAME } = require('./authController');
+const { cookieOptions, COOKIE_NAME } = require('../config/cookies');
 
 async function createInvitation(req, res, next) {
   try {
@@ -29,7 +29,7 @@ async function listInvitations(req, res, next) {
 /** Public — validates the token and returns pre-fill data for the signup form. */
 async function getInvitation(req, res, next) {
   try {
-    const data = await invitationService.getInvitation(req.params.token);
+    const data = await invitationService.getInvitation(req.body.token);
     res.json(data);
   } catch (err) { next(err); }
 }
@@ -41,14 +41,15 @@ async function getInvitation(req, res, next) {
  */
 async function acceptInvitation(req, res, next) {
   try {
+    const token = req.body.token;
     const { firstName, lastName, email, password, phone, emailOptIn, smsOptIn, acceptedTerms } = req.body;
     const acceptedTermsAt = acceptedTerms === true ? new Date() : null;
-    const { user, token, refreshToken, tenant } = await invitationService.acceptInvitation(
-      req.params.token,
+    const { user, token: accessToken, refreshToken, tenant } = await invitationService.acceptInvitation(
+      token,
       { firstName, lastName, email, password, phone, emailOptIn: !!emailOptIn, smsOptIn: !!smsOptIn, acceptedTermsAt },
     );
     res.cookie(COOKIE_NAME, refreshToken, cookieOptions());
-    res.status(201).json({ user, token, tenant });
+    res.status(201).json({ user, token: accessToken, tenant });
   } catch (err) { next(err); }
 }
 

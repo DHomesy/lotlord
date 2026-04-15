@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.2.0 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.4.8 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -971,9 +971,19 @@ NODE_ENV=development
 
 # PostgreSQL
 DATABASE_URL=postgresql://user:password@host:port/dbname
+# Set to 'false' only if your DB uses an untrusted self-signed cert (uncommon)
+# DATABASE_SSL_REJECT_UNAUTHORIZED=true
+# Optional custom CA bundle (PEM)
+# DATABASE_SSL_CA=-----BEGIN CERTIFICATE-----\n...
 
 # Auth
+# Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 JWT_SECRET=your_jwt_secret_here
+# Separate secret for refresh tokens (strongly recommended in production)
+# Falls back to JWT_SECRET + '_refresh' if not set
+JWT_REFRESH_SECRET=your_refresh_secret_here
+JWT_EXPIRES_IN=15m           # access token  (short — in-memory on client)
+JWT_REFRESH_EXPIRES_IN=30d   # refresh token (long  — httpOnly cookie)
 
 # AWS SES
 AWS_REGION=us-east-1
@@ -991,6 +1001,7 @@ S3_BUCKET_NAME=lotlord-files
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_PHONE_NUMBER=
+APP_BASE_URL=https://your-app.railway.app
 
 # Stripe
 STRIPE_SECRET_KEY=
@@ -1052,7 +1063,7 @@ property-manager/
 ### Scaling Checklist (When Ready)
 
 - [x] Swap `integrations/email/gmail.js` → `integrations/email/ses.js` (done)
-- [x] Swap `integrations/storage/googledrive.js` → `integrations/storage/s3.js` (done)
+- [x] Swap `integrations/storage/googledrive.js` → `integrations/storage/s3.js` (done; googledrive.js removed)
 - [ ] Migrate Railway PostgreSQL → Supabase or AWS RDS (schema is compatible)
 - [ ] Add `organizations` table for multi-landlord SaaS support
 - [ ] Move Redis/BullMQ to dedicated instance (Upstash or ElastiCache)

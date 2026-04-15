@@ -32,10 +32,9 @@ async function findByToken(token) {
 
 async function findAll({ page = 1, limit = 20, invitedBy = null } = {}) {
   const { limit: lim, offset } = parsePagination(page, limit);
-  const params = invitedBy ? [invitedBy, lim, offset] : [lim, offset];
-  const ownerFilter = invitedBy ? 'WHERE i.invited_by = $1' : '';
-  const limitIdx  = invitedBy ? '$2' : '$1';
-  const offsetIdx = invitedBy ? '$3' : '$2';
+  const values = [lim, offset];
+  let where = '';
+  if (invitedBy) { where = `WHERE i.invited_by = $${values.push(invitedBy)}`; }
   const { rows } = await query(
     `SELECT i.*,
             u.unit_number,
@@ -46,10 +45,10 @@ async function findAll({ page = 1, limit = 20, invitedBy = null } = {}) {
        LEFT JOIN units      u   ON u.id  = i.unit_id
        LEFT JOIN properties p   ON p.id  = u.property_id
        LEFT JOIN users      inv ON inv.id = i.invited_by
-      ${ownerFilter}
+      ${where}
       ORDER BY i.created_at DESC
-      LIMIT ${limitIdx} OFFSET ${offsetIdx}`,
-    params,
+      LIMIT $1 OFFSET $2`,
+    values,
   );
   return rows;
 }

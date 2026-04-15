@@ -89,7 +89,6 @@ app.get('/health', async (req, res) => {
     status,
     db: dbStatus,
     version,
-    env: process.env.NODE_ENV,
     uptime: Math.floor(process.uptime()),
   });
 });

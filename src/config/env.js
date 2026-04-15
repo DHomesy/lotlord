@@ -21,6 +21,10 @@ module.exports = {
 
   // Auth
   JWT_SECRET: required('JWT_SECRET'),
+  // Optional separate secret for refresh tokens. Falls back to JWT_SECRET + '_refresh' so
+  // existing deployments continue working without a new environment variable.
+  // Set JWT_REFRESH_SECRET in Railway to use a fully independent secret.
+  JWT_REFRESH_SECRET: optional('JWT_REFRESH_SECRET', '') || undefined,
   JWT_EXPIRES_IN:         optional('JWT_EXPIRES_IN', '15m'),          // access token
   JWT_REFRESH_EXPIRES_IN: optional('JWT_REFRESH_EXPIRES_IN', '30d'),  // refresh token (httpOnly cookie)
 

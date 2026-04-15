@@ -62,7 +62,7 @@ async function update(id, fields, client = null) {
 }
 
 async function remove(id) {
-  await query('DELETE FROM units WHERE id = $1', [id]);
+  await query('UPDATE units SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1', [id]);
 }
 
 module.exports = { findAll, findById, create, update, remove };

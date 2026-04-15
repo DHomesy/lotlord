@@ -116,7 +116,7 @@ async function createSetupIntent(tenantId) {
  * @param {string}  opts.createdBy         - User ID of the actor (admin recording the intent)
  * @returns {{ clientSecret, paymentIntentId, paymentId, amountDollars, status }}
  */
-async function createPaymentIntent({ leaseId, chargeId, paymentMethodId, createdBy, ipAddress }) {
+async function createPaymentIntent({ leaseId, chargeId, paymentMethodId, createdBy, ipAddress, userAgent }) {
   const lease = await leaseRepo.findById(leaseId);
   if (!lease) throw Object.assign(new Error('Lease not found'), { status: 404 });
 
@@ -172,8 +172,8 @@ async function createPaymentIntent({ leaseId, chargeId, paymentMethodId, created
       customer_acceptance: {
         type:   'online',
         online: {
-          ip_address: ipAddress || '127.0.0.1',
-          user_agent: 'server',
+          ip_address: ipAddress || '0.0.0.0',
+          user_agent: userAgent || 'unknown',
         },
       },
     };

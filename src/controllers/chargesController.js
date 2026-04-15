@@ -41,12 +41,23 @@ async function assertLandlordOwnsUnit(unitId, user) {
  */
 async function listCharges(req, res, next) {
   try {
-    const { unitId, tenantId, leaseId, propertyId, unpaidOnly, chargeType } = req.query;
+    const { unitId, leaseId, propertyId, unpaidOnly, chargeType } = req.query;
+    let { tenantId } = req.query;
+
+    const isLandlord = req.user.role === 'landlord';
+    const isTenant   = req.user.role === 'tenant';
+
+    // Tenants may only view their own charges — resolve from JWT, never from query param.
+    if (isTenant) {
+      const tenantRecord = await tenantRepo.findByUserId(req.user.sub);
+      if (!tenantRecord) return res.status(404).json({ error: 'Tenant profile not found' });
+      // Force scope to their own tenantId regardless of what was passed in the query string.
+      tenantId = tenantRecord.id;
+    }
 
     // Landlords can only see charges for their own properties.
     // ownerId injected server-side means they don't need to pass an explicit filter —
     // the query will return all charges across their properties.
-    const isLandlord = req.user.role === 'landlord';
     const ownerId = isLandlord ? req.user.sub : undefined;
 
     if (!unitId && !tenantId && !leaseId && !propertyId && !isLandlord) {

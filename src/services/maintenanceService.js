@@ -5,6 +5,7 @@ const tenantRepo = require('../dal/tenantRepository');
 const leaseRepo = require('../dal/leaseRepository');
 const storage = require('../integrations/storage');
 const audit = require('./auditService');
+const { assertMimeMatchesBytes } = require('../lib/mimeUtils');
 
 // ── Allowed MIME types for attachments ────────────────────────────────────────
 const ALLOWED_MIME_TYPES = new Set([
@@ -15,6 +16,17 @@ const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
   'video/mp4',
   'video/quicktime',
+]);
+
+// Maps detected content family (magic bytes) to valid declared MIME types.
+// Both MP4 and MOV are ISO Base Media containers — detected as 'video/isobmff'.
+const ALLOWED_DECLARED_FOR_DETECTED = new Map([
+  ['image/jpeg',      new Set(['image/jpeg'])],
+  ['image/png',       new Set(['image/png'])],
+  ['image/gif',       new Set(['image/gif'])],
+  ['image/webp',      new Set(['image/webp'])],
+  ['application/pdf', new Set(['application/pdf'])],
+  ['video/isobmff',   new Set(['video/mp4', 'video/quicktime'])],
 ]);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -169,13 +181,16 @@ async function addAttachment(requestId, file, user) {
   if (!request) throw notFound();
   assertCanAccess(request, user);
 
-  // Validate MIME type
+  // Validate declared MIME type
   if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
     throw Object.assign(
       new Error(`File type not allowed. Supported: ${[...ALLOWED_MIME_TYPES].join(', ')}`),
       { status: 415 },
     );
   }
+
+  // Validate actual file content against magic bytes — prevents disguised executables
+  assertMimeMatchesBytes(file, ALLOWED_DECLARED_FOR_DETECTED);
 
   // Upload to S3
   const { fileUrl } = await storage.uploadFile({

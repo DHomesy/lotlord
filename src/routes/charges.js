@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const controller = require('../controllers/chargesController');
-const { createChargeValidators, validate } = require('../middleware/validators');
+const { createChargeValidators, updateChargeValidators, validate } = require('../middleware/validators');
 
 // GET  /api/v1/charges?leaseId=xxx[&unpaidOnly=true][&chargeType=rent|late_fee|utility|other]
 // Returns all charges for a lease with payment status joined in
@@ -16,7 +16,7 @@ router.get('/:id', authenticate, controller.getCharge);
 router.post('/', authenticate, authorize('admin', 'landlord'), createChargeValidators, validate, controller.createCharge);
 
 // PATCH /api/v1/charges/:id  — edit description, due_date, charge_type (no payment yet)
-router.patch('/:id', authenticate, authorize('admin', 'landlord'), controller.updateCharge);
+router.patch('/:id', authenticate, authorize('admin', 'landlord'), updateChargeValidators, validate, controller.updateCharge);
 
 // POST /api/v1/charges/:id/void  — void / cancel a charge (appends a credit to the ledger)
 router.post('/:id/void', authenticate, authorize('admin', 'landlord'), controller.voidCharge);

@@ -1,30 +1,7 @@
 const authService = require('../services/authService');
 const env = require('../config/env');
 const audit = require('../services/auditService');
-
-const COOKIE_NAME = 'refreshToken';
-
-/**
- * Options for the httpOnly refresh-token cookie.
- * - httpOnly: JS cannot read it (XSS protection)
- * - secure: HTTPS only in production
- * - sameSite: 'strict' prevents the cookie being sent on cross-site navigations (CSRF protection)
- * - path: scoped to auth routes only — not sent with every API request
- */
-function cookieOptions() {
-  const isProd = env.NODE_ENV === 'production';
-  return {
-    httpOnly: true,
-    secure:   isProd,
-    // 'lax' allows the cookie to be sent from www.lotlord.app → api.lotlord.app
-    // (same registrable domain, different subdomains). 'strict' would block it.
-    sameSite: isProd ? 'lax' : 'lax',
-    // Scope cookie to the root domain so both subdomains can access it in production
-    domain:   isProd ? '.lotlord.app' : undefined,
-    path:     '/api/v1/auth',
-    maxAge:   30 * 24 * 60 * 60 * 1000, // 30 days in ms
-  };
-}
+const { COOKIE_NAME, cookieOptions } = require('../config/cookies');
 
 async function register(req, res, next) {
   try {
@@ -63,11 +40,16 @@ async function refresh(req, res, next) {
 
 /**
  * POST /auth/logout
- * Clears the refresh cookie. No body needed. Works even if the token is already expired.
+ * Increments the user's token_version (invalidating all current refresh tokens),
+ * then clears the refresh cookie. Even if the cookie is missing/expired, the
+ * cookie is cleared and a 200 is returned.
  */
-function logout(req, res) {
-  res.clearCookie(COOKIE_NAME, { path: '/api/v1/auth' });
-  res.json({ message: 'Logged out successfully' });
+async function logout(req, res, next) {
+  try {
+    await authService.logoutUser(req.cookies?.[COOKIE_NAME]);
+    res.clearCookie(COOKIE_NAME, { path: '/api/v1/auth' });
+    res.json({ message: 'Logged out successfully' });
+  } catch (err) { next(err); }
 }
 
 /**

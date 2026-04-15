@@ -28,6 +28,17 @@ async function start() {
   await connectDb();
   jobs.init();
 
+  // Warn if webhook secrets are absent in production — unauthenticated webhook calls
+  // would be accepted, letting anyone forge Twilio SMS or SES email events.
+  if (process.env.NODE_ENV === 'production') {
+    if (!process.env.TWILIO_AUTH_TOKEN) {
+      console.warn('[server] WARNING: TWILIO_AUTH_TOKEN is not set — Twilio webhook signature validation is disabled in production');
+    }
+    if (!process.env.SES_WEBHOOK_SECRET) {
+      console.warn('[server] WARNING: SES_WEBHOOK_SECRET is not set — SES inbound webhook is unauthenticated in production');
+    }
+  }
+
   app.listen(port, () => {
     console.log(`[server] Running on port ${port} (${process.env.NODE_ENV})`);
   });

@@ -13,17 +13,17 @@
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 
 const invitationRepo = require('../dal/invitationRepository');
 const userRepo = require('../dal/userRepository');
 const tenantRepo = require('../dal/tenantRepository');
 const unitRepo = require('../dal/unitRepository');
 const propertyRepo = require('../dal/propertyRepository');
+const authService = require('./authService');
 const { getClient } = require('../config/db');
 const { sendEmail } = require('../integrations/email');
 const { sendSms } = require('../integrations/twilio');
-const { FRONTEND_URL, JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN } = require('../config/env');
+const { FRONTEND_URL } = require('../config/env');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -38,22 +38,6 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function signToken(user) {
-  return jwt.sign(
-    { sub: user.id, email: user.email, role: user.role },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN },
-  );
-}
-
-function signRefreshToken(user) {
-  return jwt.sign(
-    { sub: user.id, type: 'refresh' },
-    JWT_SECRET,
-    { expiresIn: JWT_REFRESH_EXPIRES_IN },
-  );
 }
 
 // ── Service methods ───────────────────────────────────────────────────────────
@@ -185,6 +169,10 @@ async function getInvitation(token) {
  * Returns { user, token, refreshToken, tenant } — controller sets the cookie.
  */
 async function acceptInvitation(token, { firstName, lastName, email, password, phone, emailOptIn = false, smsOptIn = false, acceptedTermsAt = null }) {
+  if (!acceptedTermsAt) {
+    throw appErr('You must accept the Terms of Service to complete signup', 400);
+  }
+
   const inv = await invitationRepo.findByToken(token);
 
   // Re-validate (same checks as getInvitation)
@@ -235,8 +223,7 @@ async function acceptInvitation(token, { firstName, lastName, email, password, p
     dbClient.release();
   }
 
-  const accessToken  = signToken(user);
-  const refreshToken = signRefreshToken(user);
+  const { token: accessToken, refreshToken } = await authService.issueTokensForUser(user.id);
 
   return { user, token: accessToken, refreshToken, tenant };
 }

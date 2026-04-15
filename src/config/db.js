@@ -1,9 +1,21 @@
 const { Pool } = require('pg');
 const { DATABASE_URL, NODE_ENV } = require('./env');
 
+// In production, verify the server certificate by default.
+// Set DATABASE_SSL_REJECT_UNAUTHORIZED=false in Railway if you need to use their
+// self-signed cert and have not supplied a CA bundle via DATABASE_SSL_CA.
+const sslConfig = (() => {
+  if (NODE_ENV !== 'production') return false;
+  const rejectUnauthorized = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false';
+  return {
+    rejectUnauthorized,
+    ...(process.env.DATABASE_SSL_CA && { ca: process.env.DATABASE_SSL_CA }),
+  };
+})();
+
 const pool = new Pool({
   connectionString: DATABASE_URL,
-  ssl: NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: sslConfig,
   max: 10,               // max pool connections
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,

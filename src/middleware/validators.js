@@ -23,7 +23,8 @@ const registerValidators = [
   body('firstName').trim().notEmpty().withMessage('firstName is required'),
   body('lastName').trim().notEmpty().withMessage('lastName is required'),
   body('phone').optional({ values: 'falsy' }).isMobilePhone(),
-  body('role').optional().isString().trim(),
+  body('role').optional().isIn(['landlord', 'tenant']).withMessage('role must be landlord or tenant'),
+  body('acceptedTerms').custom((v) => v === true).withMessage('You must accept the Terms of Service'),
 ];
 
 const loginValidators = [
@@ -83,11 +84,13 @@ const createInvitationValidators = [
 ];
 
 const acceptInvitationValidators = [
+  body('token').trim().notEmpty().withMessage('Invitation token is required'),
   body('firstName').trim().notEmpty().withMessage('First name is required'),
   body('lastName').trim().notEmpty().withMessage('Last name is required'),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
   body('email').optional().isEmail().normalizeEmail().withMessage('Valid email required'),
   body('phone').optional({ values: 'falsy' }).isMobilePhone().withMessage('Valid phone number required'),
+  body('acceptedTerms').custom((v) => v === true).withMessage('You must accept the Terms of Service'),
 ];
 
 // ── Leases ────────────────────────────────────────────────────────────────────
@@ -100,6 +103,62 @@ const createLeaseValidators = [
   body('depositAmount').optional().isFloat({ min: 0 }),
   body('lateFeeAmount').optional().isFloat({ min: 0 }),
   body('lateFeeGraceDays').optional().isInt({ min: 0 }),
+];
+
+const updateLeaseValidators = [
+  body('status').optional().isIn(['active', 'terminated', 'expired', 'pending'])
+    .withMessage('status must be one of: active, terminated, expired, pending'),
+  body('depositStatus').optional().isIn(['held', 'returned', 'applied'])
+    .withMessage('depositStatus must be one of: held, returned, applied'),
+  body('signedAt').optional({ nullable: true }).isISO8601().toDate(),
+  body('documentUrl').optional({ nullable: true }).isURL(),
+  body('monthlyRent').optional().isFloat({ min: 0 }),
+  body('endDate').optional().isISO8601().toDate(),
+  body('lateFeeAmount').optional().isFloat({ min: 0 }),
+  body('lateFeeGraceDays').optional().isInt({ min: 0 }),
+];
+
+// ── Properties ────────────────────────────────────────────────────────────────
+const updatePropertyValidators = [
+  body('name').optional().trim().notEmpty(),
+  body('addressLine1').optional().trim().notEmpty(),
+  body('addressLine2').optional({ nullable: true }).trim(),
+  body('city').optional().trim().notEmpty(),
+  body('state').optional().trim().notEmpty(),
+  body('zip').optional().trim().notEmpty(),
+  body('country').optional().trim(),
+  body('propertyType').optional().isIn(['single', 'multi', 'commercial'])
+    .withMessage('propertyType must be one of: single, multi, commercial'),
+];
+
+// ── Units update ──────────────────────────────────────────────────────────────
+const updateUnitValidators = [
+  body('unitNumber').optional().trim().notEmpty(),
+  body('floor').optional({ nullable: true }).isInt({ min: 0 }),
+  body('bedrooms').optional({ nullable: true }).isInt({ min: 0 }),
+  body('bathrooms').optional({ nullable: true }).isFloat({ min: 0 }),
+  body('sqFt').optional({ nullable: true }).isInt({ min: 0 }),
+  body('rentAmount').optional().isFloat({ min: 0 }),
+  body('depositAmount').optional({ nullable: true }).isFloat({ min: 0 }),
+  body('status').optional().isIn(['vacant', 'occupied', 'maintenance'])
+    .withMessage('status must be one of: vacant, occupied, maintenance'),
+];
+
+// ── Charges update ────────────────────────────────────────────────────────────
+const updateChargeValidators = [
+  body('description').optional({ nullable: true }).trim(),
+  body('dueDate').optional().isDate().withMessage('dueDate must be a valid date (YYYY-MM-DD)'),
+  body('chargeType').optional().isIn(['rent', 'late_fee', 'utility', 'other'])
+    .withMessage('chargeType must be rent | late_fee | utility | other'),
+];
+
+// ── Tenants update ────────────────────────────────────────────────────────────
+const updateTenantValidators = [
+  body('emergencyContactName').optional({ nullable: true }).trim(),
+  body('emergencyContactPhone').optional({ nullable: true, values: 'falsy' }).isMobilePhone(),
+  body('notes').optional({ nullable: true }).trim(),
+  body('emailOptIn').optional().isBoolean(),
+  body('smsOptIn').optional().isBoolean(),
 ];
 
 // ── Payments ──────────────────────────────────────────────────────────────────
@@ -203,14 +262,26 @@ const sendSmsValidators = [
     .isLength({ max: 1600 }).withMessage('body must be 1600 characters or fewer'),
 ];
 
+// ── Users update ──────────────────────────────────────────────────────────────
+const updateUserValidators = [
+  body('firstName').optional().trim().notEmpty().withMessage('firstName must not be blank'),
+  body('lastName').optional().trim().notEmpty().withMessage('lastName must not be blank'),
+  body('phone').optional({ values: 'falsy' }).isMobilePhone().withMessage('phone must be a valid phone number'),
+  body('avatarUrl').optional({ values: 'falsy' }).isURL().withMessage('avatarUrl must be a valid URL'),
+];
+
 module.exports = {
   validate,
   registerValidators,
   loginValidators,
   createPropertyValidators,
+  updatePropertyValidators,
   createUnitValidators,
+  updateUnitValidators,
   createTenantValidators,
+  updateTenantValidators,
   createLeaseValidators,
+  updateLeaseValidators,
   createPaymentValidators,
   createMaintenanceValidators,
   updateMaintenanceValidators,
@@ -221,8 +292,10 @@ module.exports = {
   createSetupIntentValidators,
   createPaymentIntentValidators,
   createChargeValidators,
+  updateChargeValidators,
   createInvitationValidators,
   acceptInvitationValidators,
   forgotPasswordValidators,
   resetPasswordValidators,
+  updateUserValidators,
 };

@@ -9,7 +9,12 @@ const passwordResetRepo = require('../dal/passwordResetRepository');
 const emailVerifyRepo = require('../dal/emailVerificationRepository');
 const notificationRepo = require('../dal/notificationRepository');
 const { sendEmail } = require('../integrations/email');
-const { JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN, FRONTEND_URL } = require('../config/env');
+const { JWT_SECRET, JWT_REFRESH_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN, FRONTEND_URL } = require('../config/env');
+
+// Refresh tokens use a dedicated secret so a compromised access-token secret cannot be used
+// to forge refresh tokens (and vice-versa). Falls back to a derived value for deployments
+// that don't yet have JWT_REFRESH_SECRET set.
+const REFRESH_SECRET = JWT_REFRESH_SECRET || (JWT_SECRET + '_refresh');
 
 /** Escape HTML entities to prevent injection in email bodies. */
 function escapeHtml(str) {
@@ -36,16 +41,22 @@ function signToken(user) {
   );
 }
 
-/** Long-lived refresh token — sent only as an httpOnly cookie. */
+/** Long-lived refresh token — sent only as an httpOnly cookie. Uses REFRESH_SECRET. */
 function signRefreshToken(user) {
   return jwt.sign(
-    { sub: user.id, type: 'refresh' },
-    JWT_SECRET,
+    { sub: user.id, type: 'refresh', tokenVersion: user.token_version ?? 0 },
+    REFRESH_SECRET,
     { expiresIn: JWT_REFRESH_EXPIRES_IN },
   );
 }
 
 async function register({ email, password, firstName, lastName, phone, role, acceptedTermsAt }) {
+  if (!acceptedTermsAt) {
+    const err = new Error('You must accept the Terms of Service to create an account');
+    err.status = 400;
+    throw err;
+  }
+
   const existing = await userRepo.findByEmail(email);
   if (existing) {
     const err = new Error('Email already in use');
@@ -125,7 +136,7 @@ async function refreshFromCookie(cookieValue) {
 
   let payload;
   try {
-    payload = jwt.verify(cookieValue, JWT_SECRET);
+    payload = jwt.verify(cookieValue, REFRESH_SECRET);
   } catch {
     const err = new Error('Refresh token invalid or expired'); err.status = 401; throw err;
   }
@@ -137,6 +148,11 @@ async function refreshFromCookie(cookieValue) {
   const user = await userRepo.findById(payload.sub);
   if (!user) {
     const err = new Error('User not found'); err.status = 401; throw err;
+  }
+
+  // Verify token version — incremented on logout to invalidate all prior refresh tokens
+  if ((payload.tokenVersion ?? 0) !== user.token_version) {
+    const err = new Error('Refresh token has been revoked. Please log in again.'); err.status = 401; throw err;
   }
 
   return {
@@ -342,4 +358,18 @@ async function issueTokensForUser(userId) {
   return { token: signToken(user), refreshToken: signRefreshToken(user) };
 }
 
-module.exports = { register, login, refreshFromCookie, forgotPassword, resetPassword, verifyEmail, resendVerificationEmail, issueTokensForUser };
+/**
+ * Invalidate all outstanding refresh tokens for a user by incrementing their token_version.
+ * Called on explicit logout. Silently ignores missing or expired cookies.
+ */
+async function logoutUser(cookieValue) {
+  if (!cookieValue) return;
+  try {
+    const payload = jwt.verify(cookieValue, REFRESH_SECRET);
+    if (payload?.sub && payload?.type === 'refresh') {
+      await userRepo.incrementTokenVersion(payload.sub);
+    }
+  } catch { /* expired or invalid — nothing to revoke */ }
+}
+
+module.exports = { register, login, refreshFromCookie, forgotPassword, resetPassword, verifyEmail, resendVerificationEmail, issueTokensForUser, logoutUser };

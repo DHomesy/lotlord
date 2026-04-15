@@ -12,8 +12,8 @@ router.get('/',   authenticate, authorize('admin', 'landlord'),                 
 router.post('/:id/resend',  authenticate, authorize('admin', 'landlord'), controller.resendInvitation);
 router.delete('/:id',       authenticate, authorize('admin', 'landlord'), controller.deleteInvitation);
 
-// Public — token validation and acceptance (no auth required)
-router.get('/:token',         controller.getInvitation);
-router.post('/:token/accept', acceptInvitationValidators, validate, controller.acceptInvitation);
+// Public — token validation and acceptance (token in request body, not URL path)
+router.post('/validate',  controller.getInvitation);
+router.post('/accept',    acceptInvitationValidators, validate, controller.acceptInvitation);
 
 module.exports = router;

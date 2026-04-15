@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const documentRepo = require('../dal/documentRepository');
 const storage = require('../integrations/storage');
+const { assertMimeMatchesBytes } = require('../lib/mimeUtils');
 
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/webp', 'image/gif',
@@ -11,6 +12,18 @@ const ALLOWED_MIME_TYPES = new Set([
 ]);
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+
+// Maps detected raw MIME (from magic bytes) to the allowed declared MIME types.
+// DOCX/XLSX/PPTX are ZIP archives, so 'application/zip' covers them.
+const ALLOWED_DECLARED_FOR_DETECTED = new Map([
+  ['image/jpeg',         new Set(['image/jpeg'])],
+  ['image/png',          new Set(['image/png'])],
+  ['image/gif',          new Set(['image/gif'])],
+  ['image/webp',         new Set(['image/webp'])],
+  ['application/pdf',    new Set(['application/pdf'])],
+  ['application/msword', new Set(['application/msword'])],
+  ['application/zip',    new Set(['application/vnd.openxmlformats-officedocument.wordprocessingml.document'])],
+]);
 
 // GET /documents — list documents visible to the caller
 async function listDocuments(req, res, next) {
@@ -38,6 +51,13 @@ async function uploadDocument(req, res, next) {
     }
     if (file.size > MAX_FILE_SIZE) {
       return res.status(413).json({ error: 'File exceeds the 20 MB limit' });
+    }
+
+    // Validate actual file content against magic bytes — prevents disguised executables/scripts.
+    try {
+      assertMimeMatchesBytes(file, ALLOWED_DECLARED_FOR_DETECTED);
+    } catch (mimeErr) {
+      return res.status(415).json({ error: mimeErr.message });
     }
 
     const { relatedId, relatedType, category } = req.body;

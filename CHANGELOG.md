@@ -8,6 +8,43 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.4.9] — 2026-04-15 — Security hardening (audit round 3)
+
+### Security
+- **`PATCH /users/:id` input validation** — `updateUserValidators` added; `phone` is now validated as a mobile phone number, `avatarUrl` as a URL, `firstName`/`lastName` reject blank strings; validators wired to the route (previously completely unvalidated)
+- **Stripe ACH mandate real user-agent** — `createPaymentIntent` now accepts a `userAgent` parameter; both admin and tenant controllers pass `req.get('user-agent')`; the mandate `online.user_agent` field is set to the genuine client user-agent instead of the hardcoded `'server'` string, satisfying Stripe/Nacha ACH compliance requirements
+- **Startup warnings for missing webhook secrets** — server now logs a `WARNING` at startup when `NODE_ENV=production` and `TWILIO_AUTH_TOKEN` or `SES_WEBHOOK_SECRET` are absent, making it visible when the Twilio SMS and SES inbound webhooks are operating without signature validation
+
+---
+## [1.4.8] — 2026-04-14 — Security hardening (audit rounds 1 medium/low)
+
+### Security
+- **Separate JWT secrets** — refresh tokens now use `REFRESH_SECRET` (derived from `JWT_SECRET + '_refresh'` unless `JWT_REFRESH_SECRET` env var is set); a compromised access-token secret can no longer be used to forge refresh tokens
+- **`acceptedTerms` required server-side** — `authService.register` and `invitationService.acceptInvitation` now throw 400 if `acceptedTermsAt` is not supplied; `registerValidators` and `acceptInvitationValidators` validate the boolean `true` before the service is called
+- **Role enum enforcement** — `registerValidators` now restricts `role` to `['landlord', 'tenant']`; arbitrary role strings are rejected before reaching the service
+- **Health endpoint hardened** — removed `env: process.env.NODE_ENV` from `/health` response; the endpoint now returns only `{ status, db, version, uptime }`
+- **PATCH input validators added** — five previously unvalidated routes now have validators: `PATCH /leases/:id`, `PATCH /properties/:id`, `PATCH /units/:id`, `PATCH /charges/:id`, `PATCH /tenants/:id`
+
+### Removed
+- **Dead Google Drive integration** — `src/integrations/storage/googledrive.js` deleted; `storage/index.js` has always exported S3 only
+
+---
+## [1.4.7] — 2026-04-15 — Security hardening (audit rounds 1 & 2)
+
+### Security
+- **Refresh token revocation** — `users` table now has a `token_version` column (migration 023); `signRefreshToken` embeds the version and `refreshFromCookie` validates it; calling `POST /auth/logout` increments the version, instantly invalidating all outstanding refresh tokens for that user
+- **Database SSL certificate validation** — `rejectUnauthorized` now defaults to `true` in production; override with `DATABASE_SSL_REJECT_UNAUTHORIZED=false` env var if the Railway CA bundle isn't installed
+- **Magic-byte file validation (documents)** — `POST /documents` now inspects the actual file header bytes and rejects uploads where the binary content doesn't match the declared `Content-Type`, preventing disguised executables; shared helper extracted to `src/lib/mimeUtils.js`
+- **Magic-byte file validation (maintenance attachments)** — `maintenanceService.addAttachment` now applies the same magic-byte check (extended for `video/mp4` and `video/quicktime` via ISO Base Media container detection)
+- **Cron advisory locks** — all three scheduled jobs (rent reminders, late fees, lease expiry) are now guarded by `pg_try_advisory_lock`; a second instance of the server skips the job rather than running it concurrently
+- **Charges IDOR fix** — `GET /charges?tenantId=<uuid>` no longer trusts the caller-supplied `tenantId` when the role is `tenant`; the tenant's own record is resolved server-side from the JWT, making it impossible to read another tenant's billing history
+- **Invitation service stale JWT signing** — removed private `signToken`/`signRefreshToken` copies from `invitationService` that were missing `tokenVersion` and other claims; `acceptInvitation` now calls `authService.issueTokensForUser` for consistent, up-to-date tokens
+- **Unit soft delete** — `unitRepository.remove` now issues `UPDATE … SET deleted_at = NOW()` instead of a hard `DELETE`, preventing dangling `unit_id` foreign keys on historical leases and charges
+- **Invitation token out of URL path** — `GET /invitations/:token` and `POST /invitations/:token/accept` replaced with `POST /invitations/validate` and `POST /invitations/accept`; the token is now sent in the JSON request body so it is never recorded in server access logs
+- **Invitation repository parameter indices** — `invitationRepository.findAll` rewrote the manual `$1/$2/$3` index arithmetic to use the `values.push()` pattern consistent with every other repository, eliminating the risk of an off-by-one parameter binding error
+- **Cookie config extracted** — `COOKIE_NAME` and `cookieOptions()` moved from `authController` to `src/config/cookies.js`; `invitationController` now imports from there instead of from another controller
+
+---
 
 ## [1.4.6] — 2026-04-14 — Sidebar polish & tenant picker fix
 
