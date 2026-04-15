@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Button, Dialog, DialogTitle, DialogContent, Stack,
-  Checkbox, FormControlLabel, Alert, Typography, Box,
+  Alert,
   ToggleButtonGroup, ToggleButton, Chip,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
@@ -18,17 +18,21 @@ import { useCreateCharge } from '../../hooks/useCharges'
 const ACTIVE_STATUSES   = ['active', 'pending']
 const ARCHIVED_STATUSES = ['expired', 'terminated']
 
-/** Returns YYYY-MM-01 strings for every month in [startDate, endDate] */
-function getMonthlyDueDates(startDate, endDate) {
+/** Returns YYYY-MM-DD strings for every monthly due date in [startDate, endDate]. */
+function getMonthlyDueDates(startDate, endDate, dueDay = 1) {
+  const day = Math.max(1, Math.min(28, Number(dueDay) || 1))
   if (!startDate || !endDate) return []
+  const s = new Date(String(startDate).slice(0, 10))
+  const e = new Date(String(endDate).slice(0, 10))
+  if (isNaN(s) || isNaN(e) || e <= s) return []
   const dates = []
-  const cur = new Date(String(startDate).slice(0, 10))
-  cur.setDate(1)
-  const end = new Date(String(endDate).slice(0, 10))
-  while (cur <= end) {
+  const cur = new Date(s.getFullYear(), s.getMonth(), day)
+  if (cur < s) cur.setMonth(cur.getMonth() + 1)
+  while (cur <= e) {
     const y = cur.getFullYear()
     const m = String(cur.getMonth() + 1).padStart(2, '0')
-    dates.push(`${y}-${m}-01`)
+    const d = String(day).padStart(2, '0')
+    dates.push(`${y}-${m}-${d}`)
     cur.setMonth(cur.getMonth() + 1)
   }
   return dates
@@ -37,7 +41,6 @@ function getMonthlyDueDates(startDate, endDate) {
 export default function LeasesPage() {
   const navigate = useNavigate()
   const [createOpen, setCreateOpen] = useState(false)
-  const [addCharges,  setAddCharges]  = useState(false)
   const [chargeMsg,   setChargeMsg]   = useState(null)
   const [view,        setView]        = useState('active') // 'active' | 'archived'
 
@@ -79,29 +82,43 @@ export default function LeasesPage() {
 
   const handleCreate = async (values) => {
     create({
-      unitId:        values.unit_id,
-      tenantId:      values.tenant_id,
-      startDate:     values.start_date,
-      endDate:       values.end_date,
-      monthlyRent:   values.rent_amount,
-      depositAmount: values.deposit_amount,
+      unitId:           values.unit_id,
+      tenantId:         values.tenant_id,
+      startDate:        values.start_date,
+      endDate:          values.end_date,
+      monthlyRent:      values.rent_amount,
+      depositAmount:    values.deposit_amount,
+      lateFeeAmount:    parseFloat(values.late_fee_amount)    || 0,
+      lateFeeGraceDays: parseInt(values.late_fee_grace_days) || 0,
     }, {
       onSuccess: async (newLease) => {
-        if (addCharges) {
-          const dueDates = getMonthlyDueDates(values.start_date, values.end_date)
+        if (values.auto_charges) {
+          const dueDates = getMonthlyDueDates(values.start_date, values.end_date, values.charge_due_day)
           try {
-            await Promise.all(
-              dueDates.map((dueDate) =>
-                createCharge({
-                  unitId:     newLease.unit_id ?? values.unit_id,
-                  leaseId:    newLease.id,
-                  chargeType: 'rent',
-                  amount:     parseFloat(values.rent_amount),
-                  dueDate,
-                })
-              )
+            const tasks = dueDates.map((dueDate) =>
+              createCharge({
+                unitId:     newLease.unit_id ?? values.unit_id,
+                leaseId:    newLease.id,
+                chargeType: 'rent',
+                amount:     parseFloat(values.rent_amount),
+                dueDate,
+              })
             )
-            setChargeMsg({ type: 'success', text: `Lease created with ${dueDates.length} monthly charge(s).` })
+            if (values.include_deposit_charge && parseFloat(values.deposit_amount) > 0) {
+              tasks.push(createCharge({
+                unitId:      newLease.unit_id ?? values.unit_id,
+                leaseId:     newLease.id,
+                chargeType:  'other',
+                amount:      parseFloat(values.deposit_amount),
+                dueDate:     values.start_date,
+                description: 'Security deposit',
+              }))
+            }
+            await Promise.all(tasks)
+            const depLine = values.include_deposit_charge && parseFloat(values.deposit_amount) > 0
+              ? ' + 1 deposit charge'
+              : ''
+            setChargeMsg({ type: 'success', text: `Lease created with ${dueDates.length} monthly charge(s)${depLine}.` })
           } catch {
             setChargeMsg({ type: 'warning', text: 'Lease created, but some charges failed. Check the Charges page.' })
           }
@@ -116,7 +133,7 @@ export default function LeasesPage() {
     <PageContainer
       title="Leases"
       actions={
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setCreateOpen(true); setChargeMsg(null); setAddCharges(false) }}>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setCreateOpen(true); setChargeMsg(null) }}>
           New Lease
         </Button>
       }
@@ -147,7 +164,7 @@ export default function LeasesPage() {
       {!isLoading && rows.length === 0 ? (
         <EmptyState
           message={view === 'active' ? 'No active leases. Create a lease to get started.' : 'No archived leases.'}
-          onAdd={view === 'active' ? () => { setCreateOpen(true); setChargeMsg(null); setAddCharges(false) } : undefined}
+          onAdd={view === 'active' ? () => { setCreateOpen(true); setChargeMsg(null) } : undefined}
           addLabel="New Lease"
         />
       ) : (
@@ -155,44 +172,24 @@ export default function LeasesPage() {
       )}
 
       {/* Create Dialog */}
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={createOpen} onClose={() => { setCreateOpen(false); setChargeMsg(null) }} maxWidth="md" fullWidth>
         <DialogTitle>New Lease</DialogTitle>
         <DialogContent>
-          <LeaseForm onSubmit={handleCreate} loading={creating}>
-            {/* Auto-charges opt-in — rendered inside the form, above the submit button */}
-            <Box sx={{ mt: 1 }}>
-              <Typography variant="overline" color="text.secondary">Charges</Typography>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={addCharges}
-                    onChange={(e) => setAddCharges(e.target.checked)}
-                  />
-                }
-                label="Auto-generate monthly rent charges for this lease period"
-                sx={{ display: 'flex', mt: 0.5 }}
-              />
-              {addCharges && (
-                <Alert severity="info" sx={{ mt: 1 }}>
-                  One rent charge will be created per month (due on the 1st) for the full lease period.
-                  Charges will be visible on the <strong>Charges</strong> page after saving.
-                </Alert>
+          {chargeMsg?.type === 'success' ? (
+            <Alert
+              severity="success"
+              action={<Button size="small" onClick={() => { setCreateOpen(false); setChargeMsg(null) }}>Done</Button>}
+            >
+              {chargeMsg.text}
+            </Alert>
+          ) : (
+            <>
+              {chargeMsg?.type === 'warning' && (
+                <Alert severity="warning" sx={{ mb: 2 }}>{chargeMsg.text}</Alert>
               )}
-              {chargeMsg && (
-                <Alert
-                  severity={chargeMsg.type}
-                  sx={{ mt: 1 }}
-                  action={
-                    chargeMsg.type === 'success'
-                      ? <Button size="small" onClick={() => setCreateOpen(false)}>Done</Button>
-                      : undefined
-                  }
-                >
-                  {chargeMsg.text}
-                </Alert>
-              )}
-            </Box>
-          </LeaseForm>
+              <LeaseForm onSubmit={handleCreate} loading={creating} />
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </PageContainer>

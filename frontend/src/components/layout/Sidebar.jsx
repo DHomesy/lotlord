@@ -14,6 +14,7 @@ import {
 import DashboardIcon      from '@mui/icons-material/Dashboard'
 import ApartmentIcon      from '@mui/icons-material/Apartment'
 import PeopleIcon         from '@mui/icons-material/People'
+import DescriptionIcon    from '@mui/icons-material/Description'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import RequestQuoteIcon   from '@mui/icons-material/RequestQuote'
 import PaymentIcon        from '@mui/icons-material/Payment'
@@ -36,6 +37,7 @@ const NAV_GROUPS = [
       { label: 'Dashboard',   path: '/dashboard',   icon: <DashboardIcon /> },
       { label: 'Properties',  path: '/properties',  icon: <ApartmentIcon /> },
       { label: 'Tenants',     path: '/tenants',     icon: <PeopleIcon /> },
+      { label: 'Leases',      path: '/leases',      icon: <DescriptionIcon /> },
       { label: 'Maintenance', path: '/maintenance', icon: <BuildIcon /> },
       { label: 'Documents',   path: '/documents',   icon: <FolderIcon /> },
     ],

@@ -8,6 +8,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.5.0] — 2026-04-14 — Charge Schedule on lease creation
+
+### Added
+- **Charge Schedule section in Create Lease form** — a new collapsible section (toggled by a Switch) lets landlords auto-generate the full set of monthly rent charges at the same time as they create a lease
+  - **Live preview** — as dates and rent are entered, a preview box shows the exact count of charges, total dollar amount, and the month range (`12 rent charges × $1,500 = $18,000 total — May 2026 to Apr 2027`)
+  - **Configurable due day** — landlords can set the day-of-month each charge is due (1–28); the charge dates shift accordingly while the preview updates in real time
+  - **Deposit charge opt-in** — a checkbox creates an additional one-time `other` charge for the security deposit amount on the lease start date
+  - Charge creation runs in parallel after the lease is saved; a success alert shows the count created (and deposit line if applicable); a warning alert appears if charges partially failed without losing the created lease
+- **Late fee fields on Create Lease** — `lateFeeAmount` and `lateFeeGraceDays` now exposed in the create form (previously only editable after creation)
+
+### Changed
+- `LeaseForm` now self-contained: the Charge Schedule is built into the form rather than injected via a `children` slot; form `onSubmit` values include `auto_charges`, `charge_due_day`, and `include_deposit_charge`
+- Create Lease dialog widened to `maxWidth="md"` to comfortably fit the two-column grid layout
+- Monthly due-date generation updated to respect `charge_due_day` (previously hardcoded to the 1st of the month)
+- Post-save success/warning feedback moved to a top-level Alert above the form, with a "Done" button that closes and resets the dialog
+
+---
 ## [1.4.9] — 2026-04-15 — Security hardening (audit round 3)
 
 ### Security
