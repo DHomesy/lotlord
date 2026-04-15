@@ -23,8 +23,11 @@ const ACTIVE_STATUSES = ['active', 'pending']
 function getMonthlyDueDates(startDate, endDate, dueDay = 1) {
   const day = Math.max(1, Math.min(28, Number(dueDay) || 1))
   if (!startDate || !endDate) return []
-  const s = new Date(String(startDate).slice(0, 10))
-  const e = new Date(String(endDate).slice(0, 10))
+  // Parse as local time to avoid UTC-midnight rollback across month boundaries
+  const [sy, sm, sd] = String(startDate).slice(0, 10).split('-').map(Number)
+  const [ey, em, ed] = String(endDate).slice(0, 10).split('-').map(Number)
+  const s = new Date(sy, sm - 1, sd)
+  const e = new Date(ey, em - 1, ed)
   if (isNaN(s) || isNaN(e) || e <= s) return []
   const dates = []
   const cur = new Date(s.getFullYear(), s.getMonth(), day)

@@ -36,8 +36,11 @@ const schema = z.object({
 function getChargeDueDates(start, end, dueDay = 1) {
   const day = Math.max(1, Math.min(28, Number(dueDay) || 1))
   if (!start || !end) return []
-  const s = new Date(start)
-  const e = new Date(end)
+  // Parse as local time to avoid UTC-midnight rollback across month boundaries
+  const [sy, sm, sd] = start.slice(0, 10).split('-').map(Number)
+  const [ey, em, ed] = end.slice(0, 10).split('-').map(Number)
+  const s = new Date(sy, sm - 1, sd)
+  const e = new Date(ey, em - 1, ed)
   if (isNaN(s) || isNaN(e) || e <= s) return []
   const dates = []
   const cur = new Date(s.getFullYear(), s.getMonth(), day)

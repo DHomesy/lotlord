@@ -8,6 +8,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.5.1] — 2026-04-15 — Bugfixes
+
+### Fixed
+- Moved `/health` endpoint before CORS middleware so Railway deploy probes are never rejected by the origin allowlist
+- Removed auto deposit-charge creation from `leaseService` that was missing `unitId` (NOT NULL violation causing all leases with a deposit to fail silently)
+- Fixed UTC date parsing in charge due-date helpers (`getChargeDueDates` / `getMonthlyDueDates`) — `new Date("YYYY-MM-DD")` was resolving as UTC midnight causing off-by-one month in UTC-negative timezones
+
+---
 ## [1.5.0] — 2026-04-14 — Charge Schedule on lease creation
 
 ### Added

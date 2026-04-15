@@ -66,28 +66,9 @@ async function createLease(data, createdBy, user) {
     // Mark unit as occupied
     await unitRepo.update(data.unitId, { status: 'occupied' });
 
-    // Record deposit charge in ledger if deposit amount provided
-    if (data.depositAmount && parseFloat(data.depositAmount) > 0) {
-      const chargeId = uuidv4();
-      await ledgerRepo.createCharge(client, {
-        id: chargeId,
-        leaseId,
-        dueDate: data.startDate,
-        amount: data.depositAmount,
-        chargeType: 'other',
-        description: 'Security deposit',
-      });
-      await ledgerRepo.appendEntry(client, {
-        id: uuidv4(),
-        leaseId,
-        entryType: 'charge',
-        amount: parseFloat(data.depositAmount),
-        balanceAfter: parseFloat(data.depositAmount),
-        description: 'Security deposit charge',
-        referenceId: chargeId,
-        createdBy,
-      });
-    }
+    // Deposit amount is stored on the lease record for reference.
+    // Deposit charge creation is handled explicitly by the caller (Charge Schedule feature)
+    // to avoid double-charging and to respect the landlord's explicit opt-in.
 
     await client.query('COMMIT');
     audit.log({ action: 'lease_created', resourceType: 'lease', resourceId: leaseId, userId: createdBy, metadata: { tenantId: data.tenantId, unitId: data.unitId, monthlyRent: data.monthlyRent, startDate: data.startDate, endDate: data.endDate } });

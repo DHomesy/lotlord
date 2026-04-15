@@ -38,8 +38,27 @@ app.set('trust proxy', 1);
 // Security & parsing middleware
 app.use(helmet());
 
+// Health check — registered before CORS so Railway's deploy probe (which sends
+// Origin: <service-domain>) is never gated by the browser-origin allowlist.
+// No auth required.
+app.get('/health', async (req, res) => {
+  let dbStatus = 'connected';
+  try {
+    await dbQuery('SELECT 1');
+  } catch {
+    dbStatus = 'error';
+  }
+  const status = dbStatus === 'connected' ? 'ok' : 'degraded';
+  res.status(dbStatus === 'connected' ? 200 : 503).json({
+    status,
+    db: dbStatus,
+    version,
+    uptime: Math.floor(process.uptime()),
+  });
+});
+
 // CORS — allow credentials so the httpOnly refresh cookie travels with cross-origin requests.
-// FRONTEND_URL must be set in production (e.g. https://app.yoursite.com).
+// FRONTEND_URL must be set in production (e.g. https://www.lotlord.app).
 // In development, Vite proxies /api to Express so CORS is not actually exercised.
 const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173').split(',').map(s => s.trim());
 app.use(cors({
@@ -75,23 +94,6 @@ app.use('/api', rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many requests. Please try again later.' },
 }));
-
-// Health check — DB connectivity verified, no auth required
-app.get('/health', async (req, res) => {
-  let dbStatus = 'connected';
-  try {
-    await dbQuery('SELECT 1');
-  } catch {
-    dbStatus = 'error';
-  }
-  const status = dbStatus === 'connected' ? 'ok' : 'degraded';
-  res.status(dbStatus === 'connected' ? 200 : 503).json({
-    status,
-    db: dbStatus,
-    version,
-    uptime: Math.floor(process.uptime()),
-  });
-});
 
 // Routes
 app.use('/api/v1/auth', authRoutes);
