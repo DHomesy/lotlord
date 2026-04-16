@@ -1,6 +1,6 @@
 {
   "name": "property-manager",
-  "version": "1.5.1",
+  "version": "1.5.3",
   "description": "Full-stack property management platform — API server",
   "main": "src/index.js",
   "scripts": {
@@ -56,6 +56,7 @@
     "testMatch": [
       "**/tests/**/*.test.js"
     ],
-    "setupFiles": ["dotenv/config"]
+    "setupFiles": ["dotenv/config"],
+    "globalSetup": "./tests/helpers/globalSetup.js"
   }
 }

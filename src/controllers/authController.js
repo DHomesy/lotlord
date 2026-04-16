@@ -3,6 +3,24 @@ const env = require('../config/env');
 const audit = require('../services/auditService');
 const { COOKIE_NAME, cookieOptions } = require('../config/cookies');
 
+/**
+ * Normalise a raw DB user row to the camelCase shape expected by the frontend.
+ * Called on every auth response that includes a user object.
+ */
+function toPublicUser(u) {
+  if (!u) return null;
+  return {
+    id:            u.id,
+    email:         u.email,
+    role:          u.role,
+    firstName:     u.first_name   ?? u.firstName   ?? null,
+    lastName:      u.last_name    ?? u.lastName     ?? null,
+    phone:         u.phone        ?? null,
+    avatarUrl:     u.avatar_url   ?? u.avatarUrl    ?? null,
+    emailVerified: !!(u.email_verified_at ?? u.emailVerified),
+  };
+}
+
 async function register(req, res, next) {
   try {
     const { email, password, firstName, lastName, phone, role, acceptedTerms } = req.body;
@@ -10,7 +28,7 @@ async function register(req, res, next) {
     const { user, token, refreshToken } = await authService.register({ email, password, firstName, lastName, phone, role, acceptedTermsAt });
     res.cookie(COOKIE_NAME, refreshToken, cookieOptions());
     audit.log({ action: 'user_registered', resourceType: 'user', resourceId: user.id, userId: user.id, ipAddress: req.ip, metadata: { email: user.email, role: user.role } });
-    res.status(201).json({ user, token });
+    res.status(201).json({ user: toPublicUser(user), token });
   } catch (err) { next(err); }
 }
 
@@ -20,7 +38,7 @@ async function login(req, res, next) {
     const { user, token, refreshToken } = await authService.login({ email, password });
     res.cookie(COOKIE_NAME, refreshToken, cookieOptions());
     audit.log({ action: 'user_login', resourceType: 'user', resourceId: user.id, userId: user.id, ipAddress: req.ip, metadata: { email: user.email, role: user.role } });
-    res.json({ user, token });
+    res.json({ user: toPublicUser(user), token });
   } catch (err) { next(err); }
 }
 
@@ -34,7 +52,7 @@ async function refresh(req, res, next) {
     const cookieToken = req.cookies?.[COOKIE_NAME];
     const { user, token, refreshToken } = await authService.refreshFromCookie(cookieToken);
     res.cookie(COOKIE_NAME, refreshToken, cookieOptions()); // rotate
-    res.json({ user, token });
+    res.json({ user: toPublicUser(user), token });
   } catch (err) { next(err); }
 }
 
@@ -86,7 +104,7 @@ async function verifyEmail(req, res, next) {
     // Issue a fresh access token with emailVerified: true baked in
     const { token, refreshToken } = await authService.issueTokensForUser(user.id);
     res.cookie(COOKIE_NAME, refreshToken, cookieOptions());
-    res.json({ message: 'Email verified successfully.', token, user });
+    res.json({ message: 'Email verified successfully.', token, user: toPublicUser(user) });
   } catch (err) { next(err); }
 }
 

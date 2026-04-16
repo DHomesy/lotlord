@@ -4,6 +4,7 @@ import {
   Button, Dialog, DialogTitle, DialogContent, Stack,
   Alert,
   ToggleButtonGroup, ToggleButton, Chip,
+  useTheme, useMediaQuery,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
@@ -43,6 +44,8 @@ function getMonthlyDueDates(startDate, endDate, dueDay = 1) {
 
 export default function LeasesPage() {
   const navigate = useNavigate()
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const [createOpen, setCreateOpen] = useState(false)
   const [chargeMsg,   setChargeMsg]   = useState(null)
   const [view,        setView]        = useState('active') // 'active' | 'archived'
@@ -117,11 +120,24 @@ export default function LeasesPage() {
                 description: 'Security deposit',
               }))
             }
+            for (const fee of (values.additional_fees ?? [])) {
+              if (!fee.description || !(Number(fee.amount) > 0)) continue
+              for (const dueDate of dueDates) {
+                tasks.push(createCharge({
+                  unitId:      newLease.unit_id ?? values.unit_id,
+                  leaseId:     newLease.id,
+                  chargeType:  'other',
+                  amount:      parseFloat(fee.amount),
+                  dueDate,
+                  description: fee.description,
+                }))
+              }
+            }
             await Promise.all(tasks)
-            const depLine = values.include_deposit_charge && parseFloat(values.deposit_amount) > 0
-              ? ' + 1 deposit charge'
-              : ''
-            setChargeMsg({ type: 'success', text: `Lease created with ${dueDates.length} monthly charge(s)${depLine}.` })
+            const feeCount  = (values.additional_fees ?? []).filter((f) => f.description && Number(f.amount) > 0).length
+            const depLine   = values.include_deposit_charge && parseFloat(values.deposit_amount) > 0 ? ' + 1 deposit charge' : ''
+            const feeLine   = feeCount > 0 ? ` + ${feeCount} additional fee type${feeCount !== 1 ? 's' : ''}` : ''
+            setChargeMsg({ type: 'success', text: `Lease created with ${dueDates.length} monthly charge(s)${depLine}${feeLine}.` })
           } catch {
             setChargeMsg({ type: 'warning', text: 'Lease created, but some charges failed. Check the Charges page.' })
           }
@@ -175,7 +191,7 @@ export default function LeasesPage() {
       )}
 
       {/* Create Dialog */}
-      <Dialog open={createOpen} onClose={() => { setCreateOpen(false); setChargeMsg(null) }} maxWidth="md" fullWidth>
+      <Dialog open={createOpen} onClose={() => { setCreateOpen(false); setChargeMsg(null) }} maxWidth="md" fullWidth fullScreen={isMobile}>
         <DialogTitle>New Lease</DialogTitle>
         <DialogContent>
           {chargeMsg?.type === 'success' ? (

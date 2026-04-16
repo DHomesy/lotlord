@@ -11,6 +11,7 @@ import { useAuthStore } from '../../store/authStore'
 import { useProperties } from '../../hooks/useProperties'
 import { useUnits } from '../../hooks/useUnits'
 import { useTenants } from '../../hooks/useTenants'
+import { useLeases } from '../../hooks/useLeases'
 import { useConnectStatus } from '../../hooks/useStripeSetup'
 
 const DISMISS_KEY = 'll_setup_done'
@@ -29,7 +30,9 @@ export default function LandlordSetupCard() {
 
   const { data: propsData } = useProperties()
   const { data: unitsData } = useUnits()
-  const { data: tenantsData } = useTenants()
+  // includePending=true so tenants who accepted an invite but have no lease yet still count
+  const { data: tenantsData } = useTenants({ includePending: 'true' })
+  const { data: leasesData } = useLeases()
   const { data: connectStatus } = useConnectStatus()
 
   // Only for landlords
@@ -39,6 +42,7 @@ export default function LandlordSetupCard() {
   const properties = Array.isArray(propsData) ? propsData : (propsData?.properties ?? propsData?.data ?? [])
   const units = Array.isArray(unitsData) ? unitsData : (unitsData?.units ?? [])
   const tenants = Array.isArray(tenantsData) ? tenantsData : (tenantsData?.tenants ?? tenantsData?.data ?? [])
+  const leases = Array.isArray(leasesData) ? leasesData : (leasesData?.leases ?? [])
 
   const steps = [
     {
@@ -58,6 +62,12 @@ export default function LandlordSetupCard() {
       done: tenants.length > 0,
       action: () => navigate('/tenants'),
       actionLabel: 'Invite Tenant',
+    },
+    {
+      label: 'Create your first lease',
+      done: leases.length > 0,
+      action: () => navigate('/leases'),
+      actionLabel: 'View Leases',
     },
     {
       label: 'Connect your bank account for rent payouts',

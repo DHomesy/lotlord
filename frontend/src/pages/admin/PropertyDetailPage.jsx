@@ -3,29 +3,36 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   Box, Typography, Grid, Card, CardContent, Button, Chip, Stack, Tooltip,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
-  TextField,
+  TextField, Alert, useTheme, useMediaQuery,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
+import DescriptionIcon from '@mui/icons-material/Description'
 import PageContainer from '../../components/layout/PageContainer'
 import LoadingOverlay from '../../components/common/LoadingOverlay'
 import DataTable from '../../components/common/DataTable'
 import StatusChip from '../../components/common/StatusChip'
 import UnitForm from '../../components/forms/UnitForm'
+import LeaseForm from '../../components/forms/LeaseForm'
 import { useProperty, useDeleteProperty } from '../../hooks/useProperties'
 import { useUnits, useCreateUnit, useUpdateUnit, useDeleteUnit } from '../../hooks/useUnits'
-import { useLeases } from '../../hooks/useLeases'
+import { useLeases, useCreateLease } from '../../hooks/useLeases'
+import { useCreateCharge } from '../../hooks/useCharges'
 
 export default function PropertyDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const [createOpen,      setCreateOpen]      = useState(false)
   const [editingUnit,     setEditingUnit]      = useState(null)
   const [confirmDelete,   setConfirmDelete]    = useState(false)
   const [deleteStep1,     setDeleteStep1]      = useState(false)
   const [deleteStep2,     setDeleteStep2]      = useState(false)
   const [deleteNameInput, setDeleteNameInput]  = useState('')
+  const [leaseUnit,       setLeaseUnit]        = useState(null)   // unit row to create lease for
+  const [leaseChargeMsg,  setLeaseChargeMsg]   = useState(null)   // { type, text }
 
   const { data: property, isLoading: propLoading } = useProperty(id)
   const { data: unitsData, isLoading: unitsLoading } = useUnits({ propertyId: id })
@@ -34,6 +41,8 @@ export default function PropertyDetailPage() {
   const { mutate: updateUnit, isPending: updating } = useUpdateUnit(editingUnit?.id)
   const { mutate: deleteUnit, isPending: deleting } = useDeleteUnit()
   const { mutate: deleteProperty, isPending: deletingProperty } = useDeleteProperty()
+  const { mutate: createLease, isPending: creatingLease } = useCreateLease()
+  const { mutateAsync: createCharge } = useCreateCharge()
 
   // Must be above the early return to respect React's Rules of Hooks
   const tenantByUnit = useMemo(() => {
@@ -85,11 +94,24 @@ export default function PropertyDetailPage() {
             Edit
           </Button>
           {row.status === 'vacant' && (
-            <Tooltip title="Go to Tenants to invite a tenant and create a lease for this unit">
+            <Tooltip title="Create a lease for this unit">
               <Button
                 size="small"
                 color="success"
-                onClick={(e) => { e.stopPropagation(); navigate('/tenants') }}
+                startIcon={<DescriptionIcon />}
+                onClick={(e) => { e.stopPropagation(); setLeaseUnit(row); setLeaseChargeMsg(null) }}
+              >
+                Lease
+              </Button>
+            </Tooltip>
+          )}
+          {row.status === 'occupied' && (
+            <Tooltip title="View lease for this unit">
+              <Button
+                size="small"
+                color="primary"
+                startIcon={<DescriptionIcon />}
+                onClick={(e) => { e.stopPropagation(); navigate(`/leases?unitId=${row.id}`) }}
               >
                 Lease
               </Button>
@@ -127,6 +149,90 @@ export default function PropertyDetailPage() {
   const handleDeleteProperty = () => {
     deleteProperty(id, {
       onSuccess: () => navigate('/properties'),
+    })
+  }
+
+  /** Returns YYYY-MM-DD due-date strings for every month in [start, end] on the given day. */
+  function getMonthlyDueDates(startDate, endDate, dueDay = 1) {
+    const day = Math.max(1, Math.min(28, Number(dueDay) || 1))
+    if (!startDate || !endDate) return []
+    const [sy, sm, sd] = String(startDate).slice(0, 10).split('-').map(Number)
+    const [ey, em, ed] = String(endDate).slice(0, 10).split('-').map(Number)
+    const s = new Date(sy, sm - 1, sd)
+    const e = new Date(ey, em - 1, ed)
+    if (isNaN(s) || isNaN(e) || e <= s) return []
+    const dates = []
+    const cur = new Date(s.getFullYear(), s.getMonth(), day)
+    if (cur < s) cur.setMonth(cur.getMonth() + 1)
+    while (cur <= e) {
+      const y = cur.getFullYear()
+      const m = String(cur.getMonth() + 1).padStart(2, '0')
+      const d = String(day).padStart(2, '0')
+      dates.push(`${y}-${m}-${d}`)
+      cur.setMonth(cur.getMonth() + 1)
+    }
+    return dates
+  }
+
+  const handleCreateLease = (values) => {
+    createLease({
+      unitId:           values.unit_id,
+      tenantId:         values.tenant_id,
+      startDate:        values.start_date,
+      endDate:          values.end_date,
+      monthlyRent:      values.rent_amount,
+      depositAmount:    values.deposit_amount,
+      lateFeeAmount:    parseFloat(values.late_fee_amount)    || 0,
+      lateFeeGraceDays: parseInt(values.late_fee_grace_days) || 0,
+    }, {
+      onSuccess: async (newLease) => {
+        if (values.auto_charges) {
+          const dueDates = getMonthlyDueDates(values.start_date, values.end_date, values.charge_due_day)
+          try {
+            const tasks = dueDates.map((dueDate) =>
+              createCharge({
+                unitId:     newLease.unit_id ?? values.unit_id,
+                leaseId:    newLease.id,
+                chargeType: 'rent',
+                amount:     parseFloat(values.rent_amount),
+                dueDate,
+              })
+            )
+            if (values.include_deposit_charge && parseFloat(values.deposit_amount) > 0) {
+              tasks.push(createCharge({
+                unitId:      newLease.unit_id ?? values.unit_id,
+                leaseId:     newLease.id,
+                chargeType:  'other',
+                amount:      parseFloat(values.deposit_amount),
+                dueDate:     values.start_date,
+                description: 'Security deposit',
+              }))
+            }
+            for (const fee of (values.additional_fees ?? [])) {
+              if (!fee.description || !(Number(fee.amount) > 0)) continue
+              for (const dueDate of dueDates) {
+                tasks.push(createCharge({
+                  unitId:      newLease.unit_id ?? values.unit_id,
+                  leaseId:     newLease.id,
+                  chargeType:  'other',
+                  amount:      parseFloat(fee.amount),
+                  dueDate,
+                  description: fee.description,
+                }))
+              }
+            }
+            await Promise.all(tasks)
+            const feeCount = (values.additional_fees ?? []).filter((f) => f.description && Number(f.amount) > 0).length
+            const depLine  = values.include_deposit_charge && parseFloat(values.deposit_amount) > 0 ? ' + 1 deposit charge' : ''
+            const feeLine  = feeCount > 0 ? ` + ${feeCount} additional fee type${feeCount !== 1 ? 's' : ''}` : ''
+            setLeaseChargeMsg({ type: 'success', text: `Lease created with ${dueDates.length} monthly charge(s)${depLine}${feeLine}.` })
+          } catch {
+            setLeaseChargeMsg({ type: 'warning', text: 'Lease created, but some charges failed. Check the Charges page.' })
+          }
+        } else {
+          setLeaseUnit(null)
+        }
+      },
     })
   }
 
@@ -179,10 +285,51 @@ export default function PropertyDetailPage() {
       </Card>
 
       <Typography variant="h6" sx={{ mb: 1 }}>Units ({units.length})</Typography>
-      <DataTable rows={units} columns={unitColumns} loading={unitsLoading} />
+      {isMobile ? (
+        <Stack spacing={1.5}>
+          {unitsLoading && <Typography variant="body2" color="text.secondary">Loading…</Typography>}
+          {!unitsLoading && units.length === 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+              No units yet — click "Add Unit" to get started.
+            </Typography>
+          )}
+          {units.map((unit) => (
+            <Card key={unit.id} variant="outlined">
+              <CardContent sx={{ pb: '12px !important' }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                  <Box>
+                    <Typography variant="subtitle1" fontWeight="bold">Unit {unit.unit_number}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {[unit.bedrooms && `${unit.bedrooms} bd`, unit.bathrooms && `${unit.bathrooms} ba`, unit.sq_ft && `${unit.sq_ft.toLocaleString()} sqft`].filter(Boolean).join(' · ')}
+                    </Typography>
+                    <Typography variant="body1" sx={{ mt: 0.5 }}>${Number(unit.rent_amount).toLocaleString()}/mo</Typography>
+                    {tenantByUnit[unit.id] && (
+                      <Typography variant="body2" color="text.secondary">{tenantByUnit[unit.id]}</Typography>
+                    )}
+                  </Box>
+                  <StatusChip status={unit.status} />
+                </Stack>
+                <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+                  <Button size="small" startIcon={<EditIcon />} onClick={() => setEditingUnit(unit)}>Edit</Button>
+                  {unit.status === 'vacant' && (
+                    <Button size="small" color="success" startIcon={<DescriptionIcon />}
+                      onClick={() => { setLeaseUnit(unit); setLeaseChargeMsg(null) }}>Lease</Button>
+                  )}
+                  {unit.status === 'occupied' && (
+                    <Button size="small" color="primary" startIcon={<DescriptionIcon />}
+                      onClick={() => navigate(`/leases?unitId=${unit.id}`)}>Lease</Button>
+                  )}
+                </Stack>
+              </CardContent>
+            </Card>
+          ))}
+        </Stack>
+      ) : (
+        <DataTable rows={units} columns={unitColumns} loading={unitsLoading} />
+      )}
 
       {/* Add Unit */}
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle>Add Unit</DialogTitle>
         <DialogContent>
           <UnitForm onSubmit={handleCreateUnit} loading={creating} />
@@ -190,7 +337,7 @@ export default function PropertyDetailPage() {
       </Dialog>
 
       {/* Edit Unit */}
-      <Dialog open={!!editingUnit} onClose={() => setEditingUnit(null)} maxWidth="sm" fullWidth>
+      <Dialog open={!!editingUnit} onClose={() => setEditingUnit(null)} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle>
           Edit Unit {editingUnit?.unit_number}
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
@@ -294,6 +441,48 @@ export default function PropertyDetailPage() {
             {deletingProperty ? 'Archiving…' : 'Archive Property'}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Create Lease for a specific vacant unit */}
+      <Dialog
+        open={!!leaseUnit}
+        onClose={() => { setLeaseUnit(null); setLeaseChargeMsg(null) }}
+        maxWidth="md"
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle>
+          New Lease — Unit {leaseUnit?.unit_number}
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+            {prop?.name}
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          {leaseChargeMsg?.type === 'success' ? (
+            <Alert
+              severity="success"
+              action={
+                <Button size="small" onClick={() => { setLeaseUnit(null); setLeaseChargeMsg(null) }}>
+                  Done
+                </Button>
+              }
+            >
+              {leaseChargeMsg.text}
+            </Alert>
+          ) : (
+            <>
+              {leaseChargeMsg?.type === 'warning' && (
+                <Alert severity="warning" sx={{ mb: 2 }}>{leaseChargeMsg.text}</Alert>
+              )}
+              <LeaseForm
+                onSubmit={handleCreateLease}
+                loading={creatingLease}
+                hideUnitPicker
+                defaultValues={{ unit_id: leaseUnit?.id }}
+              />
+            </>
+          )}
+        </DialogContent>
       </Dialog>
     </PageContainer>
   )

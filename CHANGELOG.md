@@ -8,6 +8,42 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.5.3] — 2026-04-16 — Additional fees & maintenance photo uploads
+
+### Added
+- **Additional Fees section in Create Lease form** — a new section (between Financials and Late Fees) lets landlords add optional recurring fee line items alongside rent (e.g. Water, Electricity, Parking, Pet Fee). Each row has a free-text description and a monthly amount. Fees can be added/removed dynamically with `+` / `×` buttons.
+  - When **Charge Schedule** is enabled, each additional fee generates its own full monthly charge schedule using the same due-day and date range as rent charges, with `chargeType: 'other'` and the description set on each charge
+  - The charge schedule **preview** now shows a per-fee breakdown and a combined total-per-period line
+  - The success toast after lease creation now reports additional fee types (e.g. "12 monthly charge(s) + 1 deposit charge + 2 additional fee types")
+- **Admin maintenance request: photo/file attachments** — the Create New Request dialog in the admin Maintenance page now uses `MaintenanceForm` with `showPhotos` enabled, replacing the previous inline form that had no file support. Landlords can attch up to 5 photos/PDFs (20 MB each) before submitting. Partial upload failures surface as a warning alert without rolling back the created request.
+
+### Changed
+- Admin `MaintenancePage`'s inline `CreateForm` component removed; `MaintenanceForm` is now the single source of truth for both tenant and admin maintenance request creation
+
+### Tests
+- `toPublicUser()` pure-unit test suite added to `tests/auth.test.js` (5 cases covering snake_case mapping, camelCase fallback, null input, missing optional fields, `emailVerified` coercion)
+- `tests/helpers/globalSetup.js` added as Jest `globalSetup` — runs all pending SQL migrations against the test DB before any suite runs, preventing schema-mismatch failures (e.g. missing `token_version` column)
+- Stale "silently downgrades role:admin" test updated to match the current hardened behaviour (validator now returns 400 for `role: 'admin'`)
+- Register integration test now asserts camelCase user shape (`firstName`/`lastName` present, `first_name`/`last_name` absent)
+
+---
+## [1.5.2] — 2026-04-16 — QA fixes: UX polish & mobile responsiveness
+
+### Fixed
+- **"Welcome, \<email\>" bug** — auth responses (`register`, `login`, `refresh`, `verifyEmail`) now normalise the DB snake_case user row via `toPublicUser()` before sending; frontend receives `firstName`/`lastName`/`avatarUrl`/`emailVerified` consistently in camelCase
+- **No tenants in Create Lease dialog** — `TenantPicker` inside `LeaseForm` now passes `includePending: true` (previously only `accepted` tenants appeared, excluding those who signed up via invite but have no lease yet)
+- **Setup tasklist invite step never completing** — `LandlordSetupCard` now calls `useTenants({ includePending: 'true' })` so accepted-but-unleased tenants are counted
+
+### Added
+- **Inline Create Lease from unit card** — vacant unit rows on `PropertyDetailPage` now have a green "Lease" button that opens a full `LeaseForm` dialog pre-locked to that unit (no unit picker shown); occupied units get a "Lease" button that navigates to `/leases?unitId=…`; navigating to `/tenants` removed
+- **"Create your first lease" setup step** — `LandlordSetupCard` now shows a 5th step that completes once the landlord has at least one lease
+- **Landlord name in invitation emails** — both the initial invite and the resend now personalise the body and footer with the landlord's full name (e.g., "John Smith has invited you…" / "Sent on behalf of John Smith via LotLord."); falls back gracefully to "Your landlord" if name is unavailable
+
+### Changed
+- **Mobile responsive unit list** — `PropertyDetailPage` renders a card-based unit list on `xs`/`sm` breakpoints instead of the DataGrid; each card shows unit number, beds/baths/sqft, rent, tenant name, status chip, and Edit/Lease action buttons
+- **FullScreen dialogs on mobile** — Add Unit, Edit Unit, and Create Lease dialogs on `PropertyDetailPage`, `LeasesPage`, and `TenantDetailPage` switch to `fullScreen` mode on `xs`/`sm` breakpoints for better usability on small screens
+
+---
 ## [1.5.1] — 2026-04-15 — Bugfixes
 
 ### Fixed

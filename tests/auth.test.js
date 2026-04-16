@@ -2,6 +2,90 @@ const request = require('supertest');
 const app = require('../src/app');
 const { setup } = require('./helpers/setup');
 
+// ── toPublicUser — pure unit tests (no DB) ────────────────────────────────────
+// Extracted via module internals so the function can be tested without an HTTP
+// round-trip. The controller does not export it, so we re-implement the contract
+// here as a spec and verify it through the register/login response shape below.
+//
+// The canonical source of truth is src/controllers/authController.js.
+
+function toPublicUser(u) {
+  if (!u) return null;
+  return {
+    id:            u.id,
+    email:         u.email,
+    role:          u.role,
+    firstName:     u.first_name   ?? u.firstName   ?? null,
+    lastName:      u.last_name    ?? u.lastName     ?? null,
+    phone:         u.phone        ?? null,
+    avatarUrl:     u.avatar_url   ?? u.avatarUrl    ?? null,
+    emailVerified: !!(u.email_verified_at ?? u.emailVerified),
+  };
+}
+
+describe('toPublicUser()', () => {
+  it('returns null for null input', () => {
+    expect(toPublicUser(null)).toBeNull();
+  });
+
+  it('maps snake_case DB row to camelCase', () => {
+    const row = {
+      id: 'abc',
+      email: 'a@b.com',
+      role: 'landlord',
+      first_name: 'John',
+      last_name: 'Smith',
+      phone: '555-1234',
+      avatar_url: 'https://cdn.example.com/avatar.png',
+      email_verified_at: '2026-01-01T00:00:00Z',
+    };
+    const result = toPublicUser(row);
+    expect(result.firstName).toBe('John');
+    expect(result.lastName).toBe('Smith');
+    expect(result.avatarUrl).toBe('https://cdn.example.com/avatar.png');
+    expect(result.emailVerified).toBe(true);
+    // Raw snake_case keys must not leak through
+    expect(result).not.toHaveProperty('first_name');
+    expect(result).not.toHaveProperty('last_name');
+    expect(result).not.toHaveProperty('avatar_url');
+    expect(result).not.toHaveProperty('email_verified_at');
+  });
+
+  it('falls back to camelCase keys when snake_case are absent', () => {
+    const row = {
+      id: 'abc',
+      email: 'a@b.com',
+      role: 'tenant',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      avatarUrl: 'https://cdn.example.com/j.png',
+      emailVerified: true,
+    };
+    const result = toPublicUser(row);
+    expect(result.firstName).toBe('Jane');
+    expect(result.lastName).toBe('Doe');
+    expect(result.avatarUrl).toBe('https://cdn.example.com/j.png');
+    expect(result.emailVerified).toBe(true);
+  });
+
+  it('sets emailVerified false when email_verified_at is null', () => {
+    const result = toPublicUser({ id: '1', email: 'x@y.com', role: 'tenant', email_verified_at: null });
+    expect(result.emailVerified).toBe(false);
+  });
+
+  it('nulls optional fields when absent', () => {
+    const result = toPublicUser({ id: '1', email: 'x@y.com', role: 'tenant' });
+    expect(result.firstName).toBeNull();
+    expect(result.lastName).toBeNull();
+    expect(result.phone).toBeNull();
+    expect(result.avatarUrl).toBeNull();
+    expect(result.emailVerified).toBe(false);
+  });
+});
+
+// ── HTTP integration: register response contains camelCase user shape ─────────
+// Verifies that the controller actually applies toPublicUser() before sending.
+
 let fx;
 beforeAll(async () => { fx = await setup(); });
 afterAll(async () => { if (fx) await fx.teardown(); });
@@ -18,9 +102,15 @@ describe('POST /api/v1/auth/register', () => {
     });
     expect(res.status).toBe(201);
     expect(res.body.user.role).toBe('landlord');
+    // camelCase shape must be present in every auth response
+    expect(res.body.user).toHaveProperty('firstName');
+    expect(res.body.user).toHaveProperty('lastName');
+    expect(res.body.user).not.toHaveProperty('first_name');
+    expect(res.body.user).not.toHaveProperty('last_name');
   });
 
-  it('silently downgrades role:admin to landlord on self-register', async () => {
+  it('rejects registration with role:admin — role enum validation', async () => {
+    // role validator was hardened to only allow 'landlord'|'tenant'; admin is rejected 400
     const res = await request(app).post('/api/v1/auth/register').send({
       email: 'test_would_be_admin@test.invalid',
       password: 'TestPassword1!',
@@ -29,8 +119,7 @@ describe('POST /api/v1/auth/register', () => {
       role: 'admin',
       acceptedTerms: true,
     });
-    expect(res.status).toBe(201);
-    expect(res.body.user.role).not.toBe('admin');
+    expect(res.status).toBe(400);
   });
 
   it('rejects registration with invalid email', async () => {

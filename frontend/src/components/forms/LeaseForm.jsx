@@ -1,17 +1,19 @@
 import { useState, useMemo } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   TextField, Stack, Button, MenuItem, Divider, Typography,
   Grid, Chip, InputAdornment, Collapse, FormControlLabel, Switch,
-  Checkbox, Paper, Alert,
+  Checkbox, Paper, Alert, IconButton,
 } from '@mui/material'
 import PersonIcon      from '@mui/icons-material/Person'
 import EventIcon       from '@mui/icons-material/Event'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import GavelIcon       from '@mui/icons-material/Gavel'
 import BoltIcon        from '@mui/icons-material/Bolt'
+import AddIcon         from '@mui/icons-material/Add'
+import DeleteIcon      from '@mui/icons-material/Delete'
 import UnitPicker   from '../pickers/UnitPicker'
 import TenantPicker from '../pickers/TenantPicker'
 
@@ -26,6 +28,12 @@ const schema = z.object({
   deposit_amount:         z.coerce.number().min(0).default(0),
   late_fee_amount:        z.coerce.number().min(0).default(0),
   late_fee_grace_days:    z.coerce.number().int().min(0).default(5),
+  additional_fees:        z.array(
+    z.object({
+      description: z.string().min(1, 'Description required'),
+      amount:      z.coerce.number().positive('Amount required'),
+    }),
+  ).default([]),
   auto_charges:           z.boolean().default(false),
   charge_due_day:         z.coerce.number().int().min(1).max(28).default(1),
   include_deposit_charge: z.boolean().default(false),
@@ -104,6 +112,7 @@ function SectionHeader({ icon, label, addon }) {
  *   loading           – disables submit button while saving
  *   isEdit            – shows status field and locks tenant/unit/start date; hides Charge Schedule
  *   hideTenantPicker  – hides TenantPicker (use when tenant is pre-known; pass tenant_id via defaultValues)
+ *   hideUnitPicker    – hides UnitPicker (use when unit is pre-known; pass unit_id via defaultValues)
  *   tenantLabel       – display name shown in read-only Tenant field (edit mode)
  *   unitLabel         – display name shown in read-only Unit field (edit mode)
  */
@@ -113,6 +122,7 @@ export default function LeaseForm({
   loading,
   isEdit = false,
   hideTenantPicker = false,
+  hideUnitPicker = false,
   tenantLabel = '',
   unitLabel = '',
 }) {
@@ -126,6 +136,7 @@ export default function LeaseForm({
       deposit_amount:         0,
       late_fee_amount:        0,
       late_fee_grace_days:    5,
+      additional_fees:        [],
       auto_charges:           false,
       charge_due_day:         1,
       include_deposit_charge: false,
@@ -133,20 +144,27 @@ export default function LeaseForm({
     },
   })
 
-  const startDate     = watch('start_date')
-  const endDate       = watch('end_date')
-  const rentAmount    = watch('rent_amount')
-  const depositAmount = watch('deposit_amount')
-  const autoCharges   = watch('auto_charges')
-  const chargeDueDay  = watch('charge_due_day')
-  const inclDeposit   = watch('include_deposit_charge')
+  const { fields: feeFields, append: appendFee, remove: removeFee } = useFieldArray({
+    control,
+    name: 'additional_fees',
+  })
+
+  const startDate      = watch('start_date')
+  const endDate        = watch('end_date')
+  const rentAmount     = watch('rent_amount')
+  const depositAmount  = watch('deposit_amount')
+  const autoCharges    = watch('auto_charges')
+  const chargeDueDay   = watch('charge_due_day')
+  const inclDeposit    = watch('include_deposit_charge')
+  const additionalFees = watch('additional_fees')
 
   const duration     = calcDuration(startDate, endDate)
   const previewDates = useMemo(
     () => (autoCharges ? getChargeDueDates(startDate, endDate, chargeDueDay) : []),
     [autoCharges, startDate, endDate, chargeDueDay],
   )
-  const rentTotal = previewDates.length * (Number(rentAmount) || 0)
+  const rentTotal       = previewDates.length * (Number(rentAmount) || 0)
+  const additionalTotal = previewDates.length * (additionalFees?.reduce((sum, f) => sum + (Number(f.amount) || 0), 0) || 0)
 
   return (
     <Stack component="form" onSubmit={handleSubmit(onSubmit)} spacing={3} sx={{ pt: 1 }}>
@@ -176,6 +194,7 @@ export default function LeaseForm({
                 onChange={field.onChange}
                 error={!!errors.tenant_id}
                 helperText={errors.tenant_id?.message}
+                includePending
               />
             )}
           />
@@ -190,7 +209,7 @@ export default function LeaseForm({
           InputProps={{ readOnly: true }}
           helperText="Unit cannot be changed on an existing lease"
         />
-      ) : (
+      ) : hideUnitPicker ? null : (
         <Controller
           name="unit_id"
           control={control}
@@ -280,6 +299,68 @@ export default function LeaseForm({
           />
         </Grid>
       </Grid>
+
+      {/* ── Additional Fees (create only) ── */}
+      {!isEdit && (
+        <>
+          <SectionHeader
+            icon={<AttachMoneyIcon fontSize="small" sx={{ color: 'text.secondary' }} />}
+            label="Additional Fees"
+            addon={
+              <Button
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={() => appendFee({ description: '', amount: '' })}
+                sx={{ ml: 'auto !important' }}
+              >
+                Add Fee
+              </Button>
+            }
+          />
+
+          {feeFields.length === 0 ? (
+            <Typography variant="caption" color="text.secondary">
+              Optional — add recurring fees like water, electricity, parking, or pet fees.
+            </Typography>
+          ) : (
+            <Stack spacing={1.5}>
+              {feeFields.map((field, idx) => (
+                <Grid container spacing={1.5} alignItems="flex-start" key={field.id}>
+                  <Grid item xs={7} sm={8}>
+                    <TextField
+                      label="Description"
+                      placeholder="e.g. Water, Electricity, Parking"
+                      fullWidth
+                      size="small"
+                      {...register(`additional_fees.${idx}.description`)}
+                      error={!!errors.additional_fees?.[idx]?.description}
+                      helperText={errors.additional_fees?.[idx]?.description?.message}
+                    />
+                  </Grid>
+                  <Grid item xs={4} sm={3}>
+                    <TextField
+                      label="Amount / mo"
+                      type="number"
+                      fullWidth
+                      size="small"
+                      inputProps={{ min: 0, step: '0.01' }}
+                      InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                      {...register(`additional_fees.${idx}.amount`)}
+                      error={!!errors.additional_fees?.[idx]?.amount}
+                      helperText={errors.additional_fees?.[idx]?.amount?.message}
+                    />
+                  </Grid>
+                  <Grid item xs={1}>
+                    <IconButton size="small" color="error" onClick={() => removeFee(idx)} sx={{ mt: 0.5 }}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Grid>
+                </Grid>
+              ))}
+            </Stack>
+          )}
+        </>
+      )}
 
       {/* ── Late Fees ── */}
       <SectionHeader
@@ -408,6 +489,16 @@ export default function LeaseForm({
                         ? ` × $${Number(rentAmount).toLocaleString()} = $${rentTotal.toLocaleString()} total`
                         : ''}
                     </Typography>
+                    {additionalFees?.filter((f) => f.description && Number(f.amount) > 0).map((f, i) => (
+                      <Typography key={i} variant="caption" color="text.secondary">
+                        + {previewDates.length} × {f.description} @ ${Number(f.amount).toLocaleString()} = ${(previewDates.length * Number(f.amount)).toLocaleString()}
+                      </Typography>
+                    ))}
+                    {additionalTotal > 0 && (
+                      <Typography variant="body2" color="text.secondary">
+                        Total incl. fees: ${(rentTotal + additionalTotal).toLocaleString()}
+                      </Typography>
+                    )}
                     <Typography variant="caption" color="text.secondary">
                       Due on the {chargeDueDay}{ordinalSuffix(chargeDueDay)} of each month —{' '}
                       {fmtMonthYear(previewDates[0])} to {fmtMonthYear(previewDates[previewDates.length - 1])}

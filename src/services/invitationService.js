@@ -99,6 +99,18 @@ async function createInvitation({ invitedBy, firstName, lastName, email, phone, 
   const signupUrl = `${FRONTEND_URL}/accept-invite/${token}`;
   const name = firstName ? `Hi ${escapeHtml(firstName)},` : 'Hi there,';
 
+  // Resolve landlord display name for the email
+  let landlordName = 'Your landlord';
+  if (invitedBy) {
+    try {
+      const landlord = await userRepo.findById(invitedBy);
+      if (landlord) {
+        const full = [landlord.first_name, landlord.last_name].filter(Boolean).join(' ');
+        if (full) landlordName = escapeHtml(full);
+      }
+    } catch (_) { /* non-fatal */ }
+  }
+
   // Delivery failures are non-fatal — the invitation row is already saved and
   // the admin can share the link manually. Catch and surface as a warning.
   const deliveryErrors = [];
@@ -110,12 +122,13 @@ async function createInvitation({ invitedBy, firstName, lastName, email, phone, 
         subject: "You've been invited to your rental portal",
         html: `
           <p>${name}</p>
-          <p>Your landlord has invited you to set up access to your rental account.</p>
+          <p>${landlordName} has invited you to set up access to your rental account.</p>
           <p>Click the link below to create your account. This link expires in <strong>7 days</strong>.</p>
           <p><a href="${signupUrl}" style="font-size:16px;">Accept Invitation →</a></p>
           <p style="color:#888;font-size:12px;">If you did not expect this email, you can safely ignore it.</p>
+          <p style="color:#888;font-size:12px;">Sent on behalf of ${landlordName} via LotLord.</p>
         `,
-        text: `${name} You've been invited to your rental portal. Sign up here: ${signupUrl} (expires in 7 days)`,
+        text: `${name} ${landlordName} has invited you to your rental portal. Sign up here: ${signupUrl} (expires in 7 days)`,
       });
     } catch (err) {
       console.error('[invitations] email delivery failed:', err.message);
@@ -255,6 +268,18 @@ async function resendInvitation(id, user) {
   const signupUrl = `${FRONTEND_URL}/accept-invite/${token}`;
   const name      = inv.first_name ? `Hi ${escapeHtml(inv.first_name)},` : 'Hi there,';
 
+  // Resolve landlord display name for the email
+  let landlordName = 'Your landlord';
+  if (inv.invited_by) {
+    try {
+      const landlord = await userRepo.findById(inv.invited_by);
+      if (landlord) {
+        const full = [landlord.first_name, landlord.last_name].filter(Boolean).join(' ');
+        if (full) landlordName = escapeHtml(full);
+      }
+    } catch (_) { /* non-fatal */ }
+  }
+
   const deliveryErrors = [];
 
   if (inv.email) {
@@ -264,12 +289,13 @@ async function resendInvitation(id, user) {
         subject: "Reminder: You've been invited to your rental portal",
         html: `
           <p>${name}</p>
-          <p>This is a reminder from your landlord to set up access to your rental account.</p>
+          <p>This is a reminder from ${landlordName} to set up access to your rental account.</p>
           <p>Click the link below to create your account. This link expires in <strong>7 days</strong>.</p>
           <p><a href="${signupUrl}" style="font-size:16px;">Accept Invitation →</a></p>
           <p style="color:#888;font-size:12px;">If you did not expect this email, you can safely ignore it.</p>
+          <p style="color:#888;font-size:12px;">Sent on behalf of ${landlordName} via LotLord.</p>
         `,
-        text: `${name} Reminder: you've been invited to your rental portal. Sign up here: ${signupUrl} (expires in 7 days)`,
+        text: `${name} Reminder from ${landlordName}: you've been invited to your rental portal. Sign up here: ${signupUrl} (expires in 7 days)`,
       });
     } catch (err) {
       console.error('[invitations] resend email delivery failed:', err.message);
