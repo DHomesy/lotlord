@@ -18,7 +18,8 @@ import LeaseForm from '../../components/forms/LeaseForm'
 import { useProperty, useDeleteProperty } from '../../hooks/useProperties'
 import { useUnits, useCreateUnit, useUpdateUnit, useDeleteUnit } from '../../hooks/useUnits'
 import { useLeases, useCreateLease } from '../../hooks/useLeases'
-import { useCreateCharge } from '../../hooks/useCharges'
+import { useCreateChargesBatch, useVoidChargesByUnit } from '../../hooks/useCharges'
+import { getCharges as fetchCharges } from '../../api/charges'
 
 export default function PropertyDetailPage() {
   const { id } = useParams()
@@ -33,6 +34,7 @@ export default function PropertyDetailPage() {
   const [deleteNameInput, setDeleteNameInput]  = useState('')
   const [leaseUnit,       setLeaseUnit]        = useState(null)   // unit row to create lease for
   const [leaseChargeMsg,  setLeaseChargeMsg]   = useState(null)   // { type, text }
+  const [leaseConfirm,    setLeaseConfirm]     = useState(null)   // { pendingValues, pendingLease, pendingCharges, existingCount }
 
   const { data: property, isLoading: propLoading } = useProperty(id)
   const { data: unitsData, isLoading: unitsLoading } = useUnits({ propertyId: id })
@@ -42,7 +44,8 @@ export default function PropertyDetailPage() {
   const { mutate: deleteUnit, isPending: deleting } = useDeleteUnit()
   const { mutate: deleteProperty, isPending: deletingProperty } = useDeleteProperty()
   const { mutate: createLease, isPending: creatingLease } = useCreateLease()
-  const { mutateAsync: createCharge } = useCreateCharge()
+  const { mutateAsync: createChargesBatch, isPending: leaseBatchCreating } = useCreateChargesBatch()
+  const { mutateAsync: voidChargesByUnit } = useVoidChargesByUnit()
 
   // Must be above the early return to respect React's Rules of Hooks
   const tenantByUnit = useMemo(() => {
@@ -174,6 +177,49 @@ export default function PropertyDetailPage() {
     return dates
   }
 
+  /** Build charges array from form values + new lease. */
+  function buildLeaseCharges(values, newLease, dueDates) {
+    const unitId   = newLease.unit_id   ?? values.unit_id
+    const tenantId = newLease.tenant_id ?? values.tenant_id
+    const charges  = dueDates.map((dueDate) => ({
+      unitId, leaseId: newLease.id, tenantId, chargeType: 'rent',
+      amount: parseFloat(values.rent_amount), dueDate,
+    }))
+    if (values.include_deposit_charge && parseFloat(values.deposit_amount) > 0) {
+      charges.push({
+        unitId, leaseId: newLease.id, tenantId, chargeType: 'other',
+        amount: parseFloat(values.deposit_amount), dueDate: values.start_date,
+        description: 'Security deposit',
+      })
+    }
+    for (const fee of (values.additional_fees ?? [])) {
+      if (!fee.description || !(Number(fee.amount) > 0)) continue
+      for (const dueDate of dueDates) {
+        charges.push({
+          unitId, leaseId: newLease.id, tenantId, chargeType: 'other',
+          amount: parseFloat(fee.amount), dueDate, description: fee.description,
+        })
+      }
+    }
+    return charges
+  }
+
+  async function runLeaseCharges(values, newLease, charges, shouldVoidFirst) {
+    try {
+      if (shouldVoidFirst) {
+        await voidChargesByUnit({ unitId: newLease.unit_id ?? values.unit_id })
+      }
+      await createChargesBatch({ charges })
+      const dueDates = getMonthlyDueDates(values.start_date, values.end_date, values.charge_due_day)
+      const feeCount = (values.additional_fees ?? []).filter((f) => f.description && Number(f.amount) > 0).length
+      const depLine  = values.include_deposit_charge && parseFloat(values.deposit_amount) > 0 ? ' + 1 deposit charge' : ''
+      const feeLine  = feeCount > 0 ? ` + ${feeCount} additional fee type${feeCount !== 1 ? 's' : ''}` : ''
+      setLeaseChargeMsg({ type: 'success', text: `Lease created with ${dueDates.length} monthly charge(s)${depLine}${feeLine}.` })
+    } catch {
+      setLeaseChargeMsg({ type: 'warning', text: 'Lease created, but some charges failed. Check the Charges page.' })
+    }
+  }
+
   const handleCreateLease = (values) => {
     createLease({
       unitId:           values.unit_id,
@@ -186,52 +232,20 @@ export default function PropertyDetailPage() {
       lateFeeGraceDays: parseInt(values.late_fee_grace_days) || 0,
     }, {
       onSuccess: async (newLease) => {
-        if (values.auto_charges) {
-          const dueDates = getMonthlyDueDates(values.start_date, values.end_date, values.charge_due_day)
-          try {
-            const tasks = dueDates.map((dueDate) =>
-              createCharge({
-                unitId:     newLease.unit_id ?? values.unit_id,
-                leaseId:    newLease.id,
-                chargeType: 'rent',
-                amount:     parseFloat(values.rent_amount),
-                dueDate,
-              })
-            )
-            if (values.include_deposit_charge && parseFloat(values.deposit_amount) > 0) {
-              tasks.push(createCharge({
-                unitId:      newLease.unit_id ?? values.unit_id,
-                leaseId:     newLease.id,
-                chargeType:  'other',
-                amount:      parseFloat(values.deposit_amount),
-                dueDate:     values.start_date,
-                description: 'Security deposit',
-              }))
-            }
-            for (const fee of (values.additional_fees ?? [])) {
-              if (!fee.description || !(Number(fee.amount) > 0)) continue
-              for (const dueDate of dueDates) {
-                tasks.push(createCharge({
-                  unitId:      newLease.unit_id ?? values.unit_id,
-                  leaseId:     newLease.id,
-                  chargeType:  'other',
-                  amount:      parseFloat(fee.amount),
-                  dueDate,
-                  description: fee.description,
-                }))
-              }
-            }
-            await Promise.all(tasks)
-            const feeCount = (values.additional_fees ?? []).filter((f) => f.description && Number(f.amount) > 0).length
-            const depLine  = values.include_deposit_charge && parseFloat(values.deposit_amount) > 0 ? ' + 1 deposit charge' : ''
-            const feeLine  = feeCount > 0 ? ` + ${feeCount} additional fee type${feeCount !== 1 ? 's' : ''}` : ''
-            setLeaseChargeMsg({ type: 'success', text: `Lease created with ${dueDates.length} monthly charge(s)${depLine}${feeLine}.` })
-          } catch {
-            setLeaseChargeMsg({ type: 'warning', text: 'Lease created, but some charges failed. Check the Charges page.' })
+        if (!values.auto_charges) { setLeaseUnit(null); return }
+
+        const dueDates = getMonthlyDueDates(values.start_date, values.end_date, values.charge_due_day)
+        const charges  = buildLeaseCharges(values, newLease, dueDates)
+
+        try {
+          const existing = await fetchCharges({ unitId: newLease.unit_id ?? values.unit_id })
+          if (Array.isArray(existing) && existing.length > 0) {
+            setLeaseConfirm({ pendingValues: values, pendingLease: newLease, pendingCharges: charges, existingCount: existing.length })
+            return
           }
-        } else {
-          setLeaseUnit(null)
-        }
+        } catch { /* proceed without warning if check fails */ }
+
+        await runLeaseCharges(values, newLease, charges, false)
       },
     })
   }
@@ -483,6 +497,55 @@ export default function PropertyDetailPage() {
             </>
           )}
         </DialogContent>
+      </Dialog>
+
+      {/* Pre-existing charges confirmation (from unit lease dialog) */}
+      <Dialog open={!!leaseConfirm} onClose={() => setLeaseConfirm(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Existing Charges Found</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning">
+            This unit already has <strong>{leaseConfirm?.existingCount}</strong> existing
+            charge{leaseConfirm?.existingCount !== 1 ? 's' : ''}. What would you like to do?
+          </Alert>
+        </DialogContent>
+        <DialogActions sx={{ flexDirection: 'column', alignItems: 'stretch', gap: 1, p: 2, pt: 0 }}>
+          <Button
+            variant="contained"
+            color="warning"
+            fullWidth
+            disabled={leaseBatchCreating}
+            onClick={async () => {
+              const { pendingValues, pendingLease, pendingCharges } = leaseConfirm
+              setLeaseConfirm(null)
+              await runLeaseCharges(pendingValues, pendingLease, pendingCharges, true)
+            }}
+          >
+            Replace — void existing &amp; create new schedule
+          </Button>
+          <Button
+            variant="outlined"
+            fullWidth
+            disabled={leaseBatchCreating}
+            onClick={async () => {
+              const { pendingValues, pendingLease, pendingCharges } = leaseConfirm
+              setLeaseConfirm(null)
+              await runLeaseCharges(pendingValues, pendingLease, pendingCharges, false)
+            }}
+          >
+            Keep existing and add new schedule
+          </Button>
+          <Button
+            variant="text"
+            color="inherit"
+            fullWidth
+            onClick={() => {
+              setLeaseConfirm(null)
+              setLeaseChargeMsg({ type: 'success', text: 'Lease created. No charge schedule was generated.' })
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">Skip — don't create charges</Typography>
+          </Button>
+        </DialogActions>
       </Dialog>
     </PageContainer>
   )

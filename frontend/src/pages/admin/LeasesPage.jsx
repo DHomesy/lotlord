@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Button, Dialog, DialogTitle, DialogContent, Stack,
-  Alert,
+  Button, Dialog, DialogTitle, DialogContent, DialogActions, Stack,
+  Alert, Typography,
   ToggleButtonGroup, ToggleButton, Chip,
   useTheme, useMediaQuery,
 } from '@mui/material'
@@ -14,7 +14,8 @@ import EmptyState from '../../components/common/EmptyState'
 import StatusChip from '../../components/common/StatusChip'
 import LeaseForm from '../../components/forms/LeaseForm'
 import { useLeases, useCreateLease } from '../../hooks/useLeases'
-import { useCreateCharge } from '../../hooks/useCharges'
+import { useCreateChargesBatch, useVoidChargesByUnit } from '../../hooks/useCharges'
+import { getCharges as fetchCharges } from '../../api/charges'
 
 const ACTIVE_STATUSES   = ['active', 'pending']
 const ARCHIVED_STATUSES = ['expired', 'terminated']
@@ -47,12 +48,14 @@ export default function LeasesPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const [createOpen, setCreateOpen] = useState(false)
-  const [chargeMsg,   setChargeMsg]   = useState(null)
-  const [view,        setView]        = useState('active') // 'active' | 'archived'
+  const [chargeMsg,    setChargeMsg]    = useState(null)
+  const [confirmState, setConfirmState] = useState(null) // { pendingValues, pendingLease, pendingCharges, existingCount }
+  const [view,         setView]         = useState('active') // 'active' | 'archived'
 
   const { data, isLoading } = useLeases()
   const { mutate: create, isPending: creating } = useCreateLease()
-  const { mutateAsync: createCharge } = useCreateCharge()
+  const { mutateAsync: createChargesBatch, isPending: batchCreating } = useCreateChargesBatch()
+  const { mutateAsync: voidChargesByUnit } = useVoidChargesByUnit()
 
   const allRows     = Array.isArray(data) ? data : (data?.leases ?? [])
   const activeRows  = allRows.filter((r) => ACTIVE_STATUSES.includes(r.status))
@@ -86,7 +89,51 @@ export default function LeasesPage() {
     },
   ]
 
-  const handleCreate = async (values) => {
+  /** Build the full charges array from form values + new lease record. */
+  function buildChargesPayload(values, newLease, dueDates) {
+    const unitId   = newLease.unit_id   ?? values.unit_id
+    const tenantId = newLease.tenant_id ?? values.tenant_id
+    const charges  = dueDates.map((dueDate) => ({
+      unitId, leaseId: newLease.id, tenantId, chargeType: 'rent',
+      amount: parseFloat(values.rent_amount), dueDate,
+    }))
+    if (values.include_deposit_charge && parseFloat(values.deposit_amount) > 0) {
+      charges.push({
+        unitId, leaseId: newLease.id, tenantId, chargeType: 'other',
+        amount: parseFloat(values.deposit_amount), dueDate: values.start_date,
+        description: 'Security deposit',
+      })
+    }
+    for (const fee of (values.additional_fees ?? [])) {
+      if (!fee.description || !(Number(fee.amount) > 0)) continue
+      for (const dueDate of dueDates) {
+        charges.push({
+          unitId, leaseId: newLease.id, tenantId, chargeType: 'other',
+          amount: parseFloat(fee.amount), dueDate, description: fee.description,
+        })
+      }
+    }
+    return charges
+  }
+
+  /** Fire the batch (optionally voiding existing charges first) and set the result message. */
+  async function runBatch(values, newLease, charges, shouldVoidFirst) {
+    try {
+      if (shouldVoidFirst) {
+        await voidChargesByUnit({ unitId: newLease.unit_id ?? values.unit_id })
+      }
+      await createChargesBatch({ charges })
+      const dueDates = getMonthlyDueDates(values.start_date, values.end_date, values.charge_due_day)
+      const feeCount = (values.additional_fees ?? []).filter((f) => f.description && Number(f.amount) > 0).length
+      const depLine  = values.include_deposit_charge && parseFloat(values.deposit_amount) > 0 ? ' + 1 deposit charge' : ''
+      const feeLine  = feeCount > 0 ? ` + ${feeCount} additional fee type${feeCount !== 1 ? 's' : ''}` : ''
+      setChargeMsg({ type: 'success', text: `Lease created with ${dueDates.length} monthly charge(s)${depLine}${feeLine}.` })
+    } catch {
+      setChargeMsg({ type: 'warning', text: 'Lease created, but some charges failed. Check the Charges page.' })
+    }
+  }
+
+  const handleCreate = (values) => {
     create({
       unitId:           values.unit_id,
       tenantId:         values.tenant_id,
@@ -98,52 +145,21 @@ export default function LeasesPage() {
       lateFeeGraceDays: parseInt(values.late_fee_grace_days) || 0,
     }, {
       onSuccess: async (newLease) => {
-        if (values.auto_charges) {
-          const dueDates = getMonthlyDueDates(values.start_date, values.end_date, values.charge_due_day)
-          try {
-            const tasks = dueDates.map((dueDate) =>
-              createCharge({
-                unitId:     newLease.unit_id ?? values.unit_id,
-                leaseId:    newLease.id,
-                chargeType: 'rent',
-                amount:     parseFloat(values.rent_amount),
-                dueDate,
-              })
-            )
-            if (values.include_deposit_charge && parseFloat(values.deposit_amount) > 0) {
-              tasks.push(createCharge({
-                unitId:      newLease.unit_id ?? values.unit_id,
-                leaseId:     newLease.id,
-                chargeType:  'other',
-                amount:      parseFloat(values.deposit_amount),
-                dueDate:     values.start_date,
-                description: 'Security deposit',
-              }))
-            }
-            for (const fee of (values.additional_fees ?? [])) {
-              if (!fee.description || !(Number(fee.amount) > 0)) continue
-              for (const dueDate of dueDates) {
-                tasks.push(createCharge({
-                  unitId:      newLease.unit_id ?? values.unit_id,
-                  leaseId:     newLease.id,
-                  chargeType:  'other',
-                  amount:      parseFloat(fee.amount),
-                  dueDate,
-                  description: fee.description,
-                }))
-              }
-            }
-            await Promise.all(tasks)
-            const feeCount  = (values.additional_fees ?? []).filter((f) => f.description && Number(f.amount) > 0).length
-            const depLine   = values.include_deposit_charge && parseFloat(values.deposit_amount) > 0 ? ' + 1 deposit charge' : ''
-            const feeLine   = feeCount > 0 ? ` + ${feeCount} additional fee type${feeCount !== 1 ? 's' : ''}` : ''
-            setChargeMsg({ type: 'success', text: `Lease created with ${dueDates.length} monthly charge(s)${depLine}${feeLine}.` })
-          } catch {
-            setChargeMsg({ type: 'warning', text: 'Lease created, but some charges failed. Check the Charges page.' })
+        if (!values.auto_charges) { setCreateOpen(false); return }
+
+        const dueDates = getMonthlyDueDates(values.start_date, values.end_date, values.charge_due_day)
+        const charges  = buildChargesPayload(values, newLease, dueDates)
+
+        // Check for pre-existing unpaid charges on this unit — warn before overwriting
+        try {
+          const existing = await fetchCharges({ unitId: newLease.unit_id ?? values.unit_id })
+          if (Array.isArray(existing) && existing.length > 0) {
+            setConfirmState({ pendingValues: values, pendingLease: newLease, pendingCharges: charges, existingCount: existing.length })
+            return
           }
-        } else {
-          setCreateOpen(false)
-        }
+        } catch { /* if check fails, proceed without warning */ }
+
+        await runBatch(values, newLease, charges, false)
       },
     })
   }
@@ -210,6 +226,55 @@ export default function LeasesPage() {
             </>
           )}
         </DialogContent>
+      </Dialog>
+
+      {/* Pre-existing charges confirmation */}
+      <Dialog open={!!confirmState} onClose={() => setConfirmState(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Existing Charges Found</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning">
+            This unit already has <strong>{confirmState?.existingCount}</strong> existing
+            charge{confirmState?.existingCount !== 1 ? 's' : ''}. What would you like to do?
+          </Alert>
+        </DialogContent>
+        <DialogActions sx={{ flexDirection: 'column', alignItems: 'stretch', gap: 1, p: 2, pt: 0 }}>
+          <Button
+            variant="contained"
+            color="warning"
+            fullWidth
+            disabled={batchCreating}
+            onClick={async () => {
+              const { pendingValues, pendingLease, pendingCharges } = confirmState
+              setConfirmState(null)
+              await runBatch(pendingValues, pendingLease, pendingCharges, true)
+            }}
+          >
+            Replace — void existing &amp; create new schedule
+          </Button>
+          <Button
+            variant="outlined"
+            fullWidth
+            disabled={batchCreating}
+            onClick={async () => {
+              const { pendingValues, pendingLease, pendingCharges } = confirmState
+              setConfirmState(null)
+              await runBatch(pendingValues, pendingLease, pendingCharges, false)
+            }}
+          >
+            Keep existing and add new schedule
+          </Button>
+          <Button
+            variant="text"
+            color="inherit"
+            fullWidth
+            onClick={() => {
+              setConfirmState(null)
+              setChargeMsg({ type: 'success', text: 'Lease created. No charge schedule was generated.' })
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">Skip — don't create charges</Typography>
+          </Button>
+        </DialogActions>
       </Dialog>
     </PageContainer>
   )

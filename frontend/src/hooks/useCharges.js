@@ -41,3 +41,25 @@ export function useVoidCharge() {
   })
 }
 
+export function useCreateChargesBatch() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.createChargesBatch,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: CHARGES_KEY })
+      qc.invalidateQueries({ queryKey: ['ledger'] })
+    },
+  })
+}
+
+export function useVoidChargesByUnit() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.voidChargesByUnit,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: CHARGES_KEY })
+      qc.invalidateQueries({ queryKey: ['ledger'] })
+    },
+  })
+}
+

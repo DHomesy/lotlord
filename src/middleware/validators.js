@@ -256,6 +256,38 @@ const createChargeValidators = [
   body('tenantId').optional().isUUID().withMessage('tenantId must be a valid UUID'),
 ];
 
+const createChargesBatchValidators = [
+  body('charges')
+    .isArray({ min: 1, max: 500 })
+    .withMessage('charges must be an array of 1–500 items'),
+  body('charges.*.unitId')
+    .isUUID()
+    .withMessage('Each charge must have a valid unitId (UUID)'),
+  body('charges.*.dueDate')
+    .isDate()
+    .withMessage('Each charge must have a valid dueDate (YYYY-MM-DD)'),
+  body('charges.*.amount')
+    .isFloat({ gt: 0 })
+    .withMessage('Each charge must have amount > 0'),
+  body('charges.*.chargeType')
+    .optional()
+    .isIn(['rent', 'late_fee', 'utility', 'other'])
+    .withMessage('chargeType must be rent | late_fee | utility | other'),
+  body('charges.*.leaseId')
+    .optional({ nullable: true })
+    .isUUID()
+    .withMessage('leaseId must be a valid UUID'),
+  body('charges.*.tenantId')
+    .optional({ nullable: true })
+    .isUUID()
+    .withMessage('tenantId must be a valid UUID'),
+  body('charges.*.description').optional({ nullable: true }).trim(),
+];
+
+const voidChargesByUnitValidators = [
+  body('unitId').isUUID().withMessage('unitId must be a valid UUID'),
+];
+
 const sendSmsValidators = [
   body('recipientId').isUUID().withMessage('recipientId must be a valid UUID'),
   body('body').notEmpty().withMessage('body is required')
@@ -293,6 +325,8 @@ module.exports = {
   createPaymentIntentValidators,
   createChargeValidators,
   updateChargeValidators,
+  createChargesBatchValidators,
+  voidChargesByUnitValidators,
   createInvitationValidators,
   acceptInvitationValidators,
   forgotPasswordValidators,

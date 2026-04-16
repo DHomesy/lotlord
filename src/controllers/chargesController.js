@@ -253,4 +253,175 @@ async function voidCharge(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { listCharges, getCharge, createCharge, updateCharge, voidCharge };
+/**
+ * POST /api/v1/charges/batch  (admin or landlord)
+ *
+ * Creates multiple charges in a single DB transaction — prevents connection-pool
+ * exhaustion that occurs when firing N concurrent POST /charges requests.
+ *
+ * Body: { charges: [{ unitId, dueDate, amount, leaseId?, tenantId?, chargeType?, description? }] }
+ */
+async function createChargesBatch(req, res, next) {
+  try {
+    const { charges } = req.body;
+    // Input shape, size (1-500), UUID/date/amount/chargeType format all validated by middleware.
+    // Ownership and lease-unit cross-checks are business logic — done here.
+
+    // Verify landlord owns all unique unitIds
+    const unitIds = [...new Set(charges.map((c) => c.unitId))];
+    for (const unitId of unitIds) {
+      await assertLandlordOwnsUnit(unitId, req.user);
+    }
+
+    // Verify each unique leaseId belongs to the corresponding unitId
+    const checkedLeases = new Set();
+    for (const c of charges) {
+      if (c.leaseId && !checkedLeases.has(c.leaseId)) {
+        const { rows } = await query('SELECT unit_id FROM leases WHERE id = $1 LIMIT 1', [c.leaseId]);
+        if (!rows[0]) return res.status(404).json({ error: `Lease ${c.leaseId} not found` });
+        if (rows[0].unit_id !== c.unitId) {
+          return res.status(400).json({ error: 'leaseId does not belong to the supplied unitId' });
+        }
+        checkedLeases.add(c.leaseId);
+      }
+    }
+
+    const client = await getClient();
+    // Track cumulative balance per leaseId within this transaction so each
+    // ledger entry has the correct balance_after without re-reading mid-txn.
+    const balanceCache = {};
+    const created = [];
+
+    try {
+      await client.query('BEGIN');
+
+      for (const c of charges) {
+        const chargeId = uuidv4();
+        const charge = await ledgerRepo.createCharge(client, {
+          id:          chargeId,
+          unitId:      c.unitId,
+          leaseId:     c.leaseId     || null,
+          tenantId:    c.tenantId    || null,
+          dueDate:     c.dueDate,
+          amount:      parseFloat(c.amount),
+          chargeType:  c.chargeType  || 'rent',
+          description: c.description || null,
+          createdBy:   req.user.sub,
+        });
+        created.push(charge);
+
+        if (c.leaseId) {
+          // Read the committed balance once per lease; accumulate in memory thereafter
+          if (balanceCache[c.leaseId] === undefined) {
+            balanceCache[c.leaseId] = await ledgerRepo.getCurrentBalance(c.leaseId);
+          }
+          balanceCache[c.leaseId] = parseFloat(
+            (balanceCache[c.leaseId] + parseFloat(c.amount)).toFixed(2),
+          );
+          await ledgerRepo.appendEntry(client, {
+            id:           uuidv4(),
+            leaseId:      c.leaseId,
+            entryType:    'charge',
+            amount:       parseFloat(c.amount),
+            balanceAfter: balanceCache[c.leaseId],
+            description:  c.description || `${c.chargeType || 'rent'} charge — due ${c.dueDate}`,
+            referenceId:  chargeId,
+            createdBy:    req.user.sub,
+          });
+        }
+      }
+
+      await client.query('COMMIT');
+      audit.log({
+        action: 'charges_batch_created', resourceType: 'charge', userId: req.user.sub,
+        ipAddress: req.ip, metadata: { count: created.length },
+      });
+      res.status(201).json({ charges: created });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/v1/charges/void-by-unit  (admin or landlord)
+ *
+ * Voids all non-voided, unpaid charges for a given unit in one transaction.
+ * Used before replacing a charge schedule with a new one.
+ *
+ * Body: { unitId }
+ */
+async function voidChargesByUnit(req, res, next) {
+  try {
+    const { unitId } = req.body;
+    // unitId UUID format validated by middleware; ownership checked here.
+    await assertLandlordOwnsUnit(unitId, req.user);
+
+    const { rows: toVoid } = await query(
+      `SELECT rc.id, rc.amount, rc.lease_id, rc.charge_type
+         FROM rent_charges rc
+        WHERE rc.unit_id = $1
+          AND rc.voided_at IS NULL
+          AND rc.id NOT IN (
+                SELECT charge_id FROM rent_payments
+                 WHERE status = 'completed' AND charge_id IS NOT NULL
+              )`,
+      [unitId],
+    );
+
+    if (toVoid.length === 0) return res.json({ voided: 0 });
+
+    const client = await getClient();
+    const balanceCache = {};
+
+    try {
+      await client.query('BEGIN');
+
+      for (const c of toVoid) {
+        await client.query(
+          `UPDATE rent_charges SET voided_at = NOW(), voided_by = $1 WHERE id = $2`,
+          [req.user.sub, c.id],
+        );
+
+        if (c.lease_id) {
+          if (balanceCache[c.lease_id] === undefined) {
+            const { rows: bal } = await client.query(
+              `SELECT balance_after FROM ledger_entries WHERE lease_id = $1 ORDER BY created_at DESC LIMIT 1`,
+              [c.lease_id],
+            );
+            balanceCache[c.lease_id] = bal[0] ? parseFloat(bal[0].balance_after) : 0;
+          }
+          balanceCache[c.lease_id] = parseFloat(
+            (balanceCache[c.lease_id] - parseFloat(c.amount)).toFixed(2),
+          );
+          await client.query(
+            `INSERT INTO ledger_entries
+               (id, lease_id, entry_type, amount, balance_after, description, reference_id, created_by)
+             VALUES ($1,$2,'credit',$3,$4,$5,$6,$7)`,
+            [
+              uuidv4(), c.lease_id, -parseFloat(c.amount), balanceCache[c.lease_id],
+              `Voided ${c.charge_type} charge`, c.id, req.user.sub,
+            ],
+          );
+        }
+      }
+
+      await client.query('COMMIT');
+      audit.log({
+        action: 'charges_bulk_voided', resourceType: 'charge', userId: req.user.sub,
+        ipAddress: req.ip, metadata: { unitId, count: toVoid.length },
+      });
+      res.json({ voided: toVoid.length });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) { next(err); }
+}
+
+module.exports = { listCharges, getCharge, createCharge, updateCharge, voidCharge, createChargesBatch, voidChargesByUnit };

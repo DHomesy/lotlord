@@ -8,6 +8,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.5.5] — 2026-04-25 — Charge schedule reliability & security hardening
+
+### Fixed
+- **Connection timeout when creating lease charge schedule** — charge schedule creation previously fired N concurrent `POST /charges` requests, exhausting the pg-pool (max 10 connections) on leases with many months. All charges are now created in a single DB transaction via `POST /charges/batch`, eliminating the race.
+- **Charges invisible to tenants** — `tenant_id` was not passed to charge creation payloads; all charges had `tenant_id = NULL` and were filtered out of tenant queries. `tenantId` is now included on every charge in the batch.
+- **No warning about pre-existing charges** — creating a charge schedule on a unit with existing charges silently duplicated them. The create-lease flow now checks for existing charges before submitting and shows a confirmation dialog with three options: Replace (void all existing + create new schedule), Keep (add alongside existing), or Skip.
+
+### Added
+- `POST /api/v1/charges/batch` — creates multiple charges atomically in a single DB transaction; validates array size (max 500), UUID/date/amount/chargeType per item.
+- `POST /api/v1/charges/void-by-unit` — voids all unpaid charges for a unit in a single transaction; used by the "Replace" flow.
+
+### Security
+- Input validation middleware (`createChargesBatchValidators`, `voidChargesByUnitValidators`) added to both new endpoints — malformed UUIDs, invalid date formats, unrecognised chargeType values, and amount ≤ 0 now return 400 instead of a Postgres 500.
+- Batch size capped at 500 items per request to prevent pool exhaustion attacks.
+
+### Tests
+- 13 new integration tests in `tests/charges.test.js` covering both new endpoints: success, IDOR 403, validation rejection (empty array, >500 items, bad date, bad chargeType, zero amount), unauthenticated 401, and DB-state verification for void.
+
+---
 ## [1.5.4] — 2026-04-16 — Email verification bug fix
 
 ### Fixed
