@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.5.4] — 2026-04-16 — Email verification bug fix
+
+### Fixed
+- **Landlords blocked by email verification gate despite being verified** — `ProtectedRoute` was checking `user.email_verified_at` (the raw DB snake_case field), but the user object in auth state is normalised via `toPublicUser()` and exposes `emailVerified` (camelCase). The field was always `undefined`, so every landlord was redirected to `/verify-email-pending` on login. Changed guard to `!user.emailVerified`.
+- **Backend gate blocked tokens without the `emailVerified` claim** — changed `app.js` gate from `!payload.emailVerified` to `payload.emailVerified === false` so tokens issued before the claim was introduced (where the claim is absent, not `false`) are not incorrectly blocked.
+- **Users stuck on verify-email page unable to proceed** — when the resend-verification API returns 400 "already verified" (correct — the DB row is verified, only the in-memory token was stale), `VerifyEmailPendingPage` now automatically calls `POST /auth/refresh`, updates auth state with the fresh token, and redirects to `/dashboard` instead of showing an unrecoverable error.
+
+### Changed
+- ROADMAP.md rewritten with four strategic tiers: Tier 1 (product viability), Tier 2 (retention & trust), Tier 3 (SaaS readiness), Tier 4 (developer health). All previously documented items preserved with full implementation detail.
+
+---
 ## [1.5.3] — 2026-04-16 — Additional fees & maintenance photo uploads
 
 ### Added

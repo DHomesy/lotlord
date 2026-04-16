@@ -18,7 +18,7 @@ export default function ProtectedRoute({ allowedRoles }) {
   }
 
   // Block unverified landlords — admins and tenants are exempt
-  if (user.role === 'landlord' && !user.email_verified_at) {
+  if (user.role === 'landlord' && !user.emailVerified) {
     return <Navigate to="/verify-email-pending" replace />
   }
 

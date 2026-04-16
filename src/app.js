@@ -109,7 +109,7 @@ app.use('/api/v1', (req, res, next) => {
   if (!header?.startsWith('Bearer ')) return next();
   try {
     const payload = jwt.verify(header.split(' ')[1], JWT_SECRET);
-    if (payload.role === 'landlord' && !payload.emailVerified) {
+    if (payload.role === 'landlord' && payload.emailVerified === false) {
       return res.status(403).json({
         error: 'Please verify your email address before accessing this feature.',
         code: 'EMAIL_UNVERIFIED',
