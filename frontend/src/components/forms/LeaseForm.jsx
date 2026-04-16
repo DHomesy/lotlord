@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { Controller, useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -14,6 +14,7 @@ import GavelIcon       from '@mui/icons-material/Gavel'
 import BoltIcon        from '@mui/icons-material/Bolt'
 import AddIcon         from '@mui/icons-material/Add'
 import DeleteIcon      from '@mui/icons-material/Delete'
+import AttachFileIcon  from '@mui/icons-material/AttachFile'
 import UnitPicker   from '../pickers/UnitPicker'
 import TenantPicker from '../pickers/TenantPicker'
 
@@ -129,6 +130,8 @@ export default function LeaseForm({
   const [showLateFees, setShowLateFees] = useState(
     !!(defaultValues?.late_fee_amount && Number(defaultValues.late_fee_amount) > 0),
   )
+  const [attachedFile, setAttachedFile] = useState(null)
+  const fileInputRef = useRef()
 
   const { register, handleSubmit, control, watch, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
@@ -167,7 +170,7 @@ export default function LeaseForm({
   const additionalTotal = previewDates.length * (additionalFees?.reduce((sum, f) => sum + (Number(f.amount) || 0), 0) || 0)
 
   return (
-    <Stack component="form" onSubmit={handleSubmit(onSubmit)} spacing={3} sx={{ pt: 1 }}>
+    <Stack component="form" onSubmit={handleSubmit((values) => onSubmit({ ...values, attachedFile }))} spacing={3} sx={{ pt: 1 }}>
 
       {/* ── Parties ── */}
       <SectionHeader
@@ -538,6 +541,49 @@ export default function LeaseForm({
             )}
           />
         </>
+      )}
+
+      {/* ── Lease Document (optional) ── */}
+      <SectionHeader
+        icon={<AttachFileIcon fontSize="small" sx={{ color: 'text.secondary' }} />}
+        label="Lease Document"
+        addon={
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto !important' }}>
+            Optional
+          </Typography>
+        }
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files[0]
+          if (f) setAttachedFile(f)
+          e.target.value = ''
+        }}
+      />
+      {attachedFile ? (
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Chip
+            label={attachedFile.name}
+            onDelete={() => setAttachedFile(null)}
+            size="small"
+            icon={<AttachFileIcon />}
+            variant="outlined"
+          />
+        </Stack>
+      ) : (
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<AttachFileIcon />}
+          onClick={() => fileInputRef.current?.click()}
+          sx={{ alignSelf: 'flex-start' }}
+        >
+          Attach Signed Lease
+        </Button>
       )}
 
       <Button type="submit" variant="contained" size="large" disabled={loading}>

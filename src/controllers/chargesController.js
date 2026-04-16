@@ -51,8 +51,21 @@ async function listCharges(req, res, next) {
     if (isTenant) {
       const tenantRecord = await tenantRepo.findByUserId(req.user.sub);
       if (!tenantRecord) return res.status(404).json({ error: 'Tenant profile not found' });
-      // Force scope to their own tenantId regardless of what was passed in the query string.
-      tenantId = tenantRecord.id;
+
+      if (leaseId) {
+        // Lease-scoped query: verify the lease belongs to this tenant, then query
+        // by leaseId only — some charges may have tenant_id = NULL (created before
+        // the tenant was linked) and would be missed if tenant_id were ANDed in.
+        const { rows: leaseCheck } = await query(
+          `SELECT id FROM leases WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+          [leaseId, tenantRecord.id],
+        );
+        if (!leaseCheck[0]) return res.status(403).json({ error: 'Access denied' });
+        // Do not set tenantId — leaseId already scopes to the right charges
+      } else {
+        // No leaseId: scope by tenant_id so they only see their own records
+        tenantId = tenantRecord.id;
+      }
     }
 
     // Landlords can only see charges for their own properties.

@@ -20,6 +20,7 @@ import { useUnits, useCreateUnit, useUpdateUnit, useDeleteUnit } from '../../hoo
 import { useLeases, useCreateLease } from '../../hooks/useLeases'
 import { useCreateChargesBatch, useVoidChargesByUnit } from '../../hooks/useCharges'
 import { getCharges as fetchCharges } from '../../api/charges'
+import { uploadDocument } from '../../api/documents'
 
 export default function PropertyDetailPage() {
   const { id } = useParams()
@@ -232,6 +233,16 @@ export default function PropertyDetailPage() {
       lateFeeGraceDays: parseInt(values.late_fee_grace_days) || 0,
     }, {
       onSuccess: async (newLease) => {
+        // Upload attached lease document if provided
+        if (values.attachedFile) {
+          const fd = new FormData()
+          fd.append('file', values.attachedFile)
+          fd.append('relatedType', 'lease')
+          fd.append('relatedId', newLease.id)
+          fd.append('category', 'lease_agreement')
+          uploadDocument(fd).catch(() => {})
+        }
+
         if (!values.auto_charges) { setLeaseUnit(null); return }
 
         const dueDates = getMonthlyDueDates(values.start_date, values.end_date, values.charge_due_day)
