@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   Button, Dialog, DialogTitle, DialogContent, DialogActions,
   DialogContentText, Alert, IconButton, Tooltip,
+  useTheme, useMediaQuery,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -34,6 +35,9 @@ export default function MaintenancePage() {
   const [uploadError, setUploadError]         = useState('')
   const [selectedRequest, setSelectedRequest] = useState(null)
   const [deletingRequest, setDeletingRequest] = useState(null)
+
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const { data, isLoading } = useMaintenance()
   const { mutate: create, isPending: creating } = useCreateMaintenanceRequest()
@@ -124,7 +128,7 @@ export default function MaintenancePage() {
       />
 
       {/* Create Dialog */}
-      <Dialog open={createOpen} onClose={() => { setCreateOpen(false); setUploadError('') }} maxWidth="sm" fullWidth>
+      <Dialog open={createOpen} onClose={() => { setCreateOpen(false); setUploadError('') }} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle>New Request</DialogTitle>
         <DialogContent>
           {uploadError && <Alert severity="warning" sx={{ mb: 1 }}>{uploadError}</Alert>}

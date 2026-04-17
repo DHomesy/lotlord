@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Dialog, DialogTitle, DialogContent, Alert } from '@mui/material'
+import { Button, Dialog, DialogTitle, DialogContent, Alert, useTheme, useMediaQuery } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import PageContainer from '../../components/layout/PageContainer'
 import DataTable from '../../components/common/DataTable'
@@ -23,6 +23,8 @@ export default function TenantMaintenancePage() {
   const [open, setOpen] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const { activeLease, isLoading: loadingLease } = useMyLease()
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const { data, isLoading } = useMaintenance()
   const { mutate: create, isPending } = useCreateMaintenanceRequest()
@@ -64,7 +66,7 @@ export default function TenantMaintenancePage() {
         : <DataTable rows={rows} columns={columns} loading={isLoading} />
       }
       {uploadError && <Alert severity="warning" sx={{ mt: 2 }}>{uploadError}</Alert>}
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle>Submit Maintenance Request</DialogTitle>
         <DialogContent>
           <MaintenanceForm

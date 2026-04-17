@@ -6,6 +6,7 @@ import {
   Alert, Box, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, IconButton, MenuItem, Stack, TextField,
   ToggleButton, ToggleButtonGroup, Tooltip, Typography,
+  useTheme, useMediaQuery,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
@@ -132,6 +133,8 @@ export default function ChargesPage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const isLandlord = user?.role === 'landlord'
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editCharge, setEditCharge] = useState(null)
@@ -281,6 +284,7 @@ export default function ChargesPage() {
           exclusive
           onChange={(_, v) => { if (v) setStatusFilter(v) }}
           size="small"
+          sx={{ flexWrap: 'wrap' }}
         >
           <ToggleButton value="all">All</ToggleButton>
           <ToggleButton value="unpaid">Unpaid</ToggleButton>
@@ -302,7 +306,7 @@ export default function ChargesPage() {
       )}
 
       {/* ── Create Dialog ── */}
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle>New Charge</DialogTitle>
         <DialogContent>
           <CreateChargeForm
@@ -317,7 +321,7 @@ export default function ChargesPage() {
       </Dialog>
 
       {/* ── Edit Dialog ── */}
-      <Dialog open={!!editCharge} onClose={() => setEditCharge(null)} maxWidth="sm" fullWidth>
+      <Dialog open={!!editCharge} onClose={() => setEditCharge(null)} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle>Edit Charge</DialogTitle>
         <DialogContent>
           <EditChargeForm
@@ -335,7 +339,7 @@ export default function ChargesPage() {
       </Dialog>
 
       {/* ── Void Confirm Dialog ── */}
-      <Dialog open={!!voidTarget} onClose={() => setVoidTarget(null)} maxWidth="xs" fullWidth>
+      <Dialog open={!!voidTarget} onClose={() => setVoidTarget(null)} maxWidth="xs" fullWidth fullScreen={isMobile}>
         <DialogTitle>Void Charge?</DialogTitle>
         <DialogContent>
           <Typography variant="body2">

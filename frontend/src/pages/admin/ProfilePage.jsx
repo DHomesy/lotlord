@@ -140,7 +140,7 @@ export default function AdminProfilePage() {
       {/* ── Payout Setup (landlord only — Stripe Connect Express) ── */}
       {isLandlord && (<>
       <Divider sx={{ my: 4 }} />
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
         <Box>
           <Typography variant="h6">Payout Account</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -222,7 +222,7 @@ export default function AdminProfilePage() {
       {/* ── Subscription (landlord only — SaaS plan) ── */}
       {isLandlord && (<>
       <Divider sx={{ my: 4 }} />
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
         <Box>
           <Typography variant="h6">Subscription</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>

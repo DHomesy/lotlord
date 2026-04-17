@@ -95,19 +95,6 @@ Complete before driving user acquisition. Without these, landlords and tenants w
 
 ---
 
-### Lease PDF Generation
-
-**Goal:** Landlord and tenant can download a formatted PDF of the signed lease, including all terms, charges, and signatures.
-
-**Backend:**
-- `GET /leases/:id/pdf` — generates and streams a PDF from the lease record
-- Include: property/unit address, tenant names, lease dates, monthly rent, additional fees, signatures (stored as `signed_at` timestamps)
-
-**Frontend:**
-- "Download lease PDF" button on the lease detail page (visible to both landlord and tenant)
-
----
-
 ### Maintenance Status Notifications
 
 **Problem:** When a landlord updates a maintenance request status (`open → in_progress → resolved`), the tenant receives no notification. Tenants have no visibility into whether their request is being actioned.

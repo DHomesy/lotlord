@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Tab, Tabs, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   RadioGroup, FormControlLabel, Radio, Alert, Stack, CircularProgress, Divider, Box,
+  useTheme, useMediaQuery,
 } from '@mui/material'
 import PaymentIcon from '@mui/icons-material/Payment'
 import PageContainer from '../../components/layout/PageContainer'
@@ -16,7 +17,7 @@ import { useMyPaymentMethods } from '../../hooks/useStripeSetup'
 import { useCreateMyPaymentIntent } from '../../hooks/usePayments'
 
 // ── PaymentDialog ─────────────────────────────────────────────────────────────
-function PaymentDialog({ charge, open, onClose }) {
+function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
   const navigate = useNavigate()
   const { data: methods = [] } = useMyPaymentMethods()
   const [selectedId, setSelectedId] = useState('')
@@ -46,7 +47,7 @@ function PaymentDialog({ charge, open, onClose }) {
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth fullScreen={fullScreen}>
       {/* Guard against null charge during MUI close animation */}
       {!charge ? null : succeeded ? (
         <>
@@ -122,6 +123,8 @@ function PaymentDialog({ charge, open, onClose }) {
 export default function TenantChargesPage() {
   const [chargeTab, setChargeTab] = useState(1) // 0 = Outstanding, 1 = All
   const [selectedCharge, setSelectedCharge] = useState(null)
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const { activeLease, leases, isLoading: loadingLease } = useMyLease()
   const activeLeaseFallback = activeLease ?? leases?.[0]
 
@@ -198,6 +201,7 @@ export default function TenantChargesPage() {
         charge={selectedCharge}
         open={!!selectedCharge}
         onClose={() => setSelectedCharge(null)}
+        fullScreen={isMobile}
       />
     </PageContainer>
   )}

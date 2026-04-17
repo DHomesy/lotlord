@@ -3,6 +3,7 @@ import {
   Box, Button, Chip, FormControl, IconButton, InputLabel, MenuItem,
   Select, Stack, Tab, Tabs, TextField, Tooltip, Typography,
   Dialog, DialogTitle, DialogContent, DialogActions,
+  useTheme, useMediaQuery,
 } from '@mui/material'
 import UploadIcon from '@mui/icons-material/Upload'
 import DownloadIcon from '@mui/icons-material/Download'
@@ -45,7 +46,7 @@ function PropertySelect({ value, onChange }) {
 }
 
 // ── Upload dialog ─────────────────────────────────────────────────────────────
-function UploadDialog({ open, file, onClose, onConfirm, uploading }) {
+function UploadDialog({ open, file, onClose, onConfirm, uploading, fullScreen }) {
   const [category, setCategory]       = useState('')
   const [relatedType, setRelatedType] = useState('')
   const [relatedId, setRelatedId]     = useState(null)
@@ -61,7 +62,7 @@ function UploadDialog({ open, file, onClose, onConfirm, uploading }) {
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth fullScreen={fullScreen}>
       <DialogTitle>Upload Document</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
@@ -123,6 +124,9 @@ export default function DocumentsPage() {
   const [pendingFile, setPendingFile] = useState(null)
   const [tabIndex, setTabIndex]       = useState(0)
   const [search, setSearch]           = useState('')
+
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const activeTab = TABS[tabIndex]
   const queryParams = activeTab.value && activeTab.value !== '__unlinked__'
@@ -263,6 +267,7 @@ export default function DocumentsPage() {
         onClose={() => { setUploadOpen(false); setPendingFile(null) }}
         onConfirm={handleUploadConfirm}
         uploading={uploading}
+        fullScreen={isMobile}
       />
     </PageContainer>
   )

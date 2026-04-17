@@ -51,7 +51,7 @@ export default function TenantProfilePage() {
 
       {/* ── Billing ── */}
       <Divider sx={{ my: 4 }} />
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} sx={{ mb: 1 }}>
         <Box>
           <Typography variant="h6">Billing</Typography>
           <Typography variant="body2" color="text.secondary">

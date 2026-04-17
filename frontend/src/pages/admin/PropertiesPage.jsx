@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   DialogContentText, IconButton, Stack, TextField, Typography,
+  useTheme, useMediaQuery,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
@@ -46,6 +47,8 @@ export default function PropertiesPage() {
   const { data, isLoading } = useProperties()
   const { mutateAsync: create, isPending: isCreating } = useCreateProperty()
   const { mutateAsync: createUnit, isPending: isCreatingUnit } = useCreateUnit()
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const rows = Array.isArray(data) ? data : (data?.properties ?? data?.data ?? [])
 
@@ -124,7 +127,7 @@ export default function PropertiesPage() {
         />
       )}
 
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle>New Property</DialogTitle>
         <DialogContent>
           <PropertyForm onSubmit={handleCreate} loading={isCreating || isCreatingUnit} />
@@ -137,6 +140,7 @@ export default function PropertiesPage() {
         onClose={() => setUnitWizardPropertyId(null)}
         maxWidth="xs"
         fullWidth
+        fullScreen={isMobile}
       >
         <DialogTitle>Add Units</DialogTitle>
         <DialogContent>

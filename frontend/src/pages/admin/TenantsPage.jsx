@@ -7,6 +7,7 @@ import {
   Button, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
   Stack, TextField, Alert, Tooltip, IconButton, Chip, Typography,
   Box, Divider, ToggleButtonGroup, ToggleButton,
+  useTheme, useMediaQuery,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
@@ -198,6 +199,9 @@ export default function TenantsPage() {
   const [resendingId, setResendingId] = useState(null)
   const [deletingId, setDeletingId]   = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null) // invitation row to delete
+
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const [copied, setCopied]         = useState(false)
 
   const { data: tenantsData, isLoading: loadingTenants } = useTenants()
@@ -401,7 +405,7 @@ export default function TenantsPage() {
       </Dialog>
 
       {/* Invite dialog */}
-      <Dialog open={open} onClose={() => { setOpen(false); resetInvite() }} maxWidth="sm" fullWidth>
+      <Dialog open={open} onClose={() => { setOpen(false); resetInvite() }} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle>Invite a Tenant</DialogTitle>
         <DialogContent>
           {inviteError && (

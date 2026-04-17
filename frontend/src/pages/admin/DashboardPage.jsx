@@ -15,6 +15,8 @@ import {
   Stack,
   Alert,
   Button,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material'
 import TrendingUpIcon    from '@mui/icons-material/TrendingUp'
 import WarningAmberIcon  from '@mui/icons-material/WarningAmber'
@@ -91,7 +93,25 @@ function StatCard({ label, value, sub, color = 'text.primary', Icon, progress })
 }
 
 // ─── Activity table ───────────────────────────────────────────────────────────
-function ActivityTable({ head, children, empty }) {
+function ActivityTable({ head, children, empty, isMobile, mobileRows }) {
+  if (isMobile && mobileRows) {
+    return (
+      <Card variant="outlined" sx={{ height: '100%' }}>
+        <CardContent>
+          {mobileRows.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 1, textAlign: 'center' }}>
+              {empty}
+            </Typography>
+          ) : (
+            <Stack divider={<Box sx={{ borderBottom: 1, borderColor: 'divider' }} />} spacing={0}>
+              {mobileRows}
+            </Stack>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card variant="outlined" sx={{ height: '100%' }}>
       <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
@@ -136,6 +156,8 @@ export default function DashboardPage() {
   const user = useAuthStore((s) => s.user)
   const navigate = useNavigate()
   const isLandlord = user?.role === 'landlord'
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const [wizardOpen, setWizardOpen] = useState(!localStorage.getItem('ll_onboarding_done') && isLandlord)
 
@@ -245,6 +267,19 @@ export default function DashboardPage() {
           <ActivityTable
             head={['Tenant', 'Unit', 'Amount', 'Date', 'Method']}
             empty={recentPayments.length === 0 ? 'No payments yet' : undefined}
+            isMobile={isMobile}
+            mobileRows={recentPayments.map((p) => (
+              <Box key={p.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', py: 1 }}>
+                <Box>
+                  <Typography variant="body2" fontWeight={500}>{p.first_name} {p.last_name}</Typography>
+                  <Typography variant="caption" color="text.secondary">{p.address_line1} — {p.unit_number}</Typography>
+                </Box>
+                <Box sx={{ textAlign: 'right', flexShrink: 0, ml: 1 }}>
+                  <Typography variant="body2" fontWeight={500}>{fmt(p.amount_paid)}</Typography>
+                  <Typography variant="caption" color="text.secondary">{date(p.payment_date)}</Typography>
+                </Box>
+              </Box>
+            ))}
           >
             {recentPayments.map((p) => (
               <TableRow key={p.id} hover>
@@ -270,6 +305,19 @@ export default function DashboardPage() {
           <ActivityTable
             head={['Title', 'Unit', 'Priority', 'Status']}
             empty={recentMaintenance.length === 0 ? 'No open requests' : undefined}
+            isMobile={isMobile}
+            mobileRows={recentMaintenance.map((m) => (
+              <Box key={m.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', py: 1 }}>
+                <Box sx={{ mr: 1 }}>
+                  <Typography variant="body2" fontWeight={500}>{m.title}</Typography>
+                  <Typography variant="caption" color="text.secondary">{m.address_line1} — {m.unit_number}</Typography>
+                </Box>
+                <Stack spacing={0.5} alignItems="flex-end" sx={{ flexShrink: 0 }}>
+                  <Chip label={m.priority} size="small" color={PRIORITY_COLOR[m.priority] ?? 'default'} />
+                  <Chip label={m.status.replace('_', ' ')} size="small" variant="outlined" color={STATUS_COLOR[m.status] ?? 'default'} />
+                </Stack>
+              </Box>
+            ))}
           >
             {recentMaintenance.map((m) => (
               <TableRow key={m.id} hover>

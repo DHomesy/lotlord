@@ -31,9 +31,11 @@ function getCellDisplay(col, row) {
 function MobileCardList({ rows, columns, getRowId, onRowClick, sx }) {
   const getId = getRowId || ((r) => r.id)
   const [titleCol, ...restCols] = columns
-  // Skip columns that have no header label — these are action-button columns
-  // whose renderCell output (IconButtons etc.) doesn't belong in a card KV list.
-  const visibleRestCols = restCols.filter((c) => c.headerName !== '')
+  // Data columns have a non-empty header and are rendered as key-value pairs.
+  // Action columns (headerName === '') are rendered in a dedicated row at the
+  // bottom of each card so buttons like "Pay" remain accessible on mobile.
+  const dataCols   = restCols.filter((c) => c.headerName !== '')
+  const actionCols = restCols.filter((c) => c.headerName === '' && c.renderCell)
   return (
     <Stack spacing={1.5} sx={sx}>
       {rows.length === 0 && (
@@ -42,64 +44,59 @@ function MobileCardList({ rows, columns, getRowId, onRowClick, sx }) {
         </Typography>
       )}
       {rows.map((row) => {
-        const card = (
-          <Card key={getId(row)} variant="outlined">
-            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              {/* Title row */}
-              <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                {getCellDisplay(titleCol, row)}
-              </Typography>
+        // Render action columns (Pay, Download, etc.) at card bottom if they produce output
+        const actionNodes = actionCols
+          .map((col) => ({ key: col.field, node: col.renderCell({ value: row[col.field], row }) }))
+          .filter(({ node }) => node != null)
 
-              {/* Key-value rows for the remaining columns */}
-              <Stack spacing={0.5}>
-                {visibleRestCols.map((col) => (
-                  <Box
-                    key={col.field}
-                    sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}
-                  >
-                    <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap', pt: '2px' }}>
-                      {col.headerName}
-                    </Typography>
-                    <Typography variant="caption" sx={{ textAlign: 'right', wordBreak: 'break-word' }}>
-                      {getCellDisplay(col, row)}
-                    </Typography>
-                  </Box>
-                ))}
+        const cardBody = (
+          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+            {/* Title row */}
+            <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+              {getCellDisplay(titleCol, row)}
+            </Typography>
+
+            {/* Key-value rows for the remaining data columns */}
+            <Stack spacing={0.5}>
+              {dataCols.map((col) => (
+                <Box
+                  key={col.field}
+                  sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}
+                >
+                  <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap', pt: '2px' }}>
+                    {col.headerName}
+                  </Typography>
+                  <Typography variant="caption" sx={{ textAlign: 'right', wordBreak: 'break-word' }}>
+                    {getCellDisplay(col, row)}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+
+            {/* Action buttons row */}
+            {actionNodes.length > 0 && (
+              <Stack direction="row" spacing={1} sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+                {actionNodes.map(({ key, node }) => <Box key={key}>{node}</Box>)}
               </Stack>
-            </CardContent>
-          </Card>
+            )}
+          </CardContent>
         )
 
         if (onRowClick) {
           return (
             <Card key={getId(row)} variant="outlined" sx={{ cursor: 'pointer' }}>
               <CardActionArea onClick={() => onRowClick({ id: getId(row), row })}>
-                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                  <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                    {getCellDisplay(titleCol, row)}
-                  </Typography>
-                  <Stack spacing={0.5}>
-                    {visibleRestCols.map((col) => (
-                      <Box
-                        key={col.field}
-                        sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}
-                      >
-                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap', pt: '2px' }}>
-                          {col.headerName}
-                        </Typography>
-                        <Typography variant="caption" sx={{ textAlign: 'right', wordBreak: 'break-word' }}>
-                          {getCellDisplay(col, row)}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Stack>
-                </CardContent>
+                {cardBody}
               </CardActionArea>
             </Card>
           )
         }
 
-        return card
+        return (
+          <Card key={getId(row)} variant="outlined">
+            {cardBody}
+          </Card>
+        )
       })}
     </Stack>
   )

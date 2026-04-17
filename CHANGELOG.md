@@ -8,6 +8,39 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.5.8] — 2026-04-17 — Full mobile UX audit: admin pages
+
+### Changed
+- **Admin Dashboard — responsive activity tables** — "Recent Payments" and "Recent Maintenance" tables now render as a card-per-row layout on mobile (`xs`) instead of a horizontally-scrollable 5-column table. Each payment card shows name + unit on the left and amount + date stacked on the right; each maintenance card shows title + unit on the left and priority/status chips stacked on the right.
+- **Admin Charges — fullScreen dialogs on mobile** — Create Charge, Edit Charge, and Void Charge dialogs all switch to `fullScreen` mode on `xs`/`sm` breakpoints.
+- **Admin Charges — status filter wraps on small screens** — the All / Unpaid / Paid / Voided `ToggleButtonGroup` now has `flexWrap: 'wrap'` so buttons are never clipped on 320 px screens.
+- **Admin Maintenance — fullScreen dialog on mobile** — New Request dialog switches to `fullScreen` mode on `xs`/`sm` breakpoints.
+- **Admin Documents — fullScreen dialog on mobile** — Upload Document dialog switches to `fullScreen` mode on `xs`/`sm` breakpoints.
+- **Admin Tenants — fullScreen dialog on mobile** — Invite a Tenant dialog switches to `fullScreen` mode on `xs`/`sm` breakpoints.
+- **Admin Properties — fullScreen dialogs on mobile** — New Property dialog and the Unit Wizard dialog both switch to `fullScreen` mode on `xs`/`sm` breakpoints.
+- **Admin Profile — Payout Account & Subscription section headers stack on mobile** — both section headers (title + action button/chip) changed from `direction="row"` to `direction={{ xs: 'column', sm: 'row' }}` so the button/chip never squishes against the heading text on narrow screens.
+
+---
+## [1.5.7] — 2026-04-17 — Mobile UX audit: tenant portal & DataTable
+
+### Fixed
+- **DataTable action columns hidden on mobile** — the `MobileCardList` renderer was filtering out columns with `headerName: ''` (Pay, View, etc.) entirely, making those actions unreachable on phones. Action columns are now separated from data columns: data columns render as key-value pairs as before, while action columns (`headerName === ''`) render in a dedicated bottom row inside each card, separated by a divider.
+
+### Changed
+- **Tenant Charges — fullScreen PaymentDialog on mobile** — the Pay dialog switches to `fullScreen` mode on `xs`/`sm` breakpoints.
+- **Tenant Maintenance — fullScreen Create dialog on mobile** — the Submit Request dialog switches to `fullScreen` mode on `xs`/`sm` breakpoints.
+- **Tenant Profile — billing section header stacks on mobile** — the "Payment Method" section header (title + Stripe link button) changed from `direction="row"` to `direction={{ xs: 'column', sm: 'row' }}` to prevent squishing on narrow screens.
+
+---
+## [1.5.6] — 2026-04-16 — Tenant charge visibility & lease document attachment
+
+### Fixed
+- **Tenant charges page showing no data** — `chargesController.getCharges` now correctly scopes queries by `tenant_id` when the authenticated user is a tenant, so tenants only see their own charges and the page is no longer empty.
+
+### Added
+- **Lease document attachment** — landlords can now attach a document (PDF, image, etc.) directly to a lease from the Create Lease dialog and the Edit Lease page. The attachment is stored via the existing S3 document pipeline and linked to the lease record. A download link is shown in the lease detail view on both `LeasesPage` and `PropertyDetailPage`.
+
+---
 ## [1.5.5] — 2026-04-25 — Charge schedule reliability & security hardening
 
 ### Fixed
