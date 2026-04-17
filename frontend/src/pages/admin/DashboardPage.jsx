@@ -182,7 +182,7 @@ export default function DashboardPage() {
               </Button>
             }
           >
-            Portfolio analytics are available on the Starter plan ($30/mo). Upgrade to unlock your dashboard metrics.
+            Portfolio analytics are available on the Starter plan ($29/mo). Upgrade to unlock your dashboard metrics.
           </Alert>
         ) : (
           <Alert severity="error">
