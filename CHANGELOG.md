@@ -8,6 +8,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.5.11] — 2026-04-17 — Bug fixes: Stripe env var names and stale price copy
+
+### Fixed
+- **`STRIPE_PRICE_ID_STARTER` / `STRIPE_PRICE_ID_ENTERPRISE` env var names** — the root `.env` had these named `STRIPE_PRICE_STARTER_ID` and `STRIPE_PRICE_ENTERPRISE_ID`, which didn't match what `src/config/env.js` reads. Stripe Checkout sessions silently received an empty price ID and returned a 500. Renamed to match the config.
+- **Stale `$30/mo` price copy** — corrected to `$29/mo` in three places: `frontend/src/lib/plans.js` JSDoc comment, the `DashboardPage` upgrade alert, and a now-removed `requiresEnterprise` comment in `src/routes/payments.js` that incorrectly described ACH as an Enterprise-only feature.
+
+---
 ## [1.5.10] — 2026-04-17 — Tier refinements: ACH for all, $29 Starter, plan caps
 
 ### Changed
