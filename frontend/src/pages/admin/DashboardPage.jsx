@@ -177,7 +177,7 @@ export default function DashboardPage() {
           <Alert
             severity="info"
             action={
-              <Button size="small" variant="contained" onClick={() => navigate('/profile')}>
+              <Button size="small" variant="contained" onClick={() => navigate('/profile?upgrade=1')}>
                 Upgrade Plan
               </Button>
             }

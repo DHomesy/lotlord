@@ -8,6 +8,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.5.13] — 2026-04-17 — Co-tenants, charges fixes, upgrade UX, documentation pass
+
+### Added
+- **Co-tenants per lease** — up to 5 co-tenants can be added to any lease via the Edit Lease page. Co-tenants receive full portal access and can view and pay charges on the lease. Implementation spans:
+  - `migrations/023_lease_co_tenants.sql` — new `lease_co_tenants` pivot table (`lease_id`, `tenant_id`, unique constraint) and `lease_id` column added to `tenant_invitations` for future invite-by-lease flows.
+  - `src/dal/leaseRepository.js` — `findAllForTenant`, `tenantCanAccessLease`, `findCoTenants`, `addCoTenant`, `removeCoTenant`.
+  - `src/dal/ledgerRepository.js` — `forTenantId` filter param on `findCharges` (UNION subquery covers primary tenant + co-tenant leases).
+  - `src/controllers/leaseController.js` — `getCoTenants`, `addCoTenant`, `removeCoTenant` handlers; tenant `listLeases` and `getLease` use `tenantCanAccessLease` instead of hard `tenant_id` comparison.
+  - `src/controllers/chargesController.js` — tenant charge queries use `forTenantId` so co-tenants see all charges on their shared leases.
+  - `src/routes/leases.js` — `GET /:id/co-tenants`, `POST /:id/co-tenants`, `DELETE /:id/co-tenants/:tenantId`.
+  - `frontend/src/api/leases.js`, `frontend/src/hooks/useLeases.js` — `useCoTenants`, `useAddCoTenant`, `useRemoveCoTenant`.
+  - `frontend/src/pages/admin/EditLeasePage.jsx` — Co-Tenants management section: chip list of existing co-tenants with remove, TenantPicker + Add button (hidden when cap reached).
+
+### Changed
+- **Enterprise plan repriced** $50/mo → **$49/mo**. Updated `frontend/src/lib/plans.js` (price field + JSDoc) and the landing page PLANS array.
+- **Co-tenant cap** — raised from 3 to **5 co-tenants per lease** (6 occupants total including the primary tenant). Enforced in `leaseRepository.addCoTenant`; reflected in `EditLeasePage` UI copy and the "Add" button visibility guard.
+- **Plan upgrade UX** — Dashboard upgrade CTA now navigates to `/profile?upgrade=1`. ProfilePage detects this param, scrolls to the subscription section, and shows an info banner prompting the user to subscribe.
+- **Documentation pass** — JSDoc and inline comments updated on all files modified this session: `leaseRepository`, `ledgerRepository`, `chargesController`, `leaseController`, `routes/leases.js`, `api/leases.js`, `hooks/useLeases.js`, and `plans.js` (added price history block).
+
+### Fixed
+- **Charges property filter bug** — `findCharges` was filtering on `rc.property_id = $X` (a nullable column frequently not set on charge rows). Fixed to use `p.id = $X` via the existing `units → properties` JOIN, so property-scoped charge queries now return all charges correctly.
+- **Charges pending status filter** — The status toggle group on `ChargesPage` had no "Pending" option. Added a "Pending" `ToggleButton` and a corresponding client-side filter branch so in-progress ACH payments are visible.
+
+---
 ## [1.5.12] — 2026-04-17 — Starter plan repriced to $15/mo; landing page updated
 
 ### Changed

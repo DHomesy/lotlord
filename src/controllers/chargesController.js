@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const ledgerRepo = require('../dal/ledgerRepository');
 const tenantRepo = require('../dal/tenantRepository');
+const leaseRepo  = require('../dal/leaseRepository');
 const { getClient, query } = require('../config/db');
 const audit = require('../services/auditService');
 
@@ -25,19 +26,30 @@ async function assertLandlordOwnsUnit(unitId, user) {
 /**
  * GET /api/v1/charges
  *
- * Query params (at least one required):
- *   unitId      — all charges ever billed to a specific unit
- *   tenantId    — all charges linked to a specific tenant record
- *   leaseId     — all charges for a specific lease period
- *   propertyId  — all charges across all units of a property
+ * Returns rent charges. At least one scoping param is required (enforced by
+ * ledgerRepository.findCharges). Behaviour differs by role:
  *
- * Optional filters:
- *   unpaidOnly=true     — exclude charges that already have a completed payment
- *   chargeType=rent|late_fee|utility|other
+ * admin
+ *   Full access. Pass any combination of unitId / tenantId / leaseId /
+ *   propertyId to scope results.
  *
- * Each row includes unit_number, property_name and completed payment fields
- * (payment_id, amount_paid, payment_date, payment_method, payment_status,
- *  stripe_payment_intent_id) — all NULL when unpaid.
+ * landlord
+ *   Automatically scoped to their own properties via `ownerId`. No explicit
+ *   filter required — they see all charges across every property they own.
+ *   Additional filters (unitId, leaseId, etc.) narrow from there.
+ *
+ * tenant
+ *   Query params for tenantId are ignored — identity is resolved from the JWT.
+ *   - If `leaseId` is provided: access is verified via tenantCanAccessLease
+ *     (grants access to co-tenants as well as the primary tenant). The leaseId
+ *     filter is passed directly; no tenantId filter is added.
+ *   - If no `leaseId`: `forTenantId` is set to the tenant's record ID, which
+ *     matches charges where the tenant is primary OR a co-tenant on the lease.
+ *
+ * Query params:
+ *   unitId, tenantId, leaseId, propertyId  — at least one required (non-tenant)
+ *   unpaidOnly=true   — exclude charges with a completed or pending payment
+ *   chargeType        — 'rent' | 'late_fee' | 'utility' | 'other'
  */
 async function listCharges(req, res, next) {
   try {
@@ -47,24 +59,21 @@ async function listCharges(req, res, next) {
     const isLandlord = req.user.role === 'landlord';
     const isTenant   = req.user.role === 'tenant';
 
+    let forTenantId; // co-tenant-aware scope
+
     // Tenants may only view their own charges — resolve from JWT, never from query param.
     if (isTenant) {
       const tenantRecord = await tenantRepo.findByUserId(req.user.sub);
       if (!tenantRecord) return res.status(404).json({ error: 'Tenant profile not found' });
 
       if (leaseId) {
-        // Lease-scoped query: verify the lease belongs to this tenant, then query
-        // by leaseId only — some charges may have tenant_id = NULL (created before
-        // the tenant was linked) and would be missed if tenant_id were ANDed in.
-        const { rows: leaseCheck } = await query(
-          `SELECT id FROM leases WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
-          [leaseId, tenantRecord.id],
-        );
-        if (!leaseCheck[0]) return res.status(403).json({ error: 'Access denied' });
+        // Lease-scoped query: verify tenant is primary OR co-tenant on this lease
+        const canAccess = await leaseRepo.tenantCanAccessLease(leaseId, tenantRecord.id);
+        if (!canAccess) return res.status(403).json({ error: 'Access denied' });
         // Do not set tenantId — leaseId already scopes to the right charges
       } else {
-        // No leaseId: scope by tenant_id so they only see their own records
-        tenantId = tenantRecord.id;
+        // No leaseId: use forTenantId which matches primary + co-tenant lease charges
+        forTenantId = tenantRecord.id;
       }
     }
 
@@ -73,7 +82,7 @@ async function listCharges(req, res, next) {
     // the query will return all charges across their properties.
     const ownerId = isLandlord ? req.user.sub : undefined;
 
-    if (!unitId && !tenantId && !leaseId && !propertyId && !isLandlord) {
+    if (!unitId && !tenantId && !leaseId && !propertyId && !forTenantId && !isLandlord) {
       return res.status(400).json({
         error: 'At least one of unitId, tenantId, leaseId, or propertyId is required',
       });
@@ -84,6 +93,7 @@ async function listCharges(req, res, next) {
       tenantId,
       leaseId,
       propertyId,
+      forTenantId,
       unpaidOnly: unpaidOnly === 'true',
       chargeType: chargeType || undefined,
       ownerId,

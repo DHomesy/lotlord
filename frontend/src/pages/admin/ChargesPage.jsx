@@ -143,7 +143,7 @@ export default function ChargesPage() {
   // Filter state
   const [filterPropertyId, setFilterPropertyId] = useState(null)
   const [filterLeaseId, setFilterLeaseId] = useState(null)
-  // 'all' | 'unpaid' | 'paid' | 'voided'
+  // 'all' | 'unpaid' | 'pending' | 'paid' | 'voided'
   const [statusFilter, setStatusFilter] = useState('all')
 
   // Properties for the filter dropdown
@@ -173,10 +173,11 @@ export default function ChargesPage() {
 
   const allRows = Array.isArray(data) ? data : (data?.charges ?? [])
 
-  // Client-side status filter for Paid / Voided (avoids an extra backend trip)
+  // Client-side status filter for Paid / Pending / Voided (avoids an extra backend trip)
   const rows = useMemo(() => {
-    if (statusFilter === 'paid')   return allRows.filter((r) => r.status === 'paid')
-    if (statusFilter === 'voided') return allRows.filter((r) => r.status === 'voided')
+    if (statusFilter === 'paid')    return allRows.filter((r) => r.status === 'paid')
+    if (statusFilter === 'pending') return allRows.filter((r) => r.status === 'pending')
+    if (statusFilter === 'voided')  return allRows.filter((r) => r.status === 'voided')
     return allRows
   }, [allRows, statusFilter])
 
@@ -288,6 +289,7 @@ export default function ChargesPage() {
         >
           <ToggleButton value="all">All</ToggleButton>
           <ToggleButton value="unpaid">Unpaid</ToggleButton>
+          <ToggleButton value="pending">Pending</ToggleButton>
           <ToggleButton value="paid">Paid</ToggleButton>
           <ToggleButton value="voided">Voided</ToggleButton>
         </ToggleButtonGroup>

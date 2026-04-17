@@ -3,11 +3,15 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   Button, Stack, TextField, MenuItem, Divider, Typography,
   Checkbox, FormControlLabel, Alert, Paper, Box,
+  Chip, Tooltip,
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import PersonAddIcon from '@mui/icons-material/PersonAdd'
+import CloseIcon    from '@mui/icons-material/Close'
 import PageContainer from '../../components/layout/PageContainer'
 import LoadingOverlay from '../../components/common/LoadingOverlay'
-import { useLease, useUpdateLease } from '../../hooks/useLeases'
+import TenantPicker from '../../components/pickers/TenantPicker'
+import { useLease, useUpdateLease, useCoTenants, useAddCoTenant, useRemoveCoTenant } from '../../hooks/useLeases'
 import { useCreateCharge, useCharges } from '../../hooks/useCharges'
 
 const STATUSES = ['active', 'pending', 'expired', 'terminated']
@@ -53,6 +57,11 @@ export default function EditLeasePage() {
   const { mutate: update, isPending: updating } = useUpdateLease(id)
   const { mutateAsync: createCharge } = useCreateCharge()
   const { data: rawExistingCharges } = useCharges({ leaseId: id })
+  const { data: coTenants = [] } = useCoTenants(id)
+  const { mutate: addCoTenant, isPending: addingCoTenant } = useAddCoTenant(id)
+  const { mutate: removeCoTenant } = useRemoveCoTenant(id)
+
+  const [pendingCoTenant, setPendingCoTenant] = useState(null)
 
   // Editable form state — initialised lazily from lease once it arrives
   const [init,    setInit]    = useState(false)
@@ -289,6 +298,56 @@ export default function EditLeasePage() {
             >
               {chargeMsg.text}
             </Alert>
+          )}
+
+          <Divider />
+
+          {/* ── Co-Tenants ── */}
+          <Typography variant="overline" color="text.secondary">Co-Tenants</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: -1.5 }}>
+            Additional tenants sharing this lease. Co-tenants can log in and view/pay charges.
+            Maximum 5 co-tenants per lease.
+          </Typography>
+
+          {coTenants.length > 0 && (
+            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 0.5 }}>
+              {coTenants.map((ct) => (
+                <Chip
+                  key={ct.tenant_id}
+                  label={`${ct.first_name} ${ct.last_name}`}
+                  size="small"
+                  onDelete={() => removeCoTenant(ct.tenant_id)}
+                  deleteIcon={
+                    <Tooltip title="Remove co-tenant">
+                      <CloseIcon fontSize="small" />
+                    </Tooltip>
+                  }
+                />
+              ))}
+            </Stack>
+          )}
+
+          {coTenants.length < 5 && (
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems="flex-start">
+              <Box sx={{ flex: 1 }}>
+                <TenantPicker
+                  value={pendingCoTenant}
+                  onChange={setPendingCoTenant}
+                  label="Add co-tenant"
+                />
+              </Box>
+              <Button
+                variant="outlined"
+                startIcon={<PersonAddIcon />}
+                disabled={!pendingCoTenant || addingCoTenant}
+                onClick={() => {
+                  addCoTenant(pendingCoTenant, { onSuccess: () => setPendingCoTenant(null) })
+                }}
+                sx={{ mt: { xs: 0, sm: '4px' }, whiteSpace: 'nowrap' }}
+              >
+                Add
+              </Button>
+            </Stack>
           )}
 
           <Divider />

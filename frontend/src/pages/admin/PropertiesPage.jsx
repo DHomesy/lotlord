@@ -15,6 +15,7 @@ import UpgradePromptDialog from '../../components/common/UpgradePromptDialog'
 import PropertyForm from '../../components/forms/PropertyForm'
 import { useProperties, useCreateProperty } from '../../hooks/useProperties'
 import { useCreateUnit } from '../../hooks/useUnits'
+import { useMySubscription } from '../../hooks/useBilling'
 
 const columns = [
   { field: 'name', headerName: 'Name', flex: 1, minWidth: 150 },
@@ -41,12 +42,14 @@ export default function PropertiesPage() {
   const [upgradeMessage, setUpgradeMessage] = useState('')
   // Unit wizard state — only shown after creating a multi/commercial property
   const [unitWizardPropertyId, setUnitWizardPropertyId] = useState(null)
+  const [unitWizardPropertyType, setUnitWizardPropertyType] = useState(null)
   const [unitCount, setUnitCount] = useState(4)
   const [unitPrefix, setUnitPrefix] = useState('')
   const [unitStartNumber, setUnitStartNumber] = useState(1)
   const { data, isLoading } = useProperties()
   const { mutateAsync: create, isPending: isCreating } = useCreateProperty()
   const { mutateAsync: createUnit, isPending: isCreatingUnit } = useCreateUnit()
+  const { data: subscription } = useMySubscription()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
@@ -68,12 +71,19 @@ export default function PropertiesPage() {
         })
       } else {
         // Multi-family or commercial: open unit wizard
+        setUnitWizardPropertyType(values.propertyType)
         setUnitWizardPropertyId(created.id)
       }
     } catch (err) {
       if (err?.response?.status === 402) {
         setOpen(false)
-        setUpgradeMessage(err.response.data?.error || 'You have reached the free plan property limit.')
+        const code = err.response.data?.code
+        const msg = err.response.data?.error
+        if (code === 'COMMERCIAL_REQUIRED') {
+          setUpgradeMessage(msg || 'Commercial properties require the Commercial plan ($79/mo).')
+        } else {
+          setUpgradeMessage(msg || 'You have reached the free plan property limit.')
+        }
         setUpgradeOpen(true)
       } else {
         throw err
@@ -82,9 +92,11 @@ export default function PropertiesPage() {
   }
 
   const handleAddUnits = async () => {
+    const maxUnits = unitWizardPropertyType === 'multi' ? 4 : 100
+    const clampedCount = Math.min(unitCount, maxUnits)
     const prefix = unitPrefix.trim()
     const start = Number(unitStartNumber) || 1
-    const jobs = Array.from({ length: unitCount }, (_, i) => {
+    const jobs = Array.from({ length: clampedCount }, (_, i) => {
       const num = prefix ? `${prefix} ${start + i}` : String(start + i)
       return createUnit({
         propertyId: unitWizardPropertyId,
@@ -97,6 +109,7 @@ export default function PropertiesPage() {
     })
     await Promise.all(jobs)
     setUnitWizardPropertyId(null)
+    setUnitWizardPropertyType(null)
     setUnitCount(4)
     setUnitPrefix('')
     setUnitStartNumber(1)
@@ -130,7 +143,7 @@ export default function PropertiesPage() {
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle>New Property</DialogTitle>
         <DialogContent>
-          <PropertyForm onSubmit={handleCreate} loading={isCreating || isCreatingUnit} />
+          <PropertyForm onSubmit={handleCreate} loading={isCreating || isCreatingUnit} subscription={subscription} />
         </DialogContent>
       </Dialog>
 
@@ -161,7 +174,10 @@ export default function PropertiesPage() {
                 <Typography variant="h5" sx={{ minWidth: 36, textAlign: 'center' }}>
                   {unitCount}
                 </Typography>
-                <IconButton onClick={() => setUnitCount((n) => Math.min(100, n + 1))}>
+                <IconButton
+                  onClick={() => setUnitCount((n) => Math.min(unitWizardPropertyType === 'multi' ? 4 : 100, n + 1))}
+                  disabled={unitWizardPropertyType === 'multi' && unitCount >= 4}
+                >
                   <AddCircleOutlineIcon />
                 </IconButton>
               </Stack>

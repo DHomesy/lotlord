@@ -12,7 +12,8 @@ async function getMySubscription(req, res, next) {
 // POST /billing/checkout — creates a Stripe Checkout session; client redirects to the returned URL
 async function createMyCheckoutSession(req, res, next) {
   try {
-    const plan = req.body?.plan === 'enterprise' ? 'enterprise' : 'starter';
+    const allowed = ['starter', 'enterprise', 'commercial'];
+    const plan = allowed.includes(req.body?.plan) ? req.body.plan : 'starter';
     const result = await stripeService.createCheckoutSession(req.user.sub, plan);
     res.json(result);
   } catch (err) { next(err); }

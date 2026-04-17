@@ -178,17 +178,37 @@ async function findChargeById(id) {
 }
 
 /**
- * List rent charges with flexible filters — supports lookup by unit, tenant,
- * property, OR lease. At least one filter is required.
+ * List rent charges with flexible filters.
  *
- * Each row is enriched with unit_number, property_name, and the completed
- * payment details (all NULL when unpaid).
+ * At least one filter is required (throws otherwise). Query params are
+ * combined with AND — passing multiple narrows results.
  *
- * @param {{ leaseId?, unitId?, tenantId?, propertyId?, unpaidOnly?, chargeType? }} filters
+ * Filter options:
+ *   leaseId     — all charges for a specific lease
+ *   unitId      — all charges ever billed to a unit (across leases)
+ *   tenantId    — charges where rc.tenant_id matches exactly (admin/landlord use)
+ *   propertyId  — all charges across every unit in a property
+ *                  NOTE: matches via the units→properties JOIN (p.id), NOT the
+ *                  nullable rc.property_id column, which is often unpopulated.
+ *   forTenantId — tenant-portal scope: charges where the tenant is the primary
+ *                  tenant OR a co-tenant on the lease. Use this instead of
+ *                  `tenantId` for tenant-facing queries.
+ *   ownerId     — landlord scope: all charges for properties owned by this user.
+ *                  Sufficient on its own — no other filter required.
+ *   unpaidOnly  — exclude charges with a completed or pending payment
+ *   chargeType  — e.g. 'rent' | 'late_fee' | 'utility' | 'other'
+ *
+ * Each row is enriched with:
+ *   unit_number, property_name, payment_id, amount_paid, payment_date,
+ *   payment_method, payment_status, stripe_payment_intent_id, and a computed
+ *   `status` field: 'voided' | 'paid' | 'pending' | 'unpaid'.
+ *
+ * @param {object} filters
+ * @returns {Promise<object[]>}
  */
-async function findCharges({ leaseId, unitId, tenantId, propertyId, unpaidOnly = false, chargeType, ownerId } = {}) {
+async function findCharges({ leaseId, unitId, tenantId, propertyId, forTenantId, unpaidOnly = false, chargeType, ownerId } = {}) {
    // ownerId alone is sufficient for landlords — they see all charges for their properties
-  if (!leaseId && !unitId && !tenantId && !propertyId && !ownerId) {
+  if (!leaseId && !unitId && !tenantId && !propertyId && !forTenantId && !ownerId) {
     throw new Error('At least one of leaseId, unitId, tenantId, propertyId, or ownerId is required');
   }
 
@@ -198,9 +218,24 @@ async function findCharges({ leaseId, unitId, tenantId, propertyId, unpaidOnly =
   if (leaseId)    { values.push(leaseId);    conditions.push(`rc.lease_id    = $${values.length}`); }
   if (unitId)     { values.push(unitId);     conditions.push(`rc.unit_id     = $${values.length}`); }
   if (tenantId)   { values.push(tenantId);   conditions.push(`rc.tenant_id   = $${values.length}`); }
-  if (propertyId) { values.push(propertyId); conditions.push(`rc.property_id = $${values.length}`); }
+  // Use the JOIN path (p.id) not the nullable rc.property_id column — many charges are
+  // inserted without property_id populated directly on the row.
+  if (propertyId) { values.push(propertyId); conditions.push(`p.id           = $${values.length}`); }
   if (chargeType) { values.push(chargeType); conditions.push(`rc.charge_type = $${values.length}`); }
   if (ownerId)    { values.push(ownerId);    conditions.push(`p.owner_id     = $${values.length}`); }
+  // forTenantId: tenant-aware scope — matches charges on leases where the tenant is
+  // the primary tenant OR a co-tenant (via lease_co_tenants).
+  if (forTenantId) {
+    values.push(forTenantId);
+    const idx = values.length;
+    values.push(forTenantId);
+    const idx2 = values.length;
+    conditions.push(
+      `(rc.tenant_id = $${idx} OR rc.lease_id IN (
+         SELECT lease_id FROM lease_co_tenants WHERE tenant_id = $${idx2}
+       ))`,
+    );
+  }
 
   if (unpaidOnly) {
     // Exclude charges with any active payment (pending ACH or already completed)

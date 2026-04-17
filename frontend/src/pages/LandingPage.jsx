@@ -74,6 +74,10 @@ const FAQ = [
     a: 'Yes. The free plan is genuinely free — no trial periods, no hidden fees. You get 1 property and up to 4 units with core features including tenant management, maintenance tracking, and document storage.',
   },
   {
+    q: 'Can I manage commercial properties?',
+    a: 'Yes — the Commercial plan ($79/mo + $2/unit/mo) supports office, retail, industrial, and mixed-use properties with no unit cap. You only pay for the commercial units you have. Residential multi-family properties are included on all paid plans (up to 4 units each).',
+  },
+  {
     q: "What's included in the free plan?",
     a: '1 property · up to 4 units · up to 4 active tenants · online ACH rent collection · tenant portal access · lease management · maintenance request tracking · document storage. Portfolio analytics require a Starter or higher plan.',
   },
@@ -128,14 +132,25 @@ const PLANS = [
   },
   {
     name: 'Enterprise',
-    price: '$50',
+    price: '$49',
     period: '/ mo',
-    description: 'For serious landlords with large or growing portfolios.',
-    features: ['Unlimited properties', 'Employee accounts (coming soon)', 'AI features (coming soon)', 'Document signing (coming soon)', 'Everything in Starter'],
+    description: 'For serious landlords with large or growing residential portfolios.',
+    features: ['Unlimited properties', 'Single & multi-family (up to 4 units each)', 'Employee accounts (coming soon)', 'AI features (coming soon)', 'Document signing (coming soon)', 'Everything in Starter'],
     cta: 'Get Started',
     ctaVariant: 'outlined',
     highlight: false,
     badge: null,
+  },
+  {
+    name: 'Commercial',
+    price: '$79',
+    period: '/ mo + $2 / unit',
+    description: 'For commercial landlords — office, retail, industrial. Unlimited units, pay only for what you use.',
+    features: ['Unlimited commercial properties', 'Unlimited units per property', 'Per-unit billing ($2/unit/mo)', 'Multi-family properties included', 'Everything in Enterprise'],
+    cta: 'Get Started',
+    ctaVariant: 'outlined',
+    highlight: false,
+    badge: 'Commercial',
   },
 ]
 
@@ -408,7 +423,7 @@ export default function LandingPage() {
           </Typography>
           <Grid container spacing={3} justifyContent="center" alignItems="stretch">
             {PLANS.map((plan) => (
-              <Grid item xs={12} sm={8} md={4} key={plan.name}>
+              <Grid item xs={12} sm={6} md={3} key={plan.name}>
                 <Card
                   variant="outlined"
                   sx={{

@@ -293,6 +293,16 @@ export default function PropertyDetailPage() {
                 {maintenanceCount > 0 && (
                   <Chip size="small" color="warning" label={`${maintenanceCount} maintenance`} />
                 )}
+                {prop?.property_type === 'commercial' && (
+                  <Tooltip title={`$2/unit/mo add-on · billed through your Commercial subscription`}>
+                    <Chip
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                      label={`${units.length} commercial unit${units.length !== 1 ? 's' : ''} · ~$${units.length * 2}/mo add-on`}
+                    />
+                  </Tooltip>
+                )}
               </Stack>
             </Grid>
             <Grid item xs={12} sm={1} sx={{ display: 'flex', justifyContent: { sm: 'flex-end' } }}>

@@ -19,7 +19,7 @@ const userRepo    = require('../dal/userRepository');
 const paymentRepo = require('../dal/paymentRepository');
 const ledgerRepo  = require('../dal/ledgerRepository');
 const leaseRepo   = require('../dal/leaseRepository');
-const { getClient } = require('../config/db');
+const { getClient, query } = require('../config/db');
 const env             = require('../config/env');
 const notificationService = require('./notificationService');
 const audit           = require('./auditService');
@@ -546,6 +546,47 @@ async function getOrCreateBillingCustomer(userId) {
 }
 
 async function createCheckoutSession(userId, plan = 'starter') {
+  if (plan === 'commercial') {
+    // Commercial plan requires two price IDs: a flat base + a per-unit add-on
+    const basePriceId = env.STRIPE_PRICE_ID_COMMERCIAL;
+    const unitPriceId = env.STRIPE_PRICE_ID_COMMERCIAL_UNIT;
+    if (!basePriceId || !unitPriceId) {
+      throw Object.assign(
+        new Error('STRIPE_PRICE_ID_COMMERCIAL or STRIPE_PRICE_ID_COMMERCIAL_UNIT is not configured.'),
+        { status: 500 },
+      );
+    }
+    // Count existing commercial units so billing starts correctly
+    const { rows } = await query(
+      `SELECT COUNT(u.id)::int AS cnt
+       FROM units u
+       JOIN properties p ON p.id = u.property_id
+       WHERE p.owner_id = $1
+         AND p.property_type = 'commercial'
+         AND u.deleted_at IS NULL
+         AND p.deleted_at IS NULL`,
+      [userId],
+    );
+    const unitQty = Math.max(rows[0]?.cnt ?? 0, 0);
+
+    const customer = await getOrCreateBillingCustomer(userId);
+    const lineItems = [
+      { price: basePriceId, quantity: 1 },
+    ];
+    if (unitPriceId && unitQty > 0) {
+      lineItems.push({ price: unitPriceId, quantity: unitQty });
+    }
+    const session = await getStripe().checkout.sessions.create({
+      mode:        'subscription',
+      customer:    customer.id,
+      line_items:  lineItems,
+      success_url: `${env.FRONTEND_URL}/profile?billing=success`,
+      cancel_url:  `${env.FRONTEND_URL}/profile?billing=canceled`,
+      metadata:    { userId },
+    });
+    return { url: session.url, sessionId: session.id };
+  }
+
   const priceId = plan === 'enterprise'
     ? env.STRIPE_PRICE_ID_ENTERPRISE
     : env.STRIPE_PRICE_ID_STARTER;
@@ -566,6 +607,68 @@ async function createCheckoutSession(userId, plan = 'starter') {
     metadata:    { userId },
   });
   return { url: session.url, sessionId: session.id };
+}
+
+/**
+ * Synchronises the commercial per-unit subscription item quantity for a landlord.
+ *
+ * Should be called after any commercial unit is created or deleted.
+ * Counts all non-deleted units under commercial properties owned by the user,
+ * then updates the commercial_unit subscription item quantity on Stripe.
+ *
+ * If the user is not on the commercial plan, or has no active subscription,
+ * this is a no-op (logs a warning). Unit operations should NOT be blocked if
+ * Stripe is unavailable — callers should catch and log errors.
+ *
+ * @param {string} userId — users.id (UUID)
+ */
+async function syncCommercialUnitQuantity(userId) {
+  const billing = await userRepo.findBillingStatus(userId);
+  if (!billing?.subscription_id || billing?.subscription_plan !== 'commercial') {
+    console.info(`[stripe billing] syncCommercialUnitQuantity: user ${userId} is not on commercial plan — skipping`);
+    return;
+  }
+
+  const { rows } = await query(
+    `SELECT COUNT(u.id)::int AS cnt
+     FROM units u
+     JOIN properties p ON p.id = u.property_id
+     WHERE p.owner_id = $1
+       AND p.property_type = 'commercial'
+       AND u.deleted_at IS NULL
+       AND p.deleted_at IS NULL`,
+    [userId],
+  );
+  const qty = Math.max(rows[0]?.cnt ?? 0, 0);
+
+  if (!env.STRIPE_PRICE_ID_COMMERCIAL_UNIT) {
+    console.warn('[stripe billing] STRIPE_PRICE_ID_COMMERCIAL_UNIT not set — cannot sync unit quantity');
+    return;
+  }
+
+  // Find the commercial_unit subscription item on the active subscription
+  const subscription = await getStripe().subscriptions.retrieve(
+    billing.subscription_id,
+    { expand: ['items.data.price'] },
+  );
+
+  const unitItem = subscription.items.data.find(
+    (item) => item.price.id === env.STRIPE_PRICE_ID_COMMERCIAL_UNIT,
+  );
+
+  if (unitItem) {
+    // Update existing item
+    await getStripe().subscriptionItems.update(unitItem.id, { quantity: qty });
+    console.info(`[stripe billing] syncCommercialUnitQuantity: updated unit qty to ${qty} for user ${userId}`);
+  } else if (qty > 0) {
+    // Add the unit item if it does not exist yet (handles edge case of first unit)
+    await getStripe().subscriptionItems.create({
+      subscription: billing.subscription_id,
+      price:        env.STRIPE_PRICE_ID_COMMERCIAL_UNIT,
+      quantity:     qty,
+    });
+    console.info(`[stripe billing] syncCommercialUnitQuantity: added unit item qty ${qty} for user ${userId}`);
+  }
 }
 
 async function createBillingPortalSession(userId) {
@@ -600,12 +703,16 @@ async function onSubscriptionUpdated(subscription) {
     console.warn(`[stripe billing] subscription event — no user for customer ${subscription.customer}`);
     return;
   }
+  const KNOWN_PLAN_NICKNAMES = ['starter', 'enterprise', 'commercial'];
   await userRepo.updateBillingStatus(user.id, {
     subscriptionId:     subscription.id,
     subscriptionStatus: subscription.status,
-    subscriptionPlan:   subscription.items?.data?.[0]?.price?.nickname
-                     || subscription.items?.data?.[0]?.price?.id
-                     || null,
+    subscriptionPlan:   subscription.items?.data
+                          ?.find((item) => KNOWN_PLAN_NICKNAMES.includes(item.price?.nickname))
+                          ?.price.nickname
+                       ?? subscription.items?.data?.[0]?.price?.nickname
+                       ?? subscription.items?.data?.[0]?.price?.id
+                       ?? null,
   });
   console.info(`[stripe billing] Subscription "${subscription.status}" for user ${user.id} (${user.email})`);
 }
@@ -639,4 +746,5 @@ module.exports = {
   createCheckoutSession,
   createBillingPortalSession,
   getSubscriptionStatus,
+  syncCommercialUnitQuantity,
 };

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -15,7 +15,7 @@ import { useAuthStore } from '../../store/authStore'
 import { useUpdateMe, useChangePassword } from '../../hooks/useUsers'
 import { useConnectStatus, useConnectOnboard, useConnectLogin } from '../../hooks/useStripeSetup'
 import { useMySubscription, useCreateCheckoutSession, useCreateBillingPortalSession } from '../../hooks/useBilling'
-import { PLANS, hasStarter } from '../../lib/plans'
+import { PLANS, hasStarter, hasCommercial } from '../../lib/plans'
 
 const profileSchema = z.object({
   name:  z.string().min(1, 'Name is required'),
@@ -42,6 +42,8 @@ export default function AdminProfilePage() {
   const { mutate: openPortal,     isPending: openingPortal     }             = useCreateBillingPortalSession()
   const [connectBanner,  setConnectBanner]  = useState(null) // 'success' | 'refresh' | null
   const [billingBanner,  setBillingBanner]  = useState(null) // 'success' | 'canceled' | null
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
+  const subscriptionRef = useRef(null)
 
   // Detect return from Stripe Connect onboarding redirect
   useEffect(() => {
@@ -55,6 +57,12 @@ export default function AdminProfilePage() {
     if (billing === 'success' || billing === 'canceled') {
       setBillingBanner(billing)
       window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (params.get('upgrade') === '1') {
+      setShowUpgradePrompt(true)
+      window.history.replaceState({}, '', window.location.pathname)
+      // Scroll after a short delay to allow the page to render
+      setTimeout(() => subscriptionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
     }
   }, [])
 
@@ -222,7 +230,14 @@ export default function AdminProfilePage() {
 
       {/* ── Subscription (landlord only — SaaS plan) ── */}
       {isLandlord && (<>
-      <Divider sx={{ my: 4 }} />
+      <Divider sx={{ my: 4 }} ref={subscriptionRef} />
+
+      {showUpgradePrompt && !hasStarter(subscription) && (
+        <Alert severity="info" sx={{ mb: 2 }} onClose={() => setShowUpgradePrompt(false)}>
+          Choose a plan below to unlock analytics, more properties, and additional features.
+        </Alert>
+      )}
+
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
         <Box>
           <Typography variant="h6">Subscription</Typography>
@@ -266,8 +281,8 @@ export default function AdminProfilePage() {
 
       {/* Plan picker — shown when not subscribed (or canceled) */}
       {(!subscription?.status || subscription.status === 'none' || subscription.status === 'canceled') && (
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2, maxWidth: 540 }}>
-          {Object.values(PLANS).map(({ key, label, price, description, features }) => (
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2, maxWidth: 720 }}>
+          {Object.values(PLANS).map(({ key, label, price, unitAddon, description, features }) => (
             <Card
               key={key}
               variant="outlined"
@@ -280,7 +295,7 @@ export default function AdminProfilePage() {
               <CardContent>
                 <Typography variant="subtitle1" fontWeight={700}>{label}</Typography>
                 <Typography variant="h5" fontWeight={800} color="primary.main" sx={{ my: 0.5 }}>
-                  ${price}<Typography component="span" variant="caption" color="text.secondary">/mo</Typography>
+                  ${price}<Typography component="span" variant="caption" color="text.secondary">/mo{unitAddon ? ` + $${unitAddon}/unit` : ''}</Typography>
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
                   {description}
@@ -312,6 +327,11 @@ export default function AdminProfilePage() {
           <Typography variant="body2" sx={{ mb: 1 }}>
             Current plan: <strong style={{ textTransform: 'capitalize' }}>{subscription?.plan ?? 'active'}</strong>
           </Typography>
+          {hasCommercial(subscription) && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Your Commercial plan includes an automatic $2/unit/mo add-on for each commercial unit across all your properties. The add-on quantity is updated in real-time as you add or remove units.
+            </Typography>
+          )}
           <Button
             variant="outlined"
             endIcon={<OpenInNewIcon fontSize="small" />}

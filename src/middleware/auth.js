@@ -110,14 +110,46 @@ async function requiresConnectOnboarded(req, res, next) {
  *   free       — no active subscription
  *   starter    — any active subscription (price nickname = 'starter')
  *   enterprise — active subscription with price nickname = 'enterprise'
+ *   commercial — active subscription with price nickname = 'commercial'
  *
  * Infinity = no hard cap.
+ *
+ * Note: multi-family unit cap (max 4 per property) is enforced separately
+ * in checkPlanLimit('units') and in unitService.assertMultiFamilyCap().
  */
 const PLAN_LIMITS = {
-  properties: { free: 1,  starter: 25, enterprise: Infinity },
-  units:      { free: 4,  starter: Infinity, enterprise: Infinity },
-  tenants:    { free: 4,  starter: Infinity, enterprise: Infinity },
+  properties: { free: 1,  starter: 25, enterprise: Infinity, commercial: Infinity },
+  units:      { free: 4,  starter: Infinity, enterprise: Infinity, commercial: Infinity },
+  tenants:    { free: 4,  starter: Infinity, enterprise: Infinity, commercial: Infinity },
 };
+
+/**
+ * Requires the requesting landlord to have an active Commercial subscription.
+ * Gates commercial property creation. Admin users bypass this check.
+ * Returns 402 with code 'COMMERCIAL_REQUIRED' if the gate is not met.
+ *
+ * NOTE: This middleware is available for future route-level gating of an entire
+ * endpoint. Currently the commercial plan check is done inside the service layer
+ * (propertyService.assertCommercialPlan) so it fires only when propertyType === 'commercial',
+ * avoiding a DB round-trip for single/multi-family property changes. Only mount this
+ * middleware on a route if the *entire* route should require the commercial plan.
+ */
+async function requiresCommercialPlan(req, res, next) {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+    if (req.user.role === 'admin') return next();
+
+    const billing = await userRepo.findBillingStatus(req.user.sub);
+    const isActive = ACTIVE_STATUSES.includes(billing?.subscription_status);
+    if (!isActive || billing?.subscription_plan !== 'commercial') {
+      return res.status(402).json({
+        error: 'Commercial properties require a Commercial plan ($79/mo + $2/unit). Upgrade to continue.',
+        code:  'COMMERCIAL_REQUIRED',
+      });
+    }
+    next();
+  } catch (err) { next(err); }
+}
 
 /**
  * Tier-aware resource count guard. Blocks creation once the user has reached
@@ -146,13 +178,12 @@ function checkPlanLimit(resource) {
 
       const billing      = await userRepo.findBillingStatus(req.user.sub);
       const isActive     = ['active', 'trialing'].includes(billing?.subscription_status);
-      const isEnterprise = isActive && billing?.subscription_plan === 'enterprise';
-
-      // Enterprise: no limits
-      if (isEnterprise) return next();
+      const plan         = isActive ? (billing?.subscription_plan ?? 'starter') : 'free';
+      // enterprise and commercial both get unlimited properties/tenants/units globally
+      if (plan === 'enterprise' || plan === 'commercial') return next();
 
       const limits = PLAN_LIMITS[resource];
-      const max    = isActive ? limits.starter : limits.free;
+      const max    = limits[plan] ?? limits.free;
       if (max === Infinity) return next();
 
       let countQuery, countParams;
@@ -160,6 +191,8 @@ function checkPlanLimit(resource) {
         countQuery  = 'SELECT COUNT(*)::int AS cnt FROM properties WHERE owner_id = $1 AND deleted_at IS NULL';
         countParams = [req.user.sub];
       } else if (resource === 'units') {
+        // Global unit cap applies on Free only. On Starter the global limit is Infinity,
+        // but multi-family per-property cap (4 units) is enforced in unitService.
         countQuery = `
           SELECT COUNT(*)::int AS cnt
           FROM units u
@@ -184,14 +217,14 @@ function checkPlanLimit(resource) {
       const { rows } = await query(countQuery, countParams);
       const count = rows[0]?.cnt ?? 0;
       if (count >= max) {
-        const planLabel   = isActive ? 'Starter' : 'Free';
-        const upgradeHint = isActive
-          ? 'Upgrade to Enterprise for unlimited access.'
-          : `Upgrade to Starter (up to 25 ${resource}) or Enterprise (unlimited) to add more.`;
+        const planLabel   = plan === 'starter' ? 'Starter' : 'Free';
+        const upgradeHint = plan === 'starter'
+          ? 'Upgrade to Enterprise or Commercial for unlimited access.'
+          : `Upgrade to Starter (up to 25 ${resource}) or Enterprise/Commercial (unlimited) to add more.`;
         return res.status(402).json({
           error:   `${planLabel} plan is limited to ${max} ${resource}. ${upgradeHint}`,
           code:    'PLAN_LIMIT',
-          plan:    isActive ? 'starter' : 'free',
+          plan,
           limit:   max,
           current: count,
         });
@@ -231,6 +264,7 @@ module.exports = {
   authorize,
   requiresStarter,
   requiresEnterprise,
+  requiresCommercialPlan,
   requiresPro,          // backward-compat alias for requiresStarter
   requiresConnectOnboarded,
   checkPlanLimit,

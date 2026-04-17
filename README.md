@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.4.8 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.5.13 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -295,6 +295,10 @@ properties
   property_type   TEXT CHECK (property_type IN ('single', 'multi', 'commercial'))
   created_at      TIMESTAMPTZ DEFAULT NOW()
   updated_at      TIMESTAMPTZ DEFAULT NOW()
+  -- property_type notes:
+  --   'single'     one unit, auto-created on property creation
+  --   'multi'      2–4 units (small multi-family — traditional cap)
+  --   'commercial' unlimited units; requires Enterprise or Commercial plan
 
 units
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
@@ -326,6 +330,13 @@ tenants
   sms_opt_in                BOOLEAN NOT NULL DEFAULT false  -- migration 015
   created_at                TIMESTAMPTZ DEFAULT NOW()
   deleted_at                TIMESTAMPTZ  -- soft delete
+
+lease_co_tenants                       -- migration 023
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid()
+  lease_id    UUID NOT NULL REFERENCES leases(id) ON DELETE CASCADE
+  tenant_id   UUID NOT NULL REFERENCES tenants(id)
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  UNIQUE (lease_id, tenant_id)          -- max 5 co-tenants enforced in leaseRepository
 
 leases
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
@@ -589,7 +600,7 @@ Base URL: `/api/v1`
 | Properties | `GET /properties`, `POST /properties`, `GET /properties/:id`, `PATCH /properties/:id` |
 | Units | `GET /properties/:id/units`, `POST /properties/:id/units`, `PATCH /units/:id` |
 | Tenants | `GET /tenants`, `POST /tenants`, `GET /tenants/:id`, `PATCH /tenants/:id` |
-| Leases | `GET /leases`, `POST /leases`, `GET /leases/:id`, `PATCH /leases/:id` |
+| Leases | `GET /leases`, `POST /leases`, `GET /leases/:id`, `PATCH /leases/:id`, `GET /leases/:id/co-tenants`, `POST /leases/:id/co-tenants`, `DELETE /leases/:id/co-tenants/:tenantId` |
 | Payments | `GET /payments?leaseId=`, `POST /payments` (manual), `GET /payments/:id`, `POST /payments/stripe/setup-intent`, `POST /payments/stripe/payment-intent` |
 | Ledger | `GET /ledger?leaseId=` (audit trail), `GET /ledger/portfolio` (income summary — admin sees all; landlord scoped to own properties) |
 | Charges | `GET /charges` (filter by leaseId/unitId/tenantId/propertyId), `POST /charges` (admin or landlord), `GET /charges/:id`, `PATCH /charges/:id` (edit description/due_date/type), `POST /charges/:id/void` (soft-delete; appends ledger credit if lease-linked) |
@@ -627,7 +638,7 @@ Base URL: `/api/v1`
 The app uses **two completely separate Stripe payment flows** that must never be confused:
 
 #### 1 — SaaS Subscription Billing (Landlord → LotLord platform)
-- Landlord pays for their platform tier (Free / Starter $29 / Enterprise $50)
+- Landlord pays for their platform tier (Free / Starter $15 / Enterprise $49)
 - Handled by: `billingController.js`, `stripeService.createCheckoutSession()`, `stripeService.handleWebhookEvent()` subscription events
 - Stripe entity: landlord's **billing** customer (`users.stripe_billing_customer_id`)
 - Money destination: **your** Stripe platform account
@@ -647,7 +658,7 @@ The app uses **two completely separate Stripe payment flows** that must never be
 - Never store raw card numbers — Stripe handles all cardholder data
 - Prefer **Stripe ACH** (`us_bank_account`) for rent (0.8%, capped at $5) over card (2.9% + $0.30)
 - All Stripe events come through `/webhooks/stripe` and must update both `rent_payments` and `ledger_entries`
-- Stripe price nicknames in the Dashboard **must** be set to `starter` and `enterprise` exactly — the webhook stores `price.nickname` as `subscription_plan` in the DB
+- Stripe price nicknames in the Dashboard **must** be set to `starter`, `enterprise`, or `commercial` exactly — the webhook stores `price.nickname` as `subscription_plan` in the DB
 
 ### Soft Deletes
 - Add `deleted_at` to: `users`, `tenants`, `leases`, `units`

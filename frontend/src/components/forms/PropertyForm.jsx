@@ -1,7 +1,8 @@
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { TextField, Stack, Button, MenuItem } from '@mui/material'
+import { TextField, Stack, Button, MenuItem, Tooltip } from '@mui/material'
+import { hasCommercial } from '../../lib/plans'
 
 const schema = z.object({
   name: z.string().min(1, 'Property nickname is required'),
@@ -14,7 +15,7 @@ const schema = z.object({
   country: z.string().optional(),
 })
 
-export default function PropertyForm({ onSubmit, defaultValues, loading }) {
+export default function PropertyForm({ onSubmit, defaultValues, loading, subscription }) {
   const { register, handleSubmit, control, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
     defaultValues: defaultValues || { propertyType: 'single', country: 'US' },
@@ -22,13 +23,26 @@ export default function PropertyForm({ onSubmit, defaultValues, loading }) {
 
   const propertyType = useWatch({ control, name: 'propertyType', defaultValue: defaultValues?.propertyType || 'single' })
   const isSingleFamily = propertyType === 'single'
+  const canUseCommercial = hasCommercial(subscription)
 
   return (
     <Stack component="form" onSubmit={handleSubmit(onSubmit)} spacing={2} sx={{ pt: 1 }}>
       <TextField label="Type" select {...register('propertyType')} defaultValue={defaultValues?.propertyType || 'single'}>
         <MenuItem value="single">Single-family</MenuItem>
         <MenuItem value="multi">Multi-family</MenuItem>
-        <MenuItem value="commercial">Commercial</MenuItem>
+        <Tooltip
+          title={canUseCommercial ? '' : 'Requires the Commercial plan ($79/mo)'}
+          placement="right"
+          disableHoverListener={canUseCommercial}
+          disableFocusListener={canUseCommercial}
+          disableTouchListener={canUseCommercial}
+        >
+          <span>
+            <MenuItem value="commercial" disabled={!canUseCommercial}>
+              Commercial{!canUseCommercial ? ' (Commercial plan required)' : ''}
+            </MenuItem>
+          </span>
+        </Tooltip>
       </TextField>
       <TextField
         label="Property Nickname"
