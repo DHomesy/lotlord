@@ -24,6 +24,7 @@ router.post(
 );
 
 // Step 2: create a PaymentIntent to charge the verified bank account
+// requiresEnterprise: ACH rent collection is an Enterprise-plan feature
 // requiresConnectOnboarded: landlord must complete Stripe Connect before receiving ACH payouts
 router.post(
   '/stripe/payment-intent',

@@ -8,6 +8,39 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.5.10] — 2026-04-17 — Tier refinements: ACH for all, $29 Starter, plan caps
+
+### Changed
+- **Starter plan price** — reduced from $30/mo to **$29/mo**.
+- **ACH rent collection available on all tiers** — removed the Enterprise subscription gate from the `POST /payments/stripe/payment-intent` backend route and from `PaymentsPage`. Any landlord (Free, Starter, or Enterprise) who has completed Stripe Connect onboarding can collect rent via ACH. The only gate remaining is `requiresConnectOnboarded` — Stripe Connect setup is still required before accepting payments.
+- **Tier property/unit limits revised** — `checkFreeTierLimit` replaced by `checkPlanLimit()`, a new tier-aware middleware that enforces per-plan caps without a hard-coded max argument:
+  - **Free**: 1 property, 4 units, 4 active tenants
+  - **Starter ($29/mo)**: up to 25 properties, unlimited units & tenants
+  - **Enterprise ($50/mo)**: unlimited everything
+- **Enterprise plan future features** — Enterprise plan card now advertises AI features and document signing as "coming soon" instead of ACH (which is now available to all tiers).
+- **Error messages** — `402` responses from `checkPlanLimit` now include the current plan name and a tier-specific upgrade hint (Free users prompted to Starter **or** Enterprise; Starter users prompted to Enterprise).
+
+---
+## [1.5.9] — 2026-04-17 — 3-tier pricing: Free / Starter / Enterprise
+
+### Added
+- **3-tier subscription model** — replaced the previous single-plan ("Pro") system with three tiers:
+  - **Free** — no subscription required. Core features: 1 property, up to 4 units, 4 active tenants, full maintenance / documents / leases / charge management.
+  - **Starter ($30/mo)** — up to 25 properties, plus dashboard analytics and portfolio income summary.
+  - **Enterprise ($50/mo)** — unlimited properties, plus future premium features (AI, document signing). ACH rent collection available on all tiers.
+- **`frontend/src/lib/plans.js`** (new file) — exports `PLANS` map, `planTier()`, `hasStarter()`, `hasEnterprise()` helpers for consistent plan checks across frontend components.
+- **`requiresStarter` / `requiresEnterprise` middleware** (`src/middleware/auth.js`) — two new named subscription gates. `requiresPro` kept as backward-compat alias for `requiresStarter`.
+- **Plan-picker UI on ProfilePage** — when unsubscribed, two side-by-side cards (Starter / Enterprise) each show price, description, feature list, and a "Subscribe to [plan]" button. Subscribed users see their current plan name and a "Manage Subscription" button (Stripe Customer Portal).
+
+### Changed
+- **`STRIPE_PRICE_ID`** env var split into `STRIPE_PRICE_ID_STARTER` and `STRIPE_PRICE_ID_ENTERPRISE`. The Stripe price nickname must be set to exactly `starter` or `enterprise` in the Stripe Dashboard — the webhook stores this as `subscription_plan` in the DB.
+- **`createCheckoutSession(userId, plan)`** — now accepts a `plan` string and routes to the correct price ID.
+- **`POST /billing/checkout`** — accepts `{ plan: 'starter' | 'enterprise' }` in the request body.
+- **Analytics routes** — `requiresPro` → `requiresStarter` on `GET /analytics/dashboard` and `GET /ledger/portfolio`.
+- **DashboardPage / LedgerPage** — replaced inline `isPro` check and `checkout()` upgrade button with `hasStarter(subscription)` and `navigate('/profile')` upgrade CTA.
+- **PaymentsPage** — replaced `hasEnterprise` gate with `requiresConnectOnboarded` only (ACH available to all tiers).
+
+---
 ## [1.5.8] — 2026-04-17 — Full mobile UX audit: admin pages
 
 ### Changed

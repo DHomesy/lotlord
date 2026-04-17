@@ -189,7 +189,7 @@ Tenant replies to reply@lotlord.app
 | API Server | Node.js + Express | REST API |
 | Database | PostgreSQL on Railway | Simple managed hosting |
 | Auth | **JWT (implemented)** | Access token in memory (15 min) + httpOnly refresh cookie (30 days) |
-| Payments | Stripe (ACH preferred) | ACH = 0.8%, capped at $5 vs 2.9% card |
+| Payments | **Stripe** (ACH + Subscriptions + Connect) | ACH rent 0.8% capped $5; SaaS subs via Checkout; landlord payouts via Connect Express |
 | Email | **AWS SES** | $0.10/1,000 emails; custom domain `@lotlord.app` |
 | SMS | Twilio | ~$0.008/SMS + $1/mo per number |
 | Documents | **AWS S3** | Pre-signed URLs; CDK stack in `infra/` provisions bucket |
@@ -623,9 +623,31 @@ Base URL: `/api/v1`
 - Always provide an escalation path: if the AI marks a conversation as `escalated`, a human must follow up
 
 ### Stripe / Payments
+
+The app uses **two completely separate Stripe payment flows** that must never be confused:
+
+#### 1 — SaaS Subscription Billing (Landlord → LotLord platform)
+- Landlord pays for their platform tier (Free / Starter $29 / Enterprise $50)
+- Handled by: `billingController.js`, `stripeService.createCheckoutSession()`, `stripeService.handleWebhookEvent()` subscription events
+- Stripe entity: landlord's **billing** customer (`users.stripe_billing_customer_id`)
+- Money destination: **your** Stripe platform account
+- Webhook events: `checkout.session.completed`, `customer.subscription.*`, `invoice.*`
+- Subscription state stored in: `users.subscription_status`, `users.subscription_plan`
+
+#### 2 — ACH Rent Collection (Tenant → Landlord directly)
+- Tenant pays rent via ACH bank transfer
+- Handled by: `paymentController.js`, `stripeService.createPaymentIntent()` with `transfer_data: { destination: landlordConnect.stripe_account_id }`
+- Stripe entity: tenant's **customer** (`tenants.stripe_customer_id`) + landlord's **Connect Express** account (`users.stripe_account_id`)
+- Money destination: **landlord's connected bank account** — funds never touch your platform account. Your `STRIPE_SECRET_KEY` facilitates the transfer but you only collect the Stripe platform fee (0.8%, capped at $5 per ACH transaction).
+- Webhook events: `payment_intent.succeeded`, `payment_intent.payment_failed`
+- Payment state stored in: `rent_payments` + `ledger_entries`
+- **ACH is available on all tiers** (Free, Starter, Enterprise) — the only prerequisite is that the landlord completes Stripe Connect onboarding (`requiresConnectOnboarded` middleware)
+
+#### Rules
 - Never store raw card numbers — Stripe handles all cardholder data
-- Use **Stripe ACH** (`us_bank_account`) for rent collection (0.8%, capped at $5) instead of card (2.9% + $0.30)
-- All Stripe events (payment succeeded, failed, refunded) come through the `/webhooks/stripe` endpoint and must update both `rent_payments` and `ledger_entries`
+- Prefer **Stripe ACH** (`us_bank_account`) for rent (0.8%, capped at $5) over card (2.9% + $0.30)
+- All Stripe events come through `/webhooks/stripe` and must update both `rent_payments` and `ledger_entries`
+- Stripe price nicknames in the Dashboard **must** be set to `starter` and `enterprise` exactly — the webhook stores `price.nickname` as `subscription_plan` in the DB
 
 ### Soft Deletes
 - Add `deleted_at` to: `users`, `tenants`, `leases`, `units`
@@ -1006,7 +1028,8 @@ APP_BASE_URL=https://your-app.railway.app
 # Stripe
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
-STRIPE_PRICE_ID=price_...       # pro plan monthly price
+STRIPE_PRICE_ID_STARTER=price_...   # Starter plan — $29/mo — price nickname must be 'starter'
+STRIPE_PRICE_ID_ENTERPRISE=price_... # Enterprise plan — $50/mo — price nickname must be 'enterprise'
 
 # OpenAI
 OPENAI_API_KEY=

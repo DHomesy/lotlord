@@ -15,6 +15,7 @@ import { useAuthStore } from '../../store/authStore'
 import { useUpdateMe, useChangePassword } from '../../hooks/useUsers'
 import { useConnectStatus, useConnectOnboard, useConnectLogin } from '../../hooks/useStripeSetup'
 import { useMySubscription, useCreateCheckoutSession, useCreateBillingPortalSession } from '../../hooks/useBilling'
+import { PLANS, hasStarter } from '../../lib/plans'
 
 const profileSchema = z.object({
   name:  z.string().min(1, 'Name is required'),
@@ -226,13 +227,13 @@ export default function AdminProfilePage() {
         <Box>
           <Typography variant="h6">Subscription</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Your platform subscription gives you access to all LotLord features.
-            Manage your plan, update your payment method, or download invoices at any time.
+            Choose a plan to unlock additional features. Manage your payment method or
+            download invoices at any time.
           </Typography>
         </Box>
         <Chip
           icon={<CardMembershipIcon />}
-          label={subscription?.status ?? 'none'}
+          label={subscription?.plan ? subscription.plan : (subscription?.status ?? 'free')}
           color={
             subscription?.status === 'active'   ? 'success' :
             subscription?.status === 'trialing' ? 'info' :
@@ -246,35 +247,71 @@ export default function AdminProfilePage() {
 
       {/* Return from Stripe Checkout */}
       {billingBanner === 'success' && (
-        <Alert severity="success" sx={{ maxWidth: 460, mt: 1 }} onClose={() => setBillingBanner(null)}>
+        <Alert severity="success" sx={{ maxWidth: 560, mt: 1 }} onClose={() => setBillingBanner(null)}>
           You’re subscribed! Your plan is now active.
         </Alert>
       )}
       {billingBanner === 'canceled' && (
-        <Alert severity="info" sx={{ maxWidth: 460, mt: 1 }} onClose={() => setBillingBanner(null)}>
+        <Alert severity="info" sx={{ maxWidth: 560, mt: 1 }} onClose={() => setBillingBanner(null)}>
           Checkout canceled — you have not been charged.
         </Alert>
       )}
 
       {/* past_due warning */}
       {subscription?.status === 'past_due' && (
-        <Alert severity="warning" sx={{ maxWidth: 460, mt: 1 }}>
+        <Alert severity="warning" sx={{ maxWidth: 560, mt: 1 }}>
           Your last payment failed. Please update your payment method to restore full access.
         </Alert>
       )}
 
-      <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
-        {(!subscription?.status || subscription.status === 'none' || subscription.status === 'canceled') && (
-          <Button
-            variant="contained"
-            startIcon={startingCheckout ? <CircularProgress size={14} color="inherit" /> : <CardMembershipIcon />}
-            onClick={() => startCheckout()}
-            disabled={startingCheckout}
-          >
-            {startingCheckout ? 'Redirecting…' : 'Subscribe'}
-          </Button>
-        )}
-        {subscription?.status && subscription.status !== 'none' && subscription.status !== 'canceled' && (
+      {/* Plan picker — shown when not subscribed (or canceled) */}
+      {(!subscription?.status || subscription.status === 'none' || subscription.status === 'canceled') && (
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2, maxWidth: 540 }}>
+          {Object.values(PLANS).map(({ key, label, price, description, features }) => (
+            <Card
+              key={key}
+              variant="outlined"
+              sx={{
+                flex: 1,
+                transition: 'border-color 0.15s',
+                '&:hover': { borderColor: 'primary.main' },
+              }}
+            >
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight={700}>{label}</Typography>
+                <Typography variant="h5" fontWeight={800} color="primary.main" sx={{ my: 0.5 }}>
+                  ${price}<Typography component="span" variant="caption" color="text.secondary">/mo</Typography>
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                  {description}
+                </Typography>
+                {features.map((f) => (
+                  <Typography key={f} variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
+                    ✓ {f}
+                  </Typography>
+                ))}
+                <Button
+                  variant="contained"
+                  size="small"
+                  fullWidth
+                  sx={{ mt: 2 }}
+                  disabled={startingCheckout}
+                  onClick={() => startCheckout(key)}
+                >
+                  {startingCheckout ? 'Redirecting…' : `Subscribe to ${label}`}
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </Stack>
+      )}
+
+      {/* Active/trialing: show current plan + manage button */}
+      {hasStarter(subscription) && (
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            Current plan: <strong style={{ textTransform: 'capitalize' }}>{subscription?.plan ?? 'active'}</strong>
+          </Typography>
           <Button
             variant="outlined"
             endIcon={<OpenInNewIcon fontSize="small" />}
@@ -283,13 +320,7 @@ export default function AdminProfilePage() {
           >
             {openingPortal ? 'Loading…' : 'Manage Subscription'}
           </Button>
-        )}
-      </Stack>
-
-      {subscription?.plan && (
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-          Current plan: {subscription.plan}
-        </Typography>
+        </Box>
       )}
       </>)}
     </PageContainer>

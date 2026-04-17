@@ -545,10 +545,14 @@ async function getOrCreateBillingCustomer(userId) {
   return customer;
 }
 
-async function createCheckoutSession(userId) {
-  if (!env.STRIPE_PRICE_ID) {
+async function createCheckoutSession(userId, plan = 'starter') {
+  const priceId = plan === 'enterprise'
+    ? env.STRIPE_PRICE_ID_ENTERPRISE
+    : env.STRIPE_PRICE_ID_STARTER;
+
+  if (!priceId) {
     throw Object.assign(
-      new Error('STRIPE_PRICE_ID is not configured. Create a Product + Price in the Stripe Dashboard, then add STRIPE_PRICE_ID to your .env.'),
+      new Error(`STRIPE_PRICE_ID_${plan.toUpperCase()} is not configured. Create a Product + Price in the Stripe Dashboard, then add the env var to your deployment.`),
       { status: 500 },
     );
   }
@@ -556,7 +560,7 @@ async function createCheckoutSession(userId) {
   const session  = await getStripe().checkout.sessions.create({
     mode:       'subscription',
     customer:   customer.id,
-    line_items: [{ price: env.STRIPE_PRICE_ID, quantity: 1 }],
+    line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${env.FRONTEND_URL}/profile?billing=success`,
     cancel_url:  `${env.FRONTEND_URL}/profile?billing=canceled`,
     metadata:    { userId },

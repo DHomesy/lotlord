@@ -27,7 +27,8 @@ import LoadingOverlay    from '../../components/common/LoadingOverlay'
 import LandlordSetupCard from '../../components/common/LandlordSetupCard'
 import { useDashboard }  from '../../hooks/useAnalytics'
 import { useConnectStatus } from '../../hooks/useStripeSetup'
-import { useMySubscription, useCreateCheckoutSession } from '../../hooks/useBilling'
+import { useMySubscription } from '../../hooks/useBilling'
+import { hasStarter } from '../../lib/plans'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import OnboardingWizard from '../../components/common/OnboardingWizard'
@@ -152,7 +153,6 @@ export default function DashboardPage() {
   const { data, isLoading, isError, error } = useDashboard()
   const { data: connectStatus } = useConnectStatus()
   const { data: subscription } = useMySubscription()
-  const { mutate: checkout, isPending: checkingOut } = useCreateCheckoutSession()
   const user = useAuthStore((s) => s.user)
   const navigate = useNavigate()
   const isLandlord = user?.role === 'landlord'
@@ -163,9 +163,9 @@ export default function DashboardPage() {
 
   if (isLoading) return <LoadingOverlay />
 
-  const isPro = ['active', 'trialing'].includes(subscription?.status)
+  const isStarter = hasStarter(subscription)
 
-  // Analytics is Pro-gated — show upgrade prompt for free-tier users.
+  // Analytics is Starter-gated — show upgrade prompt for free-tier users.
   // This check must come BEFORE the !data guard so free-tier landlords see the
   // upgrade prompt instead of an infinite loading spinner (402 → isError=true, data=undefined).
   if (isError) {
@@ -177,12 +177,12 @@ export default function DashboardPage() {
           <Alert
             severity="info"
             action={
-              <Button size="small" variant="contained" onClick={() => checkout()} disabled={checkingOut}>
-                Upgrade to Pro
+              <Button size="small" variant="contained" onClick={() => navigate('/profile')}>
+                Upgrade Plan
               </Button>
             }
           >
-            Portfolio analytics are available on the Pro plan. Upgrade to unlock your dashboard metrics.
+            Portfolio analytics are available on the Starter plan ($30/mo). Upgrade to unlock your dashboard metrics.
           </Alert>
         ) : (
           <Alert severity="error">

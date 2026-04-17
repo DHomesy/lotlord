@@ -56,8 +56,10 @@ module.exports = {
   // Stripe
   STRIPE_SECRET_KEY:     optional('STRIPE_SECRET_KEY'),
   STRIPE_WEBHOOK_SECRET: optional('STRIPE_WEBHOOK_SECRET'),
-  // Stripe SaaS — monthly plan Price ID (create in Stripe Dashboard → Products → Add Product)
-  STRIPE_PRICE_ID: optional('STRIPE_PRICE_ID'),
+  // Stripe SaaS — one Price ID per plan tier (create in Stripe Dashboard → Products)
+  // Set the price nickname to 'starter' / 'enterprise' so the webhook handler stores the right label.
+  STRIPE_PRICE_ID_STARTER:    optional('STRIPE_PRICE_ID_STARTER'),
+  STRIPE_PRICE_ID_ENTERPRISE: optional('STRIPE_PRICE_ID_ENTERPRISE'),
 
   // OpenAI
   OPENAI_API_KEY: optional('OPENAI_API_KEY'),

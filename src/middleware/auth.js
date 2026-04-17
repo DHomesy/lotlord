@@ -34,28 +34,54 @@ function authorize(...roles) {
   };
 }
 
+const ACTIVE_STATUSES = ['active', 'trialing'];
+
 /**
- * Requires the requesting user to have an active ("active" or "trialing") Pro subscription.
- * Admin users bypass this check — they are system operators, not subject to landlord limits.
- * Returns 402 Payment Required if the subscription gate is not met.
+ * Requires the requesting landlord to have any active paid subscription (Starter or Enterprise).
+ * Grants access to analytics and portfolio reporting features.
+ * Admin users bypass this check.
+ * Returns 402 Payment Required if the gate is not met.
  */
-async function requiresPro(req, res, next) {
+async function requiresStarter(req, res, next) {
   try {
     if (!req.user) return res.status(401).json({ error: 'Authentication required' });
-    // Admins operate the entire platform; they are never subscription-gated
     if (req.user.role === 'admin') return next();
 
     const billing = await userRepo.findBillingStatus(req.user.sub);
-    const proStatuses = ['active', 'trialing'];
-    if (!billing || !proStatuses.includes(billing.subscription_status)) {
+    if (!billing || !ACTIVE_STATUSES.includes(billing.subscription_status)) {
       return res.status(402).json({
-        error: 'This feature requires a Pro plan. Upgrade to continue.',
+        error: 'This feature requires a Starter or Enterprise plan. Upgrade to continue.',
         code: 'SUBSCRIPTION_REQUIRED',
       });
     }
     next();
   } catch (err) { next(err); }
 }
+
+/**
+ * Requires the requesting landlord to have an active Enterprise subscription.
+ * Reserved for future premium features (AI, document signing, etc.).
+ * Admin users bypass this check.
+ * Returns 402 Payment Required if the gate is not met.
+ */
+async function requiresEnterprise(req, res, next) {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+    if (req.user.role === 'admin') return next();
+
+    const billing = await userRepo.findBillingStatus(req.user.sub);
+    if (!billing || !ACTIVE_STATUSES.includes(billing.subscription_status) || billing.subscription_plan !== 'enterprise') {
+      return res.status(402).json({
+        error: 'This feature requires an Enterprise plan. Upgrade to continue.',
+        code: 'ENTERPRISE_REQUIRED',
+      });
+    }
+    next();
+  } catch (err) { next(err); }
+}
+
+// Backward-compat alias
+const requiresPro = requiresStarter;
 
 /**
  * Requires the requesting landlord to have completed Stripe Connect onboarding.
@@ -80,38 +106,60 @@ async function requiresConnectOnboarded(req, res, next) {
 }
 
 /**
- * Free-tier resource count guard. Returns an Express middleware that blocks creation
- * once a free-tier landlord/admin has reached `max` rows for the given resource.
+ * Per-plan resource limits.
+ *   free       — no active subscription
+ *   starter    — any active subscription (price nickname = 'starter')
+ *   enterprise — active subscription with price nickname = 'enterprise'
  *
- * @param {'properties'|'units'|'tenants'} resource - Resource type to COUNT against
- * @param {number} max - Maximum rows allowed on the free tier
- *
- * Example: router.post('/', authenticate, checkFreeTierLimit('properties', 1), handler)
+ * Infinity = no hard cap.
  */
-function checkFreeTierLimit(resource, max) {
+const PLAN_LIMITS = {
+  properties: { free: 1,  starter: 25, enterprise: Infinity },
+  units:      { free: 4,  starter: Infinity, enterprise: Infinity },
+  tenants:    { free: 4,  starter: Infinity, enterprise: Infinity },
+};
+
+/**
+ * Tier-aware resource count guard. Blocks creation once the user has reached
+ * their plan's limit for the given resource.
+ *
+ *   Free       → properties: 1,  units: 4,  tenants: 4
+ *   Starter    → properties: 25, units: ∞,  tenants: ∞
+ *   Enterprise → unlimited
+ *
+ * @param {'properties'|'units'|'tenants'} resource
+ *
+ * Example: router.post('/', authenticate, checkPlanLimit('properties'), handler)
+ */
+function checkPlanLimit(resource) {
   const allowedResources = ['properties', 'units', 'tenants'];
   if (!allowedResources.includes(resource)) {
-    throw new Error(`checkFreeTierLimit: unsupported resource "${resource}"`);
+    throw new Error(`checkPlanLimit: unsupported resource "${resource}"`);
   }
 
   return async (req, res, next) => {
     try {
       if (!req.user) return res.status(401).json({ error: 'Authentication required' });
 
-      // Pro users have no hard cap
-      const billing = await userRepo.findBillingStatus(req.user.sub);
-      const proStatuses = ['active', 'trialing'];
-      if (billing && proStatuses.includes(billing.subscription_status)) return next();
-
       // Admins bypass; they operate on behalf of landlords
       if (req.user.role === 'admin') return next();
 
+      const billing      = await userRepo.findBillingStatus(req.user.sub);
+      const isActive     = ['active', 'trialing'].includes(billing?.subscription_status);
+      const isEnterprise = isActive && billing?.subscription_plan === 'enterprise';
+
+      // Enterprise: no limits
+      if (isEnterprise) return next();
+
+      const limits = PLAN_LIMITS[resource];
+      const max    = isActive ? limits.starter : limits.free;
+      if (max === Infinity) return next();
+
       let countQuery, countParams;
       if (resource === 'properties') {
-        countQuery = 'SELECT COUNT(*)::int AS cnt FROM properties WHERE owner_id = $1 AND deleted_at IS NULL';
+        countQuery  = 'SELECT COUNT(*)::int AS cnt FROM properties WHERE owner_id = $1 AND deleted_at IS NULL';
         countParams = [req.user.sub];
       } else if (resource === 'units') {
-        // units are owned transitively through properties
         countQuery = `
           SELECT COUNT(*)::int AS cnt
           FROM units u
@@ -136,10 +184,15 @@ function checkFreeTierLimit(resource, max) {
       const { rows } = await query(countQuery, countParams);
       const count = rows[0]?.cnt ?? 0;
       if (count >= max) {
+        const planLabel   = isActive ? 'Starter' : 'Free';
+        const upgradeHint = isActive
+          ? 'Upgrade to Enterprise for unlimited access.'
+          : `Upgrade to Starter (up to 25 ${resource}) or Enterprise (unlimited) to add more.`;
         return res.status(402).json({
-          error: `Free plan is limited to ${max} ${resource}. Upgrade to Pro to add more.`,
-          code: 'FREE_TIER_LIMIT',
-          limit: max,
+          error:   `${planLabel} plan is limited to ${max} ${resource}. ${upgradeHint}`,
+          code:    'PLAN_LIMIT',
+          plan:    isActive ? 'starter' : 'free',
+          limit:   max,
           current: count,
         });
       }
@@ -147,6 +200,9 @@ function checkFreeTierLimit(resource, max) {
     } catch (err) { next(err); }
   };
 }
+
+// Backward-compat alias (routes may still use the old name)
+const checkFreeTierLimit = checkPlanLimit;
 
 /**
  * Blocks landlords whose email address has not yet been verified.
@@ -170,4 +226,14 @@ function requiresVerified(req, res, next) {
   next();
 }
 
-module.exports = { authenticate, authorize, requiresPro, requiresConnectOnboarded, checkFreeTierLimit, requiresVerified };
+module.exports = {
+  authenticate,
+  authorize,
+  requiresStarter,
+  requiresEnterprise,
+  requiresPro,          // backward-compat alias for requiresStarter
+  requiresConnectOnboarded,
+  checkPlanLimit,
+  checkFreeTierLimit,   // backward-compat alias for checkPlanLimit
+  requiresVerified,
+};

@@ -7,7 +7,6 @@ import PageContainer from '../../components/layout/PageContainer'
 import TenantPicker from '../../components/pickers/TenantPicker'
 import ConnectBankDialog from '../../components/billing/ConnectBankDialog'
 import { usePaymentMethods, useConnectStatus } from '../../hooks/useStripeSetup'
-import { useMySubscription, useCreateCheckoutSession } from '../../hooks/useBilling'
 import { useTenant } from '../../hooks/useTenants'
 
 function TenantBankSection({ tenantId }) {
@@ -70,36 +69,13 @@ function TenantBankSection({ tenantId }) {
 export default function BillingPage() {
   const navigate = useNavigate()
   const [selectedTenantId, setSelectedTenantId] = useState(null)
-  const { data: subscription } = useMySubscription()
   const { data: connectStatus } = useConnectStatus()
-  const checkout = useCreateCheckoutSession()
 
-  const isPro = ['active', 'trialing'].includes(subscription?.status)
   const connectReady = connectStatus?.onboarded === true
 
   return (
     <PageContainer title="Billing">
-      {!isPro && (
-        <Alert
-          severity="warning"
-          sx={{ mb: 2 }}
-          action={
-            <Button
-              color="inherit"
-              size="small"
-              onClick={() => checkout.mutate()}
-              disabled={checkout.isPending}
-            >
-              Upgrade to Pro
-            </Button>
-          }
-        >
-          ACH bank account collection requires a <strong>Pro subscription</strong>. Upgrade to
-          enable Stripe ACH payments for your tenants.
-        </Alert>
-      )}
-
-      {isPro && !connectReady && (
+      {!connectReady && (
         <Alert
           severity="warning"
           icon={<WarningAmberIcon />}
@@ -126,7 +102,7 @@ export default function BillingPage() {
           value={selectedTenantId}
           onChange={setSelectedTenantId}
           label="Select Tenant"
-          disabled={!isPro || !connectReady}
+          disabled={!connectReady}
         />
       </Box>
 

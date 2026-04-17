@@ -12,7 +12,7 @@ export function useMySubscription() {
 
 export function useCreateCheckoutSession() {
   return useMutation({
-    mutationFn: api.createCheckoutSession,
+    mutationFn: (plan = 'starter') => api.createCheckoutSession(plan),
     onSuccess: ({ url }) => { window.location.href = url },
   })
 }

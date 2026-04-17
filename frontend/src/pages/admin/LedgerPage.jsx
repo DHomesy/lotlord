@@ -8,7 +8,9 @@ import StatusChip from '../../components/common/StatusChip'
 import LeasePicker from '../../components/pickers/LeasePicker'
 import { useLedger, usePortfolioSummary } from '../../hooks/useLedger'
 import { useProperties } from '../../hooks/useProperties'
-import { useMySubscription, useCreateCheckoutSession } from '../../hooks/useBilling'
+import { useMySubscription } from '../../hooks/useBilling'
+import { hasStarter } from '../../lib/plans'
+import { useNavigate } from 'react-router-dom'
 
 // ─── Lease Ledger columns ─────────────────────────────────────────────────────
 
@@ -62,8 +64,8 @@ function PortfolioTab() {
   const [toDate,   setToDate]   = useState('')
 
   const { data: subscription } = useMySubscription()
-  const checkout = useCreateCheckoutSession()
-  const isPro = ['active', 'trialing'].includes(subscription?.status)
+  const navigate = useNavigate()
+  const isStarter = hasStarter(subscription)
 
   const { data: propsData } = useProperties()
   const properties = Array.isArray(propsData) ? propsData : (propsData?.properties ?? [])
@@ -90,26 +92,25 @@ function PortfolioTab() {
 
   return (
     <Stack spacing={2}>
-      {!isPro && (
+      {!isStarter && (
         <Alert
           severity="info"
           action={
             <Button
               variant="contained"
               size="small"
-              onClick={() => checkout.mutate()}
-              disabled={checkout.isPending}
+              onClick={() => navigate('/profile')}
             >
-              Upgrade to Pro
+              Upgrade Plan
             </Button>
           }
         >
-          <strong>Portfolio Summary</strong> is a Pro feature. Upgrade to view cross-property
+          <strong>Portfolio Summary</strong> is a Starter plan feature. Upgrade to view cross-property
           income, outstanding balances, and net income analytics.
         </Alert>
       )}
 
-      {isPro && (
+      {isStarter && (
       <>
       {/* ── Filters ── */}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ maxWidth: 800 }}>
