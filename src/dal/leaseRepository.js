@@ -212,7 +212,7 @@ async function addCoTenant(leaseId, tenantId) {
   );
   if (cnt[0].n >= 5) {
     throw Object.assign(
-      new Error('A lease may have at most 5 co-tenants (6 people total including the primary tenant).'),(
+      new Error('A lease may have at most 5 co-tenants (6 people total including the primary tenant).'),
       { status: 422 },
     );
   }
