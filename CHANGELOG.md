@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.5.12] — 2026-04-17 — Starter plan repriced to $15/mo; landing page updated
+
+### Changed
+- **Starter plan price** — reduced from $29/mo to **$15/mo**. Updated `frontend/src/lib/plans.js` (`price` field + JSDoc) and the `DashboardPage` upgrade alert copy.
+- **Landing page pricing section** — updated `PLANS` array to reflect the current Free / Starter ($15) / Enterprise ($50) tier model:
+  - Free: now lists ACH rent collection as included (previously omitted after the all-tiers ACH change)
+  - Starter: corrected from stale "$19 / 5 properties" to "$15 / up to 25 properties, unlimited units & tenants"
+  - Renamed "Pro" tier to **Enterprise** at $50/mo with correct feature set (employee accounts, AI, document signing — all coming soon)
+- **Landing page FAQ** — updated "What's included in the free plan?" answer to include online ACH rent collection and remove the incorrect statement that rent collection requires a paid plan.
+- **Note for deployment** — create a new $15 Price on the Starter Product in the Stripe Dashboard (existing price IDs cannot be edited), then update `STRIPE_PRICE_ID_STARTER` in your Railway environment variables.
+
+---
 ## [1.5.11] — 2026-04-17 — Bug fixes: Stripe env var names and stale price copy
 
 ### Fixed

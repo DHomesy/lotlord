@@ -3,7 +3,7 @@
  *
  * Tiers (lowest → highest):
  *   0 — free       (no subscription)  1 property, 4 units, 4 tenants. ACH included.
- *   1 — starter    ($29/mo)           up to 25 properties. ACH + analytics.
+ *   1 — starter    ($15/mo)           up to 25 properties. ACH + analytics.
  *   2 — enterprise ($50/mo)           unlimited properties. Starter + future premium features.
  *
  * The `plan` string comes from subscription.plan which is populated by the
@@ -15,7 +15,7 @@ export const PLANS = {
   starter: {
     key:         'starter',
     label:       'Starter',
-    price:       29,
+    price:       15,
     description: 'Up to 25 properties, analytics & portfolio reporting',
     features:    [
       'Up to 25 properties',
