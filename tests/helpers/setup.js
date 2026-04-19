@@ -43,6 +43,8 @@ async function cleanTestFixtures(pool) {
   await pool.query(`DELETE FROM tenants WHERE user_id IN ${byLandlord}`);
   await pool.query(`DELETE FROM units WHERE property_id IN ${ownedProps}`);
   await pool.query(`DELETE FROM properties WHERE owner_id IN ${byLandlord}`);
+  // notifications_log.recipient_id has a non-cascade FK to users — must be deleted before users
+  await pool.query(`DELETE FROM notifications_log WHERE recipient_id IN ${byLandlord}`);
   await pool.query(`DELETE FROM users WHERE email LIKE 'test_%@test.invalid'`);
 }
 

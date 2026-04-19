@@ -179,7 +179,25 @@ async function createPaymentIntent({ leaseId, chargeId, paymentMethodId, created
     };
   }
 
-  const intent = await getStripe().paymentIntents.create(intentParams);
+  let intent;
+  try {
+    intent = await getStripe().paymentIntents.create(intentParams);
+  } catch (err) {
+    // Stripe rejects a PaymentIntent when the bank account has not completed micro-deposit
+    // verification. Translate to a clean 422 so the frontend can prompt the tenant to verify.
+    // Only match the specific Stripe error code — do NOT broaden to message-string checks
+    // which could silently swallow unrelated errors (e.g. TLS or address verification errors).
+    if (
+      err?.type === 'StripeInvalidRequestError' &&
+      err?.code === 'payment_method_bank_account_unverified'
+    ) {
+      throw Object.assign(
+        new Error('This bank account has not been verified. Please complete micro-deposit verification before making a payment.'),
+        { status: 422, code: 'BANK_NOT_VERIFIED' },
+      );
+    }
+    throw err;
+  }
 
   // Persist a pending payment record — we reconcile the final status via webhook
   const paymentId = uuidv4();
@@ -287,17 +305,30 @@ async function handleWebhookEvent(rawBody, signature) {
     case 'customer.subscription.deleted':
       await onSubscriptionDeleted(event.data.object);
       break;
-    case 'invoice.paid':
-      await onInvoicePaid(event.data.object);
-      break;
+    // invoice.paid is intentionally NOT handled here.
+    // Stripe guarantees that a successful payment triggers customer.subscription.updated
+    // with status='active', so onSubscriptionUpdated is the single authoritative path.
+    // Handling invoice.paid separately would create a race condition where both handlers
+    // patch subscription_status in an undefined order.
     case 'invoice.payment_failed': {
       const invoice = event.data.object;
       if (invoice.subscription) {
         const user = await userRepo.findByStripeBillingCustomerId(invoice.customer);
-        if (user) await userRepo.updateBillingStatus(user.id, { subscriptionStatus: 'past_due' });
+        if (user) {
+          await userRepo.updateBillingStatus(user.id, { subscriptionStatus: 'past_due' });
+          // Non-fatal — notify landlord that payment failed and access is suspended
+          notificationService.sendByTriggerEvent({
+            triggerEvent: 'subscription_payment_failed',
+            recipientId:  user.id,
+            variables: { first_name: user.first_name },
+          }).catch((err) => console.error('[stripe billing] subscription_payment_failed notification failed:', err.message));
+        }
       }
       break;
     }
+    case 'customer.subscription.trial_will_end':
+      await onSubscriptionTrialEnding(event.data.object);
+      break;
     default:
       // Acknowledge without processing
       break;
@@ -398,20 +429,43 @@ async function onPaymentFailed(paymentIntent) {
 
 /**
  * List the saved ACH bank accounts (us_bank_account PaymentMethods) for a tenant.
+ * Also checks for any SetupIntents in `requires_action` state (micro-deposit pending),
+ * and annotates each payment method with `verified` and `hostedVerificationUrl`.
+ *
  * @param {string} tenantId
- * @returns {Promise<Array<{ id, bankName, last4, accountType }>>}
+ * @returns {Promise<Array<{ id, bankName, last4, accountType, verified, hostedVerificationUrl }>>}
  */
 async function listPaymentMethods(tenantId) {
   const customer = await getOrCreateStripeCustomer(tenantId);
-  const { data } = await getStripe().paymentMethods.list({
-    customer: customer.id,
-    type: 'us_bank_account',
-  });
-  return data.map((pm) => ({
-    id:          pm.id,
-    bankName:    pm.us_bank_account?.bank_name    ?? 'Bank',
-    last4:       pm.us_bank_account?.last4        ?? '????',
-    accountType: pm.us_bank_account?.account_type ?? 'checking',
+
+  // Fetch payment methods and any unverified setup intents in parallel
+  const [pmResult, siResult] = await Promise.all([
+    getStripe().paymentMethods.list({ customer: customer.id, type: 'us_bank_account' }),
+    getStripe().setupIntents.list({ customer: customer.id, limit: 20 }),
+  ]);
+
+  // Build a lookup of paymentMethodId → hostedVerificationUrl for accounts awaiting micro-deposit verification
+  const unverifiedMap = new Map();
+  for (const si of siResult.data) {
+    if (
+      si.status === 'requires_action' &&
+      si.next_action?.type === 'verify_with_microdeposits' &&
+      si.payment_method
+    ) {
+      unverifiedMap.set(
+        si.payment_method,
+        si.next_action.verify_with_microdeposits.hosted_verification_url ?? null,
+      );
+    }
+  }
+
+  return pmResult.data.map((pm) => ({
+    id:                   pm.id,
+    bankName:             pm.us_bank_account?.bank_name    ?? 'Bank',
+    last4:                pm.us_bank_account?.last4        ?? '????',
+    accountType:          pm.us_bank_account?.account_type ?? 'checking',
+    verified:             !unverifiedMap.has(pm.id),
+    hostedVerificationUrl: unverifiedMap.get(pm.id) ?? null,
   }));
 }
 
@@ -704,15 +758,18 @@ async function onSubscriptionUpdated(subscription) {
     return;
   }
   const KNOWN_PLAN_NICKNAMES = ['starter', 'enterprise', 'commercial'];
+  // Resolve plan from the first matching price nickname. Fall back to null — never
+  // write a raw Stripe price ID (e.g. 'price_1AbcXYZ') as that would break all
+  // plan-check middleware which only recognises the known string values.
+  const resolvedPlan =
+    subscription.items?.data
+      ?.map((item) => item.price?.nickname)
+      ?.find((nick) => KNOWN_PLAN_NICKNAMES.includes(nick))
+    ?? null;
   await userRepo.updateBillingStatus(user.id, {
     subscriptionId:     subscription.id,
     subscriptionStatus: subscription.status,
-    subscriptionPlan:   subscription.items?.data
-                          ?.find((item) => KNOWN_PLAN_NICKNAMES.includes(item.price?.nickname))
-                          ?.price.nickname
-                       ?? subscription.items?.data?.[0]?.price?.nickname
-                       ?? subscription.items?.data?.[0]?.price?.id
-                       ?? null,
+    subscriptionPlan:   resolvedPlan,
   });
   console.info(`[stripe billing] Subscription "${subscription.status}" for user ${user.id} (${user.email})`);
 }
@@ -727,11 +784,16 @@ async function onSubscriptionDeleted(subscription) {
   console.info(`[stripe billing] Subscription canceled for user ${user.id} (${user.email})`);
 }
 
-async function onInvoicePaid(invoice) {
-  if (!invoice.subscription) return; // not a subscription invoice
-  const user = await userRepo.findByStripeBillingCustomerId(invoice.customer);
+async function onSubscriptionTrialEnding(subscription) {
+  const user = await userRepo.findByStripeBillingCustomerId(subscription.customer);
   if (!user) return;
-  await userRepo.updateBillingStatus(user.id, { subscriptionStatus: 'active' });
+  // Fire-and-forget — a missing template is fine (just warns and skips)
+  notificationService.sendByTriggerEvent({
+    triggerEvent: 'subscription_trial_ending',
+    recipientId:  user.id,
+    variables: { first_name: user.first_name },
+  }).catch((err) => console.error('[stripe billing] subscription_trial_ending notification failed:', err.message));
+  console.info(`[stripe billing] Trial ending soon — notified user ${user.id} (${user.email})`);
 }
 
 module.exports = {

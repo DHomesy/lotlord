@@ -49,7 +49,7 @@ describe('Multi-family unit cap (4 units max)', () => {
     const propRes = await request(app)
       .post('/api/v1/properties')
       .set('Authorization', `Bearer ${fx.admin.token}`)
-      .send({ name: 'Cap Test Multi', addressLine1: '99 Cap St', city: 'Testville', propertyType: 'multi' });
+      .send({ name: 'Cap Test Multi', addressLine1: '99 Cap St', city: 'Testville', state: 'TX', zip: '00001', propertyType: 'multi' });
     expect(propRes.status).toBe(201);
     multiPropId = propRes.body.id;
 
@@ -103,7 +103,7 @@ describe('Commercial property has no unit cap', () => {
     const propRes = await request(app)
       .post('/api/v1/properties')
       .set('Authorization', `Bearer ${fx.admin.token}`)
-      .send({ name: 'Corp HQ', addressLine1: '1 Commerce Blvd', city: 'Testville', propertyType: 'commercial' });
+      .send({ name: 'Corp HQ', addressLine1: '1 Commerce Blvd', city: 'Testville', state: 'TX', zip: '00001', propertyType: 'commercial' });
     expect(propRes.status).toBe(201);
     commPropId = propRes.body.id;
   });

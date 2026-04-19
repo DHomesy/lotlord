@@ -34,9 +34,12 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, charge?.id])
 
-  // Auto-select first method once they load
+  // Auto-select first verified method once they load
   useEffect(() => {
-    if (methods.length > 0 && !selectedId) setSelectedId(methods[0].id)
+    if (methods.length > 0 && !selectedId) {
+      const firstVerified = methods.find((m) => m.verified)
+      setSelectedId(firstVerified?.id ?? methods[0].id)
+    }
   }, [methods, selectedId])
 
   function handlePay() {
@@ -87,11 +90,22 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
                     <FormControlLabel
                       key={pm.id}
                       value={pm.id}
+                      disabled={!pm.verified}
                       control={<Radio />}
-                      label={`${pm.bankName} •••• ${pm.last4} (${pm.accountType})`}
+                      label={
+                        pm.verified
+                          ? `${pm.bankName} •••• ${pm.last4} (${pm.accountType})`
+                          : `${pm.bankName} •••• ${pm.last4} — verification pending`
+                      }
                     />
                   ))}
                 </RadioGroup>
+                {methods.every((pm) => !pm.verified) && (
+                  <Alert severity="warning" sx={{ mt: 1 }}>
+                    Your bank account is awaiting micro-deposit verification. Check your Profile
+                    page for a verification link once the deposits appear (1–2 business days).
+                  </Alert>
+                )}
                 {error && (
                   <Alert severity="error" sx={{ mt: 1 }}>
                     {error.response?.data?.error ?? 'Payment failed. Please try again.'}
@@ -106,7 +120,7 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
               <Button
                 variant="contained"
                 onClick={handlePay}
-                disabled={!selectedId || isPending}
+                disabled={!selectedId || isPending || methods.find((m) => m.id === selectedId)?.verified === false}
                 startIcon={isPending ? <CircularProgress size={14} color="inherit" /> : <PaymentIcon />}
               >
                 {isPending ? 'Processing…' : 'Confirm Payment'}

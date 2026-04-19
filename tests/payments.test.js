@@ -72,3 +72,148 @@ describe('GET /api/v1/payments/:id', () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ── Stripe ACH – access-control and early-return validation ─────────────────
+// Happy-path Stripe tests (SetupIntent creation, PaymentIntent creation, bank
+// account listing) require a live Stripe test key and are handled by manual /
+// integration testing outside this suite.
+
+describe('POST /api/v1/payments/stripe/setup-intent  (admin only)', () => {
+  it('returns 401 with no auth', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/stripe/setup-intent')
+      .send({ tenantId: fx.tenantA.id });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when called by a tenant', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/stripe/setup-intent')
+      .set('Authorization', `Bearer ${fx.tenantA.token}`)
+      .send({ tenantId: fx.tenantA.id });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 403 when called by a landlord', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/stripe/setup-intent')
+      .set('Authorization', `Bearer ${fx.landlordA.token}`)
+      .send({ tenantId: fx.tenantA.id });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 when tenantId is missing', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/stripe/setup-intent')
+      .set('Authorization', `Bearer ${fx.admin.token}`)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when tenantId is not a UUID', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/stripe/setup-intent')
+      .set('Authorization', `Bearer ${fx.admin.token}`)
+      .send({ tenantId: 'not-a-uuid' });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/v1/payments/stripe/setup-intent/me  (tenant only)', () => {
+  it('returns 401 with no auth', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/stripe/setup-intent/me');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when called by a landlord', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/stripe/setup-intent/me')
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 403 when called by an admin', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/stripe/setup-intent/me')
+      .set('Authorization', `Bearer ${fx.admin.token}`);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('GET /api/v1/payments/stripe/payment-methods/me  (tenant only)', () => {
+  it('returns 401 with no auth', async () => {
+    const res = await request(app)
+      .get('/api/v1/payments/stripe/payment-methods/me');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when called by a landlord', async () => {
+    const res = await request(app)
+      .get('/api/v1/payments/stripe/payment-methods/me')
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 403 when called by an admin', async () => {
+    const res = await request(app)
+      .get('/api/v1/payments/stripe/payment-methods/me')
+      .set('Authorization', `Bearer ${fx.admin.token}`);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('GET /api/v1/payments/stripe/payment-methods/:tenantId  (admin only)', () => {
+  it('returns 401 with no auth', async () => {
+    const res = await request(app)
+      .get(`/api/v1/payments/stripe/payment-methods/${fx?.tenantA?.id ?? uuidv4()}`);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when called by a landlord', async () => {
+    const res = await request(app)
+      .get(`/api/v1/payments/stripe/payment-methods/${fx.tenantA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 403 when called by a tenant', async () => {
+    const res = await request(app)
+      .get(`/api/v1/payments/stripe/payment-methods/${fx.tenantA.id}`)
+      .set('Authorization', `Bearer ${fx.tenantA.token}`);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('POST /api/v1/payments/stripe/payment-intent/me  (tenant only)', () => {
+  it('returns 401 with no auth', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/stripe/payment-intent/me')
+      .send({ paymentMethodId: 'pm_test_123', chargeId: chargeAId });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when called by a landlord', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/stripe/payment-intent/me')
+      .set('Authorization', `Bearer ${fx.landlordA.token}`)
+      .send({ paymentMethodId: 'pm_test_123', chargeId: chargeAId });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 403 when called by an admin', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/stripe/payment-intent/me')
+      .set('Authorization', `Bearer ${fx.admin.token}`)
+      .send({ paymentMethodId: 'pm_test_123', chargeId: chargeAId });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 when paymentMethodId is missing', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/stripe/payment-intent/me')
+      .set('Authorization', `Bearer ${fx.tenantA.token}`)
+      .send({ chargeId: chargeAId });
+    expect(res.status).toBe(400);
+  });
+});

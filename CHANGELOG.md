@@ -8,6 +8,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.5.14] — 2026-04-18 — ACH micro-deposit verification, maintenance notifications, subscription webhook lifecycle, security audit
+
+### Added
+- **ACH micro-deposit verification** — full end-to-end flow for bank accounts that require micro-deposit verification before charges can be processed:
+  - `stripeService.listPaymentMethods`: parallel fetch of payment methods + SetupIntents; returns `verified: bool` and `hostedVerificationUrl` per payment method.
+  - `stripeService.createPaymentIntent`: throws `{ status: 422, code: 'BANK_NOT_VERIFIED' }` when a charge is attempted against an unverified bank account (checks `err.code === 'payment_method_bank_account_unverified'`).
+  - `ConnectBankDialog.jsx`: detects micro-deposit case (`setupIntent.status === 'requires_action'` + `next_action.type === 'verify_with_microdeposits'`) and shows a warning-themed "Check Your Bank Account" screen with a hosted verification link instead of a success screen.
+  - `ProfilePage.jsx`: bank cards show a green "Verified" chip or a warning "Verification pending" chip with a direct "Verify →" link to the Stripe-hosted verification page.
+  - `ChargesPage.jsx`: auto-selects first verified payment method; unverified methods are disabled in the payment method list with a "— verification pending" suffix; "Confirm Payment" is disabled when selected method is unverified; shows a warning `Alert` when all methods are unverified.
+- **Maintenance status notifications** — `maintenanceService` fires email + SMS notifications on maintenance lifecycle events:
+  - `createRequest`: fires `maintenance_submitted` notification to the property owner; skips when submitter is the owner.
+  - `updateRequest`: fires `maintenance_in_progress` or `maintenance_completed` to the original submitter on status change; skips self-notification.
+  - All notifications are fire-and-forget (never block the HTTP response).
+- **Subscription webhook: trial ending** — `customer.subscription.trial_will_end` event handled in `handleWebhookEvent`; calls new `onSubscriptionTrialEnding()` which fires a `subscription_trial_ending` email to the landlord.
+- **Subscription webhook: payment failed email** — `invoice.payment_failed` handler now fires a `subscription_payment_failed` email notification to the landlord in addition to setting `subscription_status = 'past_due'`.
+- **`migrations/024_notification_templates_seed.sql`** (new migration) — expands the `trigger_event` CHECK constraint to include `maintenance_submitted`, `maintenance_in_progress`, `maintenance_completed`, `subscription_payment_failed`, and `subscription_trial_ending`; seeds 5 default email templates with `NOT EXISTS` guards (idempotent).
+- **`tests/billing.test.js`** (new suite) — 24 tests covering billing status, Stripe Checkout, Customer Portal, admin landlord list, webhook signature validation, and the `requiresStarter` access gate (including `past_due` and `canceled` blocking, admin bypass, active/trialing pass-through).
+- **Test coverage expansion** — 13 new maintenance tests (RBAC, cross-landlord blocking, tenant cancel rules, timestamps); 18 new ACH access-control tests for all 5 Stripe payment routes. Total: 135 tests across 12 suites, all passing.
+
+### Fixed
+- **Webhook 400 / 500 error split** (`src/routes/webhooks.js`) — the `catch` block previously returned `400` for all errors. Stripe treats any `4xx` as "do not retry", meaning DB failures during webhook processing caused silent event loss. Fixed: `StripeSignatureVerificationError` → `400` (correct; Stripe should not retry bad signatures); all other errors → `500` so Stripe retries with exponential backoff.
+- **`invoice.paid` status race** — removed the `case 'invoice.paid'` handler and `onInvoicePaid()` entirely. It was racing with `customer.subscription.updated` to write `subscription_status`, creating an unreliable update order. `onSubscriptionUpdated` is now the single authoritative path for all subscription status writes.
+- **Price ID fallback bug** (`onSubscriptionUpdated`) — when a Stripe Price object has no nickname set, the plan nickname fallback was `price.id` (a raw Stripe ID string like `"price_1AbcXYZ"`). All plan-check middleware (`requiresStarter`, `requiresEnterprise`) was silently failing to match, granting or denying access incorrectly. Fallback is now `null` so failures are explicit.
+- **Test suite teardown FK violation** (`tests/helpers/setup.js`) — fire-and-forget notifications were inserting `notifications_log` rows with FKs to test users; `cleanTestFixtures` was deleting users before the log. Added `notifications_log` cleanup step before user deletion to prevent cascading teardown failures across all suites.
+- **Properties/units test fixture gaps** (`tests/properties.test.js`, `tests/units.test.js`) — fixed missing `state`/`zip` fields in property create payloads (NOT NULL violation); corrected `subscription_status = NULL` seed to `'none'`; fixed free-plan commercial test to expect `PLAN_LIMIT` (not `COMMERCIAL_REQUIRED`) since `checkPlanLimit` fires before the property type guard.
+
+---
 ## [1.5.13] — 2026-04-17 — Co-tenants, charges fixes, upgrade UX, documentation pass
 
 ### Added

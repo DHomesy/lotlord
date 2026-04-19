@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.5.13 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.5.14 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -1038,9 +1038,15 @@ APP_BASE_URL=https://your-app.railway.app
 
 # Stripe
 STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=
-STRIPE_PRICE_ID_STARTER=price_...   # Starter plan — $29/mo — price nickname must be 'starter'
-STRIPE_PRICE_ID_ENTERPRISE=price_... # Enterprise plan — $50/mo — price nickname must be 'enterprise'
+STRIPE_WEBHOOK_SECRET=          # required — from Stripe Dashboard → Webhooks → signing secret
+STRIPE_PRICE_ID_STARTER=price_...   # Starter plan — $15/mo — price nickname must be 'starter'
+STRIPE_PRICE_ID_ENTERPRISE=price_... # Enterprise plan — $49/mo — price nickname must be 'enterprise'
+# Stripe webhook events to enable in the Dashboard:
+#   customer.subscription.created, customer.subscription.updated,
+#   customer.subscription.deleted, customer.subscription.trial_will_end,
+#   invoice.payment_failed
+# ACH micro-deposit verification uses Stripe Financial Connections (automatic,
+# no extra config) or manual micro-deposits — both work out of the box.
 
 # OpenAI
 OPENAI_API_KEY=

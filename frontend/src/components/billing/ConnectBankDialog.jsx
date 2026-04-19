@@ -42,7 +42,7 @@ function BankSetupForm({ onSuccess, onCancel }) {
     setLoading(true)
     setError(null)
 
-    const { error: stripeError } = await stripe.confirmSetup({
+    const { setupIntent, error: stripeError } = await stripe.confirmSetup({
       elements,
       confirmParams: {
         return_url: window.location.href.split('?')[0] + '?redirect_status=succeeded',
@@ -55,7 +55,13 @@ function BankSetupForm({ onSuccess, onCancel }) {
     if (stripeError) {
       setError(stripeError.message)
     } else {
-      onSuccess()
+      // Detect micro-deposit case: setupIntent still requires_action after confirm
+      const requiresMicrodeposits =
+        setupIntent?.status === 'requires_action' &&
+        setupIntent?.next_action?.type === 'verify_with_microdeposits'
+      const hostedVerificationUrl =
+        setupIntent?.next_action?.verify_with_microdeposits?.hosted_verification_url ?? null
+      onSuccess({ requiresMicrodeposits, hostedVerificationUrl })
     }
   }
 
@@ -90,9 +96,11 @@ function BankSetupForm({ onSuccess, onCancel }) {
  */
 export default function ConnectBankDialog({ open, onClose, tenantId, tenantName, onConnected }) {
   const qc = useQueryClient()
-  const [step,         setStep]         = useState('idle')   // idle | loading | form | success
-  const [clientSecret, setClientSecret] = useState(null)
-  const [setupError,   setSetupError]   = useState(null)
+  const [step,                  setStep]                  = useState('idle')   // idle | loading | form | success
+  const [clientSecret,          setClientSecret]          = useState(null)
+  const [setupError,            setSetupError]            = useState(null)
+  const [requiresMicrodeposits, setRequiresMicrodeposits] = useState(false)
+  const [verificationUrl,       setVerificationUrl]       = useState(null)
 
   const { mutate: createAdmin  } = useCreateSetupIntent()
   const { mutate: createSelf   } = useCreateMySetupIntent()
@@ -103,6 +111,8 @@ export default function ConnectBankDialog({ open, onClose, tenantId, tenantName,
       setStep('idle')
       setClientSecret(null)
       setSetupError(null)
+      setRequiresMicrodeposits(false)
+      setVerificationUrl(null)
     }
   }, [open])
 
@@ -125,7 +135,9 @@ export default function ConnectBankDialog({ open, onClose, tenantId, tenantName,
     })
   }
 
-  function handleSuccess() {
+  function handleSuccess({ requiresMicrodeposits: needsMicro = false, hostedVerificationUrl = null } = {}) {
+    setRequiresMicrodeposits(needsMicro)
+    setVerificationUrl(hostedVerificationUrl)
     setStep('success')
     // Refresh the payment-methods list so the parent component updates
     if (tenantId) qc.invalidateQueries({ queryKey: ['payment-methods', tenantId] })
@@ -197,12 +209,35 @@ export default function ConnectBankDialog({ open, onClose, tenantId, tenantName,
         {/* ── Success ── */}
         {step === 'success' && (
           <Stack alignItems="center" spacing={2} sx={{ py: 3 }}>
-            <CheckCircleOutlineIcon color="success" sx={{ fontSize: 56 }} />
-            <Typography variant="h6">Bank Account Connected!</Typography>
-            <Typography variant="body2" color="text.secondary" textAlign="center">
-              The bank account has been saved. You can now use it to collect ACH rent payments
-              from the Charges page.
-            </Typography>
+            <CheckCircleOutlineIcon color={requiresMicrodeposits ? 'warning' : 'success'} sx={{ fontSize: 56 }} />
+            {requiresMicrodeposits ? (
+              <>
+                <Typography variant="h6" textAlign="center">Check Your Bank Account</Typography>
+                <Typography variant="body2" color="text.secondary" textAlign="center">
+                  Stripe has sent two small micro-deposits to your bank account. This typically
+                  takes <strong>1–2 business days</strong>. Once they appear, click below to
+                  verify the amounts and activate your account for payments.
+                </Typography>
+                {verificationUrl && (
+                  <Button
+                    variant="outlined"
+                    href={verificationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Verify Micro-Deposits →
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <Typography variant="h6">Bank Account Connected!</Typography>
+                <Typography variant="body2" color="text.secondary" textAlign="center">
+                  Your bank account has been verified and saved. You can now use it to pay
+                  rent from the Charges page.
+                </Typography>
+              </>
+            )}
             <Button variant="contained" onClick={onClose}>Done</Button>
           </Stack>
         )}

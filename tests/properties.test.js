@@ -36,13 +36,15 @@ describe('GET /api/v1/properties/:id', () => {
 });
 
 describe('Commercial property plan gate', () => {
-  it('rejects commercial property creation for a free-plan landlord (402 COMMERCIAL_REQUIRED)', async () => {
+  it('rejects commercial property creation for a free-plan landlord (402 PLAN_LIMIT — property cap reached first)', async () => {
+    // LandlordA already has 1 property from fixtures — free plan max is 1.
+    // checkPlanLimit fires before the service-level commercial check, so PLAN_LIMIT is returned.
     const res = await request(app)
       .post('/api/v1/properties')
       .set('Authorization', `Bearer ${fx.landlordA.token}`)
-      .send({ name: 'Shop Denied', addressLine1: '1 Shop St', city: 'Testville', propertyType: 'commercial' });
+      .send({ name: 'Shop Denied', addressLine1: '1 Shop St', city: 'Testville', state: 'TX', zip: '00001', propertyType: 'commercial' });
     expect(res.status).toBe(402);
-    expect(res.body.code).toBe('COMMERCIAL_REQUIRED');
+    expect(res.body.code).toBe('PLAN_LIMIT');
   });
 
   it('rejects commercial property creation for a Starter-plan landlord (402 COMMERCIAL_REQUIRED)', async () => {
@@ -54,11 +56,11 @@ describe('Commercial property plan gate', () => {
       const res = await request(app)
         .post('/api/v1/properties')
         .set('Authorization', `Bearer ${fx.landlordA.token}`)
-        .send({ name: 'Shop Starter', addressLine1: '3 Starter St', city: 'Testville', propertyType: 'commercial' });
+        .send({ name: 'Shop Starter', addressLine1: '3 Starter St', city: 'Testville', state: 'TX', zip: '00001', propertyType: 'commercial' });
       expect(res.status).toBe(402);
       expect(res.body.code).toBe('COMMERCIAL_REQUIRED');
     } finally {
-      await fx.pool.query(`UPDATE users SET subscription_status = NULL, subscription_plan = NULL WHERE id = $1`, [fx.landlordA.id]);
+      await fx.pool.query(`UPDATE users SET subscription_status = 'none', subscription_plan = NULL WHERE id = $1`, [fx.landlordA.id]);
     }
   });
 
@@ -71,11 +73,11 @@ describe('Commercial property plan gate', () => {
       const res = await request(app)
         .post('/api/v1/properties')
         .set('Authorization', `Bearer ${fx.landlordA.token}`)
-        .send({ name: 'Shop Enterprise', addressLine1: '4 Enterprise St', city: 'Testville', propertyType: 'commercial' });
+        .send({ name: 'Shop Enterprise', addressLine1: '4 Enterprise St', city: 'Testville', state: 'TX', zip: '00001', propertyType: 'commercial' });
       expect(res.status).toBe(402);
       expect(res.body.code).toBe('COMMERCIAL_REQUIRED');
     } finally {
-      await fx.pool.query(`UPDATE users SET subscription_status = NULL, subscription_plan = NULL WHERE id = $1`, [fx.landlordA.id]);
+      await fx.pool.query(`UPDATE users SET subscription_status = 'none', subscription_plan = NULL WHERE id = $1`, [fx.landlordA.id]);
     }
   });
 
@@ -89,13 +91,13 @@ describe('Commercial property plan gate', () => {
       const res = await request(app)
         .post('/api/v1/properties')
         .set('Authorization', `Bearer ${fx.landlordA.token}`)
-        .send({ name: 'Corp Tower', addressLine1: '2 Commerce Ave', city: 'Testville', propertyType: 'commercial' });
+        .send({ name: 'Corp Tower', addressLine1: '2 Commerce Ave', city: 'Testville', state: 'TX', zip: '00001', propertyType: 'commercial' });
       expect(res.status).toBe(201);
       expect(res.body.property_type).toBe('commercial');
     } finally {
       // Restore to free plan so other tests are not affected
       await fx.pool.query(
-        `UPDATE users SET subscription_status = NULL, subscription_plan = NULL WHERE id = $1`,
+        `UPDATE users SET subscription_status = 'none', subscription_plan = NULL WHERE id = $1`,
         [fx.landlordA.id],
       );
     }
@@ -106,10 +108,16 @@ describe('Commercial property PATCH type-promotion gate', () => {
   let multiPropId;
 
   beforeAll(async () => {
+    // Temporarily upgrade to starter so landlordA can bypass the 1-property free-plan limit
+    await fx.pool.query(
+      `UPDATE users SET subscription_status = 'active', subscription_plan = 'starter' WHERE id = $1`,
+      [fx.landlordA.id],
+    );
     const propRes = await request(app)
       .post('/api/v1/properties')
       .set('Authorization', `Bearer ${fx.landlordA.token}`)
-      .send({ name: 'Upgrade Target', addressLine1: '77 Promo Ave', city: 'Testville', propertyType: 'multi' });
+      .send({ name: 'Upgrade Target', addressLine1: '77 Promo Ave', city: 'Testville', state: 'TX', zip: '00001', propertyType: 'multi' });
+    await fx.pool.query(`UPDATE users SET subscription_status = 'none', subscription_plan = NULL WHERE id = $1`, [fx.landlordA.id]);
     expect(propRes.status).toBe(201);
     multiPropId = propRes.body.id;
   });
@@ -135,12 +143,12 @@ describe('Commercial property PATCH type-promotion gate', () => {
       const createRes = await request(app)
         .post('/api/v1/properties')
         .set('Authorization', `Bearer ${fx.landlordA.token}`)
-        .send({ name: 'Editable Corp', addressLine1: '88 Corp Blvd', city: 'Testville', propertyType: 'commercial' });
+        .send({ name: 'Editable Corp', addressLine1: '88 Corp Blvd', city: 'Testville', state: 'TX', zip: '00001', propertyType: 'commercial' });
       expect(createRes.status).toBe(201);
       commPropId = createRes.body.id;
     } finally {
-      // Downgrade back to free BEFORE the patch test
-      await fx.pool.query(`UPDATE users SET subscription_status = NULL, subscription_plan = NULL WHERE id = $1`, [fx.landlordA.id]);
+      // Downgrade back to free plan BEFORE the patch test
+      await fx.pool.query(`UPDATE users SET subscription_status = 'none', subscription_plan = NULL WHERE id = $1`, [fx.landlordA.id]);
     }
 
     // Now on free plan, editing name only should succeed (no type change)

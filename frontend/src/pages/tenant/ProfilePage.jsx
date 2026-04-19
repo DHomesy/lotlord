@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { TextField, Stack, Button, Alert, Typography, Card, CardContent, Divider, Box } from '@mui/material'
+import { TextField, Stack, Button, Alert, Typography, Card, CardContent, Divider, Box, Chip } from '@mui/material'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import PageContainer from '../../components/layout/PageContainer'
 import ConnectBankDialog from '../../components/billing/ConnectBankDialog'
 import { useAuthStore } from '../../store/authStore'
@@ -74,15 +76,35 @@ export default function TenantProfilePage() {
       ) : (
         <Stack spacing={1} sx={{ maxWidth: 460, mt: 2 }}>
           {paymentMethods.map((pm) => (
-            <Card key={pm.id} variant="outlined">
+            <Card key={pm.id} variant="outlined" sx={pm.verified ? undefined : { borderColor: 'warning.main' }}>
               <CardContent sx={{ py: '8px !important', display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <AccountBalanceIcon fontSize="small" color="action" />
-                <Box>
+                <AccountBalanceIcon fontSize="small" color={pm.verified ? 'action' : 'warning'} />
+                <Box sx={{ flex: 1 }}>
                   <Typography variant="body2" fontWeight={500}>
                     {pm.bankName} •••• {pm.last4}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">{pm.accountType}</Typography>
                 </Box>
+                {pm.verified ? (
+                  <Chip icon={<CheckCircleIcon />} label="Verified" size="small" color="success" variant="outlined" />
+                ) : (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Chip icon={<WarningAmberIcon />} label="Verification pending" size="small" color="warning" variant="outlined" />
+                    {pm.hostedVerificationUrl && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="warning"
+                        href={pm.hostedVerificationUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{ whiteSpace: 'nowrap' }}
+                      >
+                        Verify →
+                      </Button>
+                    )}
+                  </Stack>
+                )}
               </CardContent>
             </Card>
           ))}

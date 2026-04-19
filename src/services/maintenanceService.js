@@ -3,6 +3,8 @@ const maintenanceRepo = require('../dal/maintenanceRepository');
 const unitRepo = require('../dal/unitRepository');
 const tenantRepo = require('../dal/tenantRepository');
 const leaseRepo = require('../dal/leaseRepository');
+const propertyRepo = require('../dal/propertyRepository');
+const notificationService = require('./notificationService');
 const storage = require('../integrations/storage');
 const audit = require('./auditService');
 const { assertMimeMatchesBytes } = require('../lib/mimeUtils');
@@ -91,7 +93,11 @@ async function getRequest(id, user) {
 /**
  * Create a new maintenance request.
  * Validates that the unit exists.
- * Tenants can only submit for valid units (unit ownership check is enforced by lease logic; unit must exist).
+ * Tenants can only submit for valid units (lease check enforces unit access).
+ *
+ * Side-effect: fires a fire-and-forget 'maintenance_submitted' notification to the property
+ * owner when the submitter is a tenant (not the owner themselves). Silently no-ops if no
+ * matching template exists in the DB, or if the notification send fails.
  */
 async function createRequest({ unitId, category, priority, title, description }, user) {
   const unit = await unitRepo.findById(unitId);
@@ -115,6 +121,26 @@ async function createRequest({ unitId, category, priority, title, description },
     description,
   });
   audit.log({ action: 'maintenance_request_created', resourceType: 'maintenance', resourceId: request.id, userId: user.sub, metadata: { unitId, category, priority, title } });
+
+  // Notify the property owner of the new submission (fire-and-forget — never blocks creation).
+  // Triggered by the 'maintenance_submitted' email/sms template.
+  // Skip if the submitter IS the property owner (landlord self-submitted).
+  propertyRepo.findById(unit.property_id).then((property) => {
+    if (!property?.owner_id || property.owner_id === user.sub) return;
+    return notificationService.sendAllChannels({
+      triggerEvent: 'maintenance_submitted',
+      recipientId:  property.owner_id,
+      variables: {
+        title:    request.title,
+        unit:     unit.unit_number,
+        category: request.category || '',
+        priority: request.priority || '',
+      },
+    });
+  }).catch((err) =>
+    console.warn('[maintenance] Failed to notify landlord of new request:', err.message),
+  );
+
   return request;
 }
 
@@ -124,6 +150,12 @@ async function createRequest({ unitId, category, priority, title, description },
  *  - Admin/staff can update all fields.
  *  - Tenants can only cancel their own open requests.
  * Automatically sets resolved_at when status becomes 'completed'.
+ *
+ * Side-effect: when status changes to 'in_progress' or 'completed', fires a fire-and-forget
+ * notification to the original submitter using the 'maintenance_in_progress' or
+ * 'maintenance_completed' trigger event respectively. No notification is sent when the
+ * updater is the same person who submitted the request. Silently no-ops if no template
+ * exists or if the status is unchanged.
  */
 async function updateRequest(id, data, user) {
   const request = await maintenanceRepo.findById(id);
@@ -155,6 +187,29 @@ async function updateRequest(id, data, user) {
 
   const updated = await maintenanceRepo.update(id, data);
   if (!updated) throw Object.assign(new Error('No valid fields to update'), { status: 400 });
+
+  // Notify the submitting tenant when a landlord/admin moves the request forward.
+  // Only fires when status actually changes to a notable value, and only to the
+  // person who submitted the request (never self-notifies the updater).
+  const STATUS_TRIGGER = { in_progress: 'maintenance_in_progress', completed: 'maintenance_completed' };
+  if (data.status
+      && STATUS_TRIGGER[data.status]
+      && data.status !== request.status
+      && request.submitted_by !== user.sub) {
+    notificationService.sendAllChannels({
+      triggerEvent: STATUS_TRIGGER[data.status],
+      recipientId:  request.submitted_by,
+      variables: {
+        title:    request.title,
+        unit:     request.unit_number,
+        property: request.property_name,
+        status:   data.status,
+      },
+    }).catch((err) =>
+      console.warn(`[maintenance] Failed to send ${STATUS_TRIGGER[data.status]} notification:`, err.message),
+    );
+  }
+
   return updated;
 }
 

@@ -14,14 +14,21 @@ router.post('/stripe', async (req, res) => {
   const sig = req.headers['stripe-signature'];
   if (!sig) return res.status(400).json({ error: 'Missing stripe-signature header' });
 
+  let event;
   try {
-    const event = await stripeService.handleWebhookEvent(req.body, sig);
-    res.json({ received: true, type: event.type });
+    // constructWebhookEvent throws a SignatureVerificationError on bad signature
+    event = await stripeService.handleWebhookEvent(req.body, sig);
   } catch (err) {
-    // Invalid signature — do NOT return 500 (Stripe would retry indefinitely)
-    console.error('[stripe webhook]', err.message);
-    res.status(400).json({ error: err.message });
+    if (err?.type === 'StripeSignatureVerificationError') {
+      // Stripe should NOT retry on a bad signature — return 400
+      console.error('[stripe webhook] Invalid signature:', err.message);
+      return res.status(400).json({ error: 'Invalid Stripe signature' });
+    }
+    // Any other error (DB failure, coding error) → 500 so Stripe retries
+    console.error('[stripe webhook] Handler error:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
   }
+  res.json({ received: true, type: event.type });
 });
 
 // POST /api/v1/webhooks/twilio/sms

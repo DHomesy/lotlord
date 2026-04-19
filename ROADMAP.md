@@ -1,21 +1,21 @@
 ﻿# LotLord — Roadmap
 
-Planned features and improvements. All items here are **not yet implemented** unless noted.
+Planned features and improvements. Items are **not yet implemented** unless marked ✅ shipped.
 See [CHANGELOG.md](CHANGELOG.md) for what has already shipped.
 
-Items are ordered by strategic priority. Complete Tier 1 before onboarding real users; complete Tier 2 before driving marketing traffic; Tier 3 is required before operating as a multi-landlord SaaS.
+Items are ordered by strategic priority. **Tier 1 is complete** — safe to onboard real users. Complete Tier 2 before driving marketing traffic; Tier 3 is required before operating as a multi-landlord SaaS.
 
 ---
 
 ## Table of Contents
 
-- [Tier 1 — Product Viability](#tier-1--product-viability)
-  - [Stripe Subscription Webhook Lifecycle](#stripe-subscription-webhook-lifecycle)
-  - [Rent Payment ACH Verification](#rent-payment-ach-verification)
+- [Tier 1 — Product Viability](#tier-1--product-viability) ✅ Complete
+  - [Stripe Subscription Webhook Lifecycle](#stripe-subscription-webhook-lifecycle) ✅
+  - [Rent Payment ACH Verification](#rent-payment-ach-verification) ✅
 - [Tier 2 — Retention & Trust](#tier-2--retention--trust)
   - [Tenant Payment Receipts & Statements](#tenant-payment-receipts--statements)
   - [Lease PDF Generation](#lease-pdf-generation)
-  - [Maintenance Status Notifications](#maintenance-status-notifications)
+  - ~~[Maintenance Status Notifications]~~ ✅ Shipped in v1.5.14
 - [Tier 3 — SaaS Readiness](#tier-3--saas-readiness)
   - [SaaS Multi-Tenancy](#saas-multi-tenancy)
   - [AI Agent for Communications](#ai-agent-for-communications)
@@ -27,48 +27,31 @@ Items are ordered by strategic priority. Complete Tier 1 before onboarding real 
 
 ---
 
-## Tier 1 — Product Viability
+## Tier 1 — Product Viability ✅ Complete
 
-These items block safe production deployment. A user-facing bug or a payment gap at this tier means money is lost or accounts break.
+All Tier 1 items shipped in **v1.5.14**. Safe to onboard real users.
 
 ---
 
-### Stripe Subscription Webhook Lifecycle
+### ✅ Stripe Subscription Webhook Lifecycle — shipped v1.5.14
 
-**Problem:** Stripe webhooks for subscription state transitions are not handled. If a card declines, a trial expires, or a subscription is cancelled from the Stripe dashboard, the app's `subscription_status` column is never updated — users keep full access indefinitely after they stop paying.
-
-**Events to handle** (in `src/controllers/billingController.js` / `webhookController.js`):
+All subscription lifecycle events are handled in `src/services/stripeService.js` (`handleWebhookEvent`):
 
 | Stripe Event | Action |
 |---|---|
 | `customer.subscription.created` | Set status `active`, store `current_period_end` |
-| `customer.subscription.updated` | Sync status + period dates |
+| `customer.subscription.updated` | Sync status + period dates (single authoritative path) |
 | `customer.subscription.deleted` | Set status `cancelled`, restrict access |
-| `invoice.payment_succeeded` | Renew `current_period_end` |
 | `invoice.payment_failed` | Set status `past_due`, email landlord |
 | `customer.subscription.trial_will_end` | Email landlord 3 days before trial ends |
 
-**Access enforcement:**
-- Middleware reads `subscription_status` from the DB (or JWT claim) and blocks `past_due` / `cancelled` landlords from write operations
-
-**Files affected:**
-- `src/routes/webhooks.js` — register Stripe webhook route
-- `src/controllers/billingController.js` — add event handlers
-- `src/dal/userRepository.js` — `updateSubscriptionStatus(userId, status, periodEnd)`
-- Migration: add `subscription_status` column if not already present
+Access enforcement via `requiresStarter` / `requiresEnterprise` middleware blocks `past_due` and `cancelled` landlords from all write operations.
 
 ---
 
-### Rent Payment ACH Verification
+### ✅ Rent Payment ACH Verification — shipped v1.5.14
 
-**Problem:** Stripe ACH (bank transfer) payments require micro-deposit verification before the first charge. The current flow accepts bank account details but does not guide users through the verification step, meaning first-time ACH payments will silently fail.
-
-**Implementation Steps:**
-
-1. **Frontend** — after adding a bank account, show a "verify your bank" card with an input for two micro-deposit amounts
-2. **Backend** — `POST /payments/verify-bank` calls `stripe.paymentMethods.verify()` with the amounts
-3. **Backend** — gate ACH charges behind `bank_account_verified` status; fall back to card if bank is unverified
-4. **UX** — email tenant when micro-deposits are sent (typically 1–2 business days); link them back to the verification page
+Full micro-deposit verification flow implemented. `listPaymentMethods` returns `verified` status and `hostedVerificationUrl` per payment method. Unverified bank accounts are surfaced in the UI with a direct link to Stripe-hosted verification. ACH charges against unverified accounts return `422 BANK_NOT_VERIFIED`.
 
 ---
 
@@ -95,18 +78,9 @@ Complete before driving user acquisition. Without these, landlords and tenants w
 
 ---
 
-### Maintenance Status Notifications
+### ✅ Maintenance Status Notifications — shipped v1.5.14
 
-**Problem:** When a landlord updates a maintenance request status (`open → in_progress → resolved`), the tenant receives no notification. Tenants have no visibility into whether their request is being actioned.
-
-**Implementation Steps:**
-
-1. **Backend** — in `maintenanceController.update()`, after saving, call `notificationService.send()` with the new status
-2. **Notification content:**
-   - `in_progress`: "Your maintenance request '[title]' is being worked on."
-   - `resolved`: "Your maintenance request '[title]' has been resolved."
-3. **Channel:** SMS (via Twilio) + in-app notification row (already wired)
-4. **Tenant opt-out:** respect existing `notification_preferences` opt-in/out before sending
+Email + SMS notifications fire on `maintenance_submitted` (to owner), `maintenance_in_progress`, and `maintenance_completed` (to submitter). All notifications are fire-and-forget and respect `notification_preferences` opt-in/out.
 
 ---
 
