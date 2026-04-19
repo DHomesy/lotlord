@@ -4,6 +4,7 @@ const tenantRepo = require('../dal/tenantRepository');
 const leaseRepo  = require('../dal/leaseRepository');
 const { getClient, query } = require('../config/db');
 const audit = require('../services/auditService');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 /**
  * Verify that the unit belongs to a property owned by the requesting landlord.
@@ -16,7 +17,7 @@ async function assertLandlordOwnsUnit(unitId, user) {
     `SELECT p.owner_id FROM units u JOIN properties p ON p.id = u.property_id WHERE u.id = $1 LIMIT 1`,
     [unitId],
   );
-  if (!rows[0] || rows[0].owner_id !== user.sub) {
+  if (!rows[0] || rows[0].owner_id !== resolveOwnerId(user)) {
     const err = new Error('You do not have permission to manage charges for this unit');
     err.status = 403;
     throw err;
@@ -56,7 +57,7 @@ async function listCharges(req, res, next) {
     const { unitId, leaseId, propertyId, unpaidOnly, chargeType } = req.query;
     let { tenantId } = req.query;
 
-    const isLandlord = req.user.role === 'landlord';
+    const isLandlord = req.user.role === 'landlord' || req.user.role === 'employee';
     const isTenant   = req.user.role === 'tenant';
 
     let forTenantId; // co-tenant-aware scope
@@ -80,7 +81,7 @@ async function listCharges(req, res, next) {
     // Landlords can only see charges for their own properties.
     // ownerId injected server-side means they don't need to pass an explicit filter —
     // the query will return all charges across their properties.
-    const ownerId = isLandlord ? req.user.sub : undefined;
+    const ownerId = isLandlord ? resolveOwnerId(req.user) : undefined;
 
     if (!unitId && !tenantId && !leaseId && !propertyId && !forTenantId && !isLandlord) {
       return res.status(400).json({

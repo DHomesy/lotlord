@@ -44,23 +44,23 @@ const NAV_GROUPS = [
   },
   {
     label: 'Finance',
-    roles: ['admin', 'landlord'],
+    roles: ['admin', 'landlord', 'employee'],
     items: [
-      { label: 'Ledger',  path: '/ledger',   icon: <AccountBalanceIcon />, roles: ['admin', 'landlord'] },
-      { label: 'Charges', path: '/charges',  icon: <RequestQuoteIcon />,  roles: ['admin', 'landlord'] },
-      { label: 'Billing', path: '/payments', icon: <PaymentIcon />,       roles: ['admin'] },
+      { label: 'Ledger',    path: '/ledger',    icon: <AccountBalanceIcon />, roles: ['admin', 'landlord', 'employee'] },
+      { label: 'Charges',   path: '/charges',   icon: <RequestQuoteIcon />,  roles: ['admin', 'landlord', 'employee'] },
+      { label: 'Payments',  path: '/payments',  icon: <PaymentIcon />,       roles: ['admin', 'landlord', 'employee'] },
     ],
   },
   {
     label: 'Admin',
-    roles: ['admin'],
+    roles: ['admin', 'landlord', 'employee'],
     items: [
-      { label: 'Notifications', path: '/notifications',           icon: <NotificationsIcon /> },
-      { label: 'Templates',     path: '/notifications/templates', icon: <ArticleIcon /> },
-      { label: 'Messages',      path: '/messages',                icon: <MailIcon /> },
-      { label: 'Users',         path: '/users',                   icon: <ManageAccountsIcon /> },
-      { label: 'Subscriptions', path: '/subscriptions',           icon: <CardMembershipIcon /> },
-      { label: 'Audit Log',     path: '/audit',                   icon: <HistoryIcon /> },
+      { label: 'Notifications', path: '/notifications',           icon: <NotificationsIcon />, roles: ['admin', 'landlord', 'employee'] },
+      { label: 'Templates',     path: '/notifications/templates', icon: <ArticleIcon />,       roles: ['admin'] },
+      { label: 'Messages',      path: '/messages',                icon: <MailIcon />,          roles: ['admin', 'landlord', 'employee'] },
+      { label: 'Users',         path: '/users',                   icon: <ManageAccountsIcon />, roles: ['admin'] },
+      { label: 'Subscriptions', path: '/subscriptions',           icon: <CardMembershipIcon />, roles: ['admin', 'landlord'] },
+      { label: 'Audit Log',     path: '/audit',                   icon: <HistoryIcon />,        roles: ['admin'] },
     ],
   },
   {
@@ -82,7 +82,7 @@ export default function Sidebar({ role, user, onNavClick }) {
   const initials = displayName
     ? displayName.slice(0, 1).toUpperCase()
     : '?'
-  const roleLabel = role === 'admin' ? 'Admin' : role === 'landlord' ? 'Landlord' : 'Tenant'
+  const roleLabel = role === 'admin' ? 'Admin' : role === 'landlord' ? 'Landlord' : role === 'employee' ? 'Employee' : 'Tenant'
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -160,7 +160,8 @@ export default function Sidebar({ role, user, onNavClick }) {
                           mx: 1,
                           mb: 0.25,
                           borderRadius: 1.5,
-                          py: 0.85,
+                          py: 1,
+                          minHeight: 44,
                           '&.Mui-selected': {
                             bgcolor: 'primary.main',
                             color: '#fff',

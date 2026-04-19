@@ -3,7 +3,7 @@
 Planned features and improvements. Items are **not yet implemented** unless marked ✅ shipped.
 See [CHANGELOG.md](CHANGELOG.md) for what has already shipped.
 
-Items are ordered by strategic priority. **Tier 1 is complete** — safe to onboard real users. Complete Tier 2 before driving marketing traffic; Tier 3 is required before operating as a multi-landlord SaaS.
+Items are ordered by strategic priority. **Tiers 1 and 2 are complete** — safe to onboard real users and drive marketing traffic. Tier 3 is required before operating as a multi-landlord SaaS.
 
 ---
 
@@ -12,14 +12,14 @@ Items are ordered by strategic priority. **Tier 1 is complete** — safe to onbo
 - [Tier 1 — Product Viability](#tier-1--product-viability) ✅ Complete
   - [Stripe Subscription Webhook Lifecycle](#stripe-subscription-webhook-lifecycle) ✅
   - [Rent Payment ACH Verification](#rent-payment-ach-verification) ✅
-- [Tier 2 — Retention & Trust](#tier-2--retention--trust)
-  - [Tenant Payment Receipts & Statements](#tenant-payment-receipts--statements)
+- [Tier 2 — Retention & Trust](#tier-2--retention--trust) ✅ Complete
+  - ~~[Tenant Payment Receipts & Statements]~~ ✅ Shipped in v1.6.0
   - [Lease PDF Generation](#lease-pdf-generation)
   - ~~[Maintenance Status Notifications]~~ ✅ Shipped in v1.5.14
 - [Tier 3 — SaaS Readiness](#tier-3--saas-readiness)
   - [SaaS Multi-Tenancy](#saas-multi-tenancy)
   - [AI Agent for Communications](#ai-agent-for-communications)
-  - [Role-Based Access Control (RBAC)](#role-based-access-control-rbac)
+  ~~[Role-Based Access Control (RBAC)]~~ ✅ Shipped in v1.6.0–v1.6.1
   - [Per-Property Twilio Number Management](#per-property-twilio-number-management)
 - [Tier 4 — Developer Health](#tier-4--developer-health)
   - [Test Coverage Audit](#test-coverage-audit)
@@ -55,26 +55,19 @@ Full micro-deposit verification flow implemented. `listPaymentMethods` returns `
 
 ---
 
-## Tier 2 — Retention & Trust
+## Tier 2 — Retention & Trust ✅ Complete
 
-Complete before driving user acquisition. Without these, landlords and tenants will churn because they can't document what happened.
+All Tier 2 items shipped in **v1.6.0**.
 
 ---
 
-### Tenant Payment Receipts & Statements
+### ✅ Tenant Payment Receipts & Statements — shipped v1.6.0
 
-**Goal:** Tenants can download a PDF receipt for each payment and a monthly statement of all charges and payments on their lease.
-
-**Backend:**
-- `GET /ledger/statement?from=&to=` — returns structured ledger entries for a date range
-- `GET /payments/:id/receipt` — returns a PDF receipt for a single payment
-- PDF generation via `pdfkit` or `puppeteer` (render an HTML template, export to PDF)
-
-**Frontend:**
-- Statement download button on the tenant `My Payments` page
-- Receipt download link on each row of the payment history table
-
-**Data already available:** `ledger_entries`, `rent_charges`, `payments` tables have everything needed.
+- `GET /payments/:id/receipt` — PDF receipt per payment (landlord, tenant, employees scoped)
+- `GET /ledger/statement` — JSON ledger entries for a date range
+- `GET /ledger/statement/pdf` — formatted PDF account statement for audit/legal use
+- Receipt download icon per row on the tenant Payments page
+- "Download Statement (PDF)" button on the tenant Payments page
 
 ---
 
@@ -163,30 +156,9 @@ All messages stored in ai_messages table for audit.
 
 ---
 
-### Role-Based Access Control (RBAC)
+### ✅ Role-Based Access Control (RBAC) — shipped v1.6.0
 
-**Goal:** Add a `staff` / property manager role with scoped permissions for landlords who employ people to manage units on their behalf.
-
-**Current roles:** `admin` (full), `landlord` (own properties), `tenant` (own lease)
-
-**Proposed `staff` role:**
-- Can view all resources under their associated landlord's properties
-- Can create/update maintenance requests and notes
-- Cannot record payments, void charges, or access billing
-- Cannot delete properties, units, or tenants
-
-**Implementation Steps:**
-
-1. **Migration:**
-```sql
-ALTER TABLE users DROP CONSTRAINT users_role_check;
-ALTER TABLE users ADD CONSTRAINT users_role_check
-  CHECK (role IN ('admin', 'landlord', 'staff', 'tenant'));
-ALTER TABLE users ADD COLUMN staff_of_user_id UUID REFERENCES users(id);
-```
-
-2. **Backend** — update `authorize()` calls to include `'staff'` where appropriate; add ownership scoping via `staff_of_user_id`
-3. **Frontend** — hide destructive actions (delete, void, record payment) for staff users
+`employee` role added. Employees are scoped to their employer's properties and units. All `owner_id` resolution runs through `resolveOwnerId()` which transparently redirects employee requests to their employer. Employees cannot record payments, void charges, or manage billing. Landlords invite employees via `POST /invitations/employee`.
 
 ---
 

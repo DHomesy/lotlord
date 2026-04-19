@@ -11,8 +11,11 @@ const {
 // GET  /api/v1/payments?leaseId=xxx
 router.get('/',    authenticate,                                                       controller.listPayments);
 // POST records manual cash/check payments; Stripe payments come in via webhook
-router.post('/',   authenticate, authorize('admin', 'landlord'), createPaymentValidators, validate, controller.createManualPayment);
+router.post('/',   authenticate, authorize('admin', 'landlord', 'employee'), createPaymentValidators, validate, controller.createManualPayment);
+// GET  /api/v1/payments/:id — single payment detail
 router.get('/:id', authenticate,                                                       controller.getPayment);
+// GET  /api/v1/payments/:id/receipt — PDF receipt download
+router.get('/:id/receipt', authenticate, controller.getReceipt);
 
 // ── Stripe ACH ──────────────────────────────────────────────────────────────
 // Step 1: obtain a SetupIntent client_secret so the tenant can add a bank account
@@ -49,6 +52,6 @@ router.post('/connect/onboard', authenticate, authorize('admin', 'landlord'), co
 // POST: returns a one-time login link to the Stripe Express Dashboard (already-onboarded only)
 router.post('/connect/login',   authenticate, authorize('admin', 'landlord'), controller.createConnectLoginLink);
 // GET:  returns the current onboarding status (connected, onboarded, chargesEnabled, etc.)
-router.get('/connect/status',   authenticate, authorize('admin', 'landlord'), controller.getConnectStatus);
+router.get('/connect/status',   authenticate, authorize('admin', 'landlord', 'employee'), controller.getConnectStatus);
 
 module.exports = router;

@@ -8,6 +8,7 @@ const notificationService = require('./notificationService');
 const storage = require('../integrations/storage');
 const audit = require('./auditService');
 const { assertMimeMatchesBytes } = require('../lib/mimeUtils');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 // ── Allowed MIME types for attachments ────────────────────────────────────────
 const ALLOWED_MIME_TYPES = new Set([
@@ -49,8 +50,8 @@ function forbidden(msg = 'Forbidden') {
  */
 function assertCanAccess(request, user) {
   if (user.role === 'admin') return;
-  if (user.role === 'landlord') {
-    if (request.owner_id !== user.sub) throw forbidden();
+  if (user.role === 'landlord' || user.role === 'employee') {
+    if (request.owner_id !== resolveOwnerId(user)) throw forbidden();
     return;
   }
   if (request.submitted_by !== user.sub) throw forbidden();
@@ -69,9 +70,9 @@ async function listRequests(user, { unitId, status, assignedTo, page = 1, limit 
   if (user.role === 'tenant') {
     // Tenants can only see their own submitted requests
     filters.submittedBy = user.sub;
-  } else if (user.role === 'landlord') {
-    // Landlords only see requests on their own properties
-    filters.ownerId = user.sub;
+  } else if (user.role === 'landlord' || user.role === 'employee') {
+    // Scope to properties owned by this user (or their employer)
+    filters.ownerId = resolveOwnerId(user);
     if (assignedTo) filters.assignedTo = assignedTo;
   } else if (assignedTo) {
     filters.assignedTo = assignedTo;

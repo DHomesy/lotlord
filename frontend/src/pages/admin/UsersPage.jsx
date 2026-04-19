@@ -13,19 +13,19 @@ const schema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8, 'Min 8 characters'),
-  role: z.enum(['admin', 'staff', 'tenant']).default('staff'),
+  role: z.enum(['admin', 'employee', 'tenant']).default('employee'),
 })
 
 function UserForm({ onSubmit, loading }) {
-  const { register, handleSubmit, formState: { errors } } = useForm({ resolver: zodResolver(schema), defaultValues: { role: 'staff' } })
+  const { register, handleSubmit, formState: { errors } } = useForm({ resolver: zodResolver(schema), defaultValues: { role: 'employee' } })
   return (
     <Stack component="form" onSubmit={handleSubmit(onSubmit)} spacing={2} sx={{ pt: 1 }}>
       <TextField label="Name" {...register('name')} error={!!errors.name} helperText={errors.name?.message} />
       <TextField label="Email" {...register('email')} error={!!errors.email} helperText={errors.email?.message} />
       <TextField label="Password" type="password" {...register('password')} error={!!errors.password} helperText={errors.password?.message} />
-      <TextField label="Role" select {...register('role')} defaultValue="staff">
+      <TextField label="Role" select {...register('role')} defaultValue="employee">
         <MenuItem value="admin">Admin</MenuItem>
-        <MenuItem value="staff">Staff</MenuItem>
+        <MenuItem value="employee">Employee</MenuItem>
         <MenuItem value="tenant">Tenant</MenuItem>
       </TextField>
       <Button type="submit" variant="contained" disabled={loading}>{loading ? 'Saving…' : 'Save'}</Button>

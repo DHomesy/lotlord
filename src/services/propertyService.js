@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const propertyRepo = require('../dal/propertyRepository');
 const userRepo     = require('../dal/userRepository');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 const ACTIVE_STATUSES = ['active', 'trialing'];
 
@@ -10,7 +11,7 @@ const ACTIVE_STATUSES = ['active', 'trialing'];
  */
 async function assertCommercialPlan(user) {
   if (user?.role === 'admin') return; // admins bypass all plan checks
-  const billing  = await userRepo.findBillingStatus(user.sub);
+  const billing  = await userRepo.findBillingStatus(resolveOwnerId(user));
   const isActive = ACTIVE_STATUSES.includes(billing?.subscription_status);
   if (!isActive || billing?.subscription_plan !== 'commercial') {
     const err = new Error(
@@ -25,7 +26,7 @@ async function assertCommercialPlan(user) {
 async function listProperties({ user, page, limit }) {
   // Tenants only see properties they are assigned to (via active leases) — handled by future scope
   // For now admin/staff see all
-  return propertyRepo.findAll({ ownerId: user.role === 'admin' ? undefined : user.sub, page, limit });
+  return propertyRepo.findAll({ ownerId: user.role === 'admin' ? undefined : resolveOwnerId(user), page, limit });
 }
 
 async function getProperty(id) {
@@ -43,12 +44,12 @@ async function createProperty(data, user) {
   if (data.propertyType === 'commercial') {
     await assertCommercialPlan(user);
   }
-  return propertyRepo.create({ ...data, id: uuidv4(), ownerId: user.sub });
+  return propertyRepo.create({ ...data, id: uuidv4(), ownerId: resolveOwnerId(user) });
 }
 
 async function updateProperty(id, data, user) {
   const property = await getProperty(id); // ensures 404 if missing
-  if (user?.role === 'landlord' && property.owner_id !== user.sub) {
+  if ((user?.role === 'landlord' || user?.role === 'employee') && property.owner_id !== resolveOwnerId(user)) {
     const err = new Error('Forbidden'); err.status = 403; throw err;
   }
   // Gate type change to commercial — same plan check as createProperty
@@ -66,7 +67,7 @@ async function updateProperty(id, data, user) {
 
 async function deleteProperty(id, user) {
   const property = await getProperty(id);
-  if (user?.role === 'landlord' && property.owner_id !== user.sub) {
+  if ((user?.role === 'landlord' || user?.role === 'employee') && property.owner_id !== resolveOwnerId(user)) {
     const err = new Error('Forbidden'); err.status = 403; throw err;
   }
   // Cascade archive: terminate active leases, soft-delete units, soft-delete property

@@ -12,20 +12,21 @@ async function findByEmail(email) {
 async function findById(id) {
   const { rows } = await query(
     `SELECT id, email, role, first_name, last_name, phone, avatar_url,
-            email_bounced, email_bounced_at, email_verified_at, token_version, created_at
+            email_bounced, email_bounced_at, email_verified_at, token_version,
+            employer_id, created_at
      FROM users WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
     [id],
   );
   return rows[0] || null;
 }
 
-async function create({ id, email, passwordHash, role, firstName, lastName, phone, acceptedTermsAt }, client = null) {
+async function create({ id, email, passwordHash, role, firstName, lastName, phone, acceptedTermsAt, employerId = null }, client = null) {
   const fn = client ? (sql, vals) => client.query(sql, vals) : query;
   const { rows } = await fn(
-    `INSERT INTO users (id, email, password_hash, role, first_name, last_name, phone, accepted_terms_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING id, email, role, first_name, last_name, phone, accepted_terms_at, email_verified_at, token_version, created_at`,
-    [id, email, passwordHash, role || 'tenant', firstName, lastName, phone || null, acceptedTermsAt || null],
+    `INSERT INTO users (id, email, password_hash, role, first_name, last_name, phone, accepted_terms_at, employer_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING id, email, role, first_name, last_name, phone, accepted_terms_at, email_verified_at, token_version, employer_id, created_at`,
+    [id, email, passwordHash, role || 'tenant', firstName, lastName, phone || null, acceptedTermsAt || null, employerId],
   );
   return rows[0];
 }

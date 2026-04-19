@@ -28,6 +28,14 @@ export function useCreateInvitation() {
   })
 }
 
+export function useCreateEmployeeInvitation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.createEmployeeInvitation,
+    onSuccess: () => qc.invalidateQueries({ queryKey: INVITATIONS_KEY }),
+  })
+}
+
 export function useResendInvitation() {
   const qc = useQueryClient()
   return useMutation({

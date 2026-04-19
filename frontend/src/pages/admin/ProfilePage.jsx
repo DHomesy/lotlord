@@ -31,6 +31,7 @@ export default function AdminProfilePage() {
   const user = useAuthStore((s) => s.user)
   const isAdmin    = user?.role === 'admin'
   const isLandlord = user?.role === 'landlord'
+  const isEmployee = user?.role === 'employee'
 
   const { mutate: updateMe,       isPending: savingProfile, isSuccess: profileSaved }               = useUpdateMe()
   const { mutate: changePassword, isPending: changingPw,   isSuccess: pwChanged, isError: pwError } = useChangePassword()
@@ -145,6 +146,17 @@ export default function AdminProfilePage() {
           {changingPw ? 'Saving…' : 'Change Password'}
         </Button>
       </Stack>
+
+      {/* ── Payout Setup (landlord only — Stripe Connect Express) ── */}
+      {isEmployee && (
+        <>
+          <Divider sx={{ my: 4 }} />
+          <Alert severity="info" sx={{ maxWidth: 460 }}>
+            You are a team member operating under your employer&apos;s account. Billing, payout
+            settings, and subscription management are handled by your employer.
+          </Alert>
+        </>
+      )}
 
       {/* ── Payout Setup (landlord only — Stripe Connect Express) ── */}
       {isLandlord && (<>

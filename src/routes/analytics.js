@@ -5,6 +5,6 @@ const { getDashboard } = require('../controllers/analyticsController');
 const router = Router();
 
 // Portfolio analytics dashboard is a Starter-and-above feature
-router.get('/dashboard', authenticate, authorize('admin', 'landlord'), requiresStarter, getDashboard);
+router.get('/dashboard', authenticate, authorize('admin', 'landlord', 'employee'), requiresStarter, getDashboard);
 
 module.exports = router;

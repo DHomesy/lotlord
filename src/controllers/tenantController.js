@@ -1,10 +1,11 @@
 const tenantService = require('../services/tenantService');
 const leaseRepo = require('../dal/leaseRepository');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 async function listTenants(req, res, next) {
   try {
     const { page = 1, limit = 20, includePending } = req.query;
-    const ownerId = req.user.role === 'landlord' ? req.user.sub : undefined;
+    const ownerId = (req.user.role === 'landlord' || req.user.role === 'employee') ? resolveOwnerId(req.user) : undefined;
     const tenants = await tenantService.listTenants({
       page: Number(page),
       limit: Number(limit),
@@ -17,10 +18,10 @@ async function listTenants(req, res, next) {
 
 async function getTenant(req, res, next) {
   try {
-    // Landlords may only view tenants on their own properties
-    if (req.user.role === 'landlord') {
+    // Landlords and employees may only view tenants on their own (or employer's) properties
+    if (req.user.role === 'landlord' || req.user.role === 'employee') {
       const tenant = await tenantService.getTenant(req.params.id);
-      const leases = await leaseRepo.findAll({ tenantId: tenant.id, ownerId: req.user.sub, limit: 1 });
+      const leases = await leaseRepo.findAll({ tenantId: tenant.id, ownerId: resolveOwnerId(req.user), limit: 1 });
       if (!leases.length) return res.status(403).json({ error: 'Forbidden' });
       return res.json(tenant);
     }

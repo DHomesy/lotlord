@@ -1,6 +1,7 @@
 const leaseService = require('../services/leaseService');
 const leaseRepo   = require('../dal/leaseRepository');
 const tenantRepo  = require('../dal/tenantRepository');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 async function listLeases(req, res, next) {
   try {
@@ -11,8 +12,8 @@ async function listLeases(req, res, next) {
       return res.json(leases);
     }
     let { tenantId, unitId, status, page = 1, limit = 20 } = req.query;
-    // Landlords are scoped to leases on their own properties
-    const ownerId = req.user.role === 'landlord' ? req.user.sub : undefined;
+    // Landlords and employees are scoped to leases on their own properties
+    const ownerId = (req.user.role === 'landlord' || req.user.role === 'employee') ? resolveOwnerId(req.user) : undefined;
     const leases = await leaseService.listLeases({ tenantId, unitId, status, page: Number(page), limit: Number(limit), ownerId });
     res.json(leases);
   } catch (err) { next(err); }
@@ -25,8 +26,8 @@ async function getLease(req, res, next) {
       const tenantRecord = await tenantRepo.findByUserId(req.user.sub);
       const canAccess = await leaseRepo.tenantCanAccessLease(req.params.id, tenantRecord?.id);
       if (!canAccess) return res.status(403).json({ error: 'Forbidden' });
-    } else if (req.user.role === 'landlord') {
-      if (lease.owner_id !== req.user.sub) {
+    } else if (req.user.role === 'landlord' || req.user.role === 'employee') {
+      if (lease.owner_id !== resolveOwnerId(req.user)) {
         return res.status(403).json({ error: 'Forbidden' });
       }
     }

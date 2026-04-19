@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('../config/env');
 const userRepo = require('../dal/userRepository');
 const { query } = require('../config/db');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 /**
  * Verifies the Bearer token in the Authorization header.
@@ -47,7 +48,7 @@ async function requiresStarter(req, res, next) {
     if (!req.user) return res.status(401).json({ error: 'Authentication required' });
     if (req.user.role === 'admin') return next();
 
-    const billing = await userRepo.findBillingStatus(req.user.sub);
+    const billing = await userRepo.findBillingStatus(resolveOwnerId(req.user));
     if (!billing || !ACTIVE_STATUSES.includes(billing.subscription_status)) {
       return res.status(402).json({
         error: 'This feature requires a Starter or Enterprise plan. Upgrade to continue.',
@@ -69,7 +70,7 @@ async function requiresEnterprise(req, res, next) {
     if (!req.user) return res.status(401).json({ error: 'Authentication required' });
     if (req.user.role === 'admin') return next();
 
-    const billing = await userRepo.findBillingStatus(req.user.sub);
+    const billing = await userRepo.findBillingStatus(resolveOwnerId(req.user));
     if (!billing || !ACTIVE_STATUSES.includes(billing.subscription_status) || billing.subscription_plan !== 'enterprise') {
       return res.status(402).json({
         error: 'This feature requires an Enterprise plan. Upgrade to continue.',
@@ -91,10 +92,10 @@ const requiresPro = requiresStarter;
 async function requiresConnectOnboarded(req, res, next) {
   try {
     if (!req.user) return res.status(401).json({ error: 'Authentication required' });
-    // Only landlords need a connected payout account
-    if (req.user.role !== 'landlord') return next();
+    // Only landlords and employees (acting as landlord) need a connected payout account
+    if (req.user.role !== 'landlord' && req.user.role !== 'employee') return next();
 
-    const connect = await userRepo.findConnectStatus(req.user.sub);
+    const connect = await userRepo.findConnectStatus(resolveOwnerId(req.user));
     if (!connect?.stripe_account_onboarded) {
       return res.status(422).json({
         error: 'Your Stripe payout account is not set up. Complete onboarding in your Profile before accepting ACH payments.',
@@ -139,7 +140,7 @@ async function requiresCommercialPlan(req, res, next) {
     if (!req.user) return res.status(401).json({ error: 'Authentication required' });
     if (req.user.role === 'admin') return next();
 
-    const billing = await userRepo.findBillingStatus(req.user.sub);
+    const billing = await userRepo.findBillingStatus(resolveOwnerId(req.user));
     const isActive = ACTIVE_STATUSES.includes(billing?.subscription_status);
     if (!isActive || billing?.subscription_plan !== 'commercial') {
       return res.status(402).json({
@@ -173,10 +174,10 @@ function checkPlanLimit(resource) {
     try {
       if (!req.user) return res.status(401).json({ error: 'Authentication required' });
 
-      // Admins bypass; they operate on behalf of landlords
+      // Admins bypass; employees use their employer's billing
       if (req.user.role === 'admin') return next();
 
-      const billing      = await userRepo.findBillingStatus(req.user.sub);
+      const billing      = await userRepo.findBillingStatus(resolveOwnerId(req.user));
       const isActive     = ['active', 'trialing'].includes(billing?.subscription_status);
       const plan         = isActive ? (billing?.subscription_plan ?? 'starter') : 'free';
       // enterprise and commercial both get unlimited properties/tenants/units globally
@@ -186,10 +187,12 @@ function checkPlanLimit(resource) {
       const max    = limits[plan] ?? limits.free;
       if (max === Infinity) return next();
 
+      // Count against the effective owner (employer for employees, self for landlords)
+      const effectiveOwnerId = resolveOwnerId(req.user);
       let countQuery, countParams;
       if (resource === 'properties') {
         countQuery  = 'SELECT COUNT(*)::int AS cnt FROM properties WHERE owner_id = $1 AND deleted_at IS NULL';
-        countParams = [req.user.sub];
+        countParams = [effectiveOwnerId];
       } else if (resource === 'units') {
         // Global unit cap applies on Free only. On Starter the global limit is Infinity,
         // but multi-family per-property cap (4 units) is enforced in unitService.
@@ -201,7 +204,7 @@ function checkPlanLimit(resource) {
             AND u.deleted_at IS NULL
             AND p.deleted_at IS NULL
         `;
-        countParams = [req.user.sub];
+        countParams = [effectiveOwnerId];
       } else {
         // tenants: count active (non-terminated) leases under this landlord's properties
         countQuery = `
@@ -212,7 +215,7 @@ function checkPlanLimit(resource) {
           WHERE p.owner_id = $1
             AND l.status NOT IN ('terminated', 'expired')
         `;
-        countParams = [req.user.sub];
+        countParams = [effectiveOwnerId];
       }
       const { rows } = await query(countQuery, countParams);
       const count = rows[0]?.cnt ?? 0;

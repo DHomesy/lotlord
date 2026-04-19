@@ -8,6 +8,7 @@ import TenantPicker from '../../components/pickers/TenantPicker'
 import ConnectBankDialog from '../../components/billing/ConnectBankDialog'
 import { usePaymentMethods, useConnectStatus } from '../../hooks/useStripeSetup'
 import { useTenant } from '../../hooks/useTenants'
+import { useAuthStore } from '../../store/authStore'
 
 function TenantBankSection({ tenantId }) {
   const [bankOpen, setBankOpen] = useState(false)
@@ -70,12 +71,14 @@ export default function BillingPage() {
   const navigate = useNavigate()
   const [selectedTenantId, setSelectedTenantId] = useState(null)
   const { data: connectStatus } = useConnectStatus()
+  const user = useAuthStore((s) => s.user)
+  const isEmployee = user?.role === 'employee'
 
   const connectReady = connectStatus?.onboarded === true
 
   return (
     <PageContainer title="Billing">
-      {!connectReady && (
+      {!connectReady && !isEmployee && (
         <Alert
           severity="warning"
           icon={<WarningAmberIcon />}
@@ -102,11 +105,16 @@ export default function BillingPage() {
           value={selectedTenantId}
           onChange={setSelectedTenantId}
           label="Select Tenant"
-          disabled={!connectReady}
+          disabled={!connectReady || isEmployee}
         />
       </Box>
 
-      {selectedTenantId && <TenantBankSection tenantId={selectedTenantId} />}
+      {!isEmployee && selectedTenantId && <TenantBankSection tenantId={selectedTenantId} />}
+      {isEmployee && (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          Bank account setup is managed by your employer. Contact them to update payment settings.
+        </Alert>
+      )}
     </PageContainer>
   )
 }

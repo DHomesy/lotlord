@@ -191,12 +191,21 @@ function LedgerTab() {
       )}
 
       {lease && (
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="flex-start">
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="flex-start" flexWrap="wrap">
           <Paper variant="outlined" sx={{ px: 2.5, py: 1.5, minWidth: 200 }}>
             <Typography variant="caption" color="text.secondary">Tenant</Typography>
             <Typography variant="body1" fontWeight={600}>
               {[lease.first_name, lease.last_name].filter(Boolean).join(' ') || '—'}
             </Typography>
+          </Paper>
+          <Paper variant="outlined" sx={{ px: 2.5, py: 1.5, minWidth: 200 }}>
+            <Typography variant="caption" color="text.secondary">Property / Unit</Typography>
+            <Typography variant="body1" fontWeight={600}>
+              {lease.property_name || '—'}{lease.unit_number ? ` — Unit ${lease.unit_number}` : ''}
+            </Typography>
+            {lease.address_line1 && (
+              <Typography variant="caption" color="text.secondary">{lease.address_line1}</Typography>
+            )}
           </Paper>
           <Paper variant="outlined" sx={{ px: 2.5, py: 1.5, minWidth: 200 }}>
             <Typography variant="caption" color="text.secondary">Current Balance</Typography>

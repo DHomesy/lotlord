@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const documentRepo = require('../dal/documentRepository');
 const storage = require('../integrations/storage');
 const { assertMimeMatchesBytes } = require('../lib/mimeUtils');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/webp', 'image/gif',
@@ -35,7 +36,7 @@ async function listDocuments(req, res, next) {
       // Accepting an arbitrary relatedId would let a tenant enumerate documents across any entity UUID.
       docs = await documentRepo.findAll({ tenantUserId: req.user.sub, relatedType, category, page, limit });
     } else {
-      docs = await documentRepo.findAll({ ownerId: req.user.sub, relatedId, relatedType, category, page, limit });
+      docs = await documentRepo.findAll({ ownerId: resolveOwnerId(req.user), relatedId, relatedType, category, page, limit });
     }
     res.json(docs);
   } catch (err) { next(err); }
@@ -71,7 +72,7 @@ async function uploadDocument(req, res, next) {
 
     const doc = await documentRepo.create({
       id:          uuidv4(),
-      ownerId:     req.user.sub,
+      ownerId:     resolveOwnerId(req.user),
       relatedId:   relatedId  || null,
       relatedType: relatedType || null,
       fileUrl,      // S3 key
@@ -99,7 +100,7 @@ async function getDownloadUrl(req, res, next) {
       const row = await documentRepo.findByIdForTenant(req.params.id, req.user.sub);
       canAccess = !!row;
     } else {
-      canAccess = doc.owner_id === req.user.sub;
+      canAccess = doc.owner_id === resolveOwnerId(req.user);
     }
 
     if (!canAccess) return res.status(403).json({ error: 'Access denied' });

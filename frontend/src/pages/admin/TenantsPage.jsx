@@ -6,7 +6,7 @@ import { z } from 'zod'
 import {
   Button, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
   Stack, TextField, Alert, Tooltip, IconButton, Chip, Typography,
-  Box, Divider, ToggleButtonGroup, ToggleButton,
+  Box, Divider, Tab, Tabs, ToggleButtonGroup, ToggleButton,
   useTheme, useMediaQuery,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
@@ -15,12 +15,14 @@ import MailOutlineIcon from '@mui/icons-material/MailOutline'
 import SmsIcon from '@mui/icons-material/Sms'
 import SendIcon from '@mui/icons-material/Send'
 import DeleteIcon from '@mui/icons-material/Delete'
+import PeopleIcon from '@mui/icons-material/People'
 import PageContainer from '../../components/layout/PageContainer'
 import DataTable from '../../components/common/DataTable'
 import EmptyState from '../../components/common/EmptyState'
 import UnitPicker from '../../components/pickers/UnitPicker'
 import { useTenants } from '../../hooks/useTenants'
-import { useCreateInvitation, useInvitations, useResendInvitation, useDeleteInvitation } from '../../hooks/useInvitations'
+import { useCreateInvitation, useCreateEmployeeInvitation, useInvitations, useResendInvitation, useDeleteInvitation } from '../../hooks/useInvitations'
+import { useAuthStore } from '../../store/authStore'
 
 // ── Column definitions ────────────────────────────────────────────────────────
 
@@ -188,11 +190,57 @@ function InviteForm({ onSubmit, loading }) {
   )
 }
 
+// ── Employee invite form schema ───────────────────────────────────────────────
+
+const employeeInviteSchema = z.object({
+  firstName: z.string().optional(),
+  lastName:  z.string().optional(),
+  email:     z.string().email('Valid email required'),
+})
+
+function EmployeeInviteForm({ onSubmit, loading }) {
+  const { register, handleSubmit, formState: { errors } } = useForm({
+    resolver: zodResolver(employeeInviteSchema),
+  })
+
+  return (
+    <Stack component="form" onSubmit={handleSubmit(onSubmit)} spacing={2} sx={{ pt: 1 }}>
+      <Alert severity="info" icon={false}>
+        The employee will receive an email to create their account. They will have access to
+        your properties, tenants, and operational tools — but cannot manage billing or subscriptions.
+      </Alert>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <TextField label="First Name (optional)" fullWidth {...register('firstName')} />
+        <TextField label="Last Name (optional)"  fullWidth {...register('lastName')} />
+      </Stack>
+      <TextField
+        label="Email"
+        type="email"
+        fullWidth
+        required
+        {...register('email')}
+        error={!!errors.email}
+        helperText={errors.email?.message}
+        InputProps={{
+          startAdornment: <MailOutlineIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />,
+        }}
+      />
+      <Button type="submit" variant="contained" disabled={loading}>
+        {loading ? 'Sending…' : 'Send Employee Invitation'}
+      </Button>
+    </Stack>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function TenantsPage() {
   const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
+  const isEmployee = user?.role === 'employee'
+  const [pageTab, setPageTab] = useState(0)           // 0=Tenants 1=Team Members
   const [open, setOpen]             = useState(false)
+  const [empOpen, setEmpOpen]       = useState(false)
   const [inviteView, setInviteView] = useState('pending') // 'pending' | 'accepted' | 'expired'
   const [sentTo, setSentTo]         = useState(null)
   const [resendInfo, setResendInfo] = useState(null)
@@ -207,6 +255,7 @@ export default function TenantsPage() {
   const { data: tenantsData, isLoading: loadingTenants } = useTenants()
   const { data: invitesData,  isLoading: loadingInvites } = useInvitations()
   const { mutate: invite,  isPending, error: inviteError, reset: resetInvite }  = useCreateInvitation()
+  const { mutate: inviteEmployee, isPending: invitingEmp, error: empError, reset: resetEmp } = useCreateEmployeeInvitation()
   const { mutate: resend }              = useResendInvitation()
   const { mutate: deleteInv }           = useDeleteInvitation()
 
@@ -223,6 +272,8 @@ export default function TenantsPage() {
     : inviteView === 'accepted'
       ? acceptedInvites
       : expiredInvites
+
+  const [empSentTo, setEmpSentTo] = useState(null)
 
   const handleInvite = (values) => {
     const payload = Object.fromEntries(Object.entries(values).filter(([, v]) => v))
@@ -255,17 +306,35 @@ export default function TenantsPage() {
     })
   }
 
+  const handleEmployeeInvite = (values) => {
+    const payload = Object.fromEntries(Object.entries(values).filter(([, v]) => v))
+    inviteEmployee(payload, {
+      onSuccess: (inv) => {
+        setEmpOpen(false)
+        resetEmp()
+        setEmpSentTo({ email: inv.email, signupUrl: inv.signupUrl })
+      },
+    })
+  }
+
   const inviteColumns = buildInviteColumns(inviteView, handleResend, (row) => setConfirmDelete(row), resendingId, deletingId)
 
+  const pageActions = pageTab === 0
+    ? <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)}>Invite Tenant</Button>
+    : !isEmployee
+      ? <Button variant="contained" startIcon={<PeopleIcon />} onClick={() => setEmpOpen(true)}>Invite Employee</Button>
+      : null
+
   return (
-    <PageContainer
-      title="Tenants"
-      actions={
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)}>
-          Invite Tenant
-        </Button>
-      }
-    >
+    <PageContainer title="Tenants" actions={pageActions}>
+      {/* Page-level tabs: Tenants / Team Members */}
+      <Tabs value={pageTab} onChange={(_, v) => setPageTab(v)} sx={{ mb: 3 }}>
+        <Tab label="Tenants" />
+        {!isEmployee && <Tab label="Team Members" />}
+      </Tabs>
+
+      {/* ── Tenants tab ─────────────────────────────────────────────────── */}
+      {pageTab === 0 && (<>
       {/* Resend confirmation banner */}
       {resendInfo && (
         <Alert
@@ -386,6 +455,39 @@ export default function TenantsPage() {
 
         <DataTable rows={inviteRows} columns={inviteColumns} loading={loadingInvites} />
       </Box>
+      </>)}
+
+      {/* ── Team Members tab ─────────────────────────────────────────────── */}
+      {pageTab === 1 && !isEmployee && (<>
+        {empSentTo && (
+          <Alert severity="success" onClose={() => setEmpSentTo(null)} sx={{ mb: 2 }}>
+            Employee invitation sent to <strong>{empSentTo.email}</strong>.
+            They will receive a sign-up link to create their account.
+          </Alert>
+        )}
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          Invite team members to help manage your properties. Employees can view and manage
+          tenants, leases, charges, and maintenance — but cannot access billing or subscription settings.
+        </Typography>
+        <DataTable
+          rows={allInvites.filter((r) => r.role === 'employee')}
+          columns={[
+            { field: 'first_name', headerName: 'Name', flex: 1,
+              valueGetter: (v, row) => [row.first_name, row.last_name].filter(Boolean).join(' ') || '—' },
+            { field: 'email', headerName: 'Email', flex: 1.5 },
+            { field: 'created_at', headerName: 'Invited', width: 110, valueFormatter: (v) => v?.slice(0, 10) },
+            { field: 'accepted_at', headerName: 'Accepted', width: 110, valueFormatter: (v) => v ? v.slice(0, 10) : '—' },
+            { field: 'expires_at', headerName: 'Expires', width: 110,
+              renderCell: ({ row }) => row.accepted_at
+                ? <Chip label="Accepted" size="small" color="success" />
+                : new Date(row.expires_at) > new Date()
+                  ? <Chip label={row.expires_at?.slice(0, 10)} size="small" color="warning" />
+                  : <Chip label="Expired" size="small" color="error" />,
+            },
+          ]}
+          loading={loadingInvites}
+        />
+      </>)}
 
       {/* Delete confirmation dialog */}
       <Dialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} maxWidth="xs" fullWidth>
@@ -414,6 +516,19 @@ export default function TenantsPage() {
             </Alert>
           )}
           <InviteForm onSubmit={handleInvite} loading={isPending} />
+        </DialogContent>
+      </Dialog>
+
+      {/* Employee invite dialog */}
+      <Dialog open={empOpen} onClose={() => { setEmpOpen(false); resetEmp() }} maxWidth="sm" fullWidth fullScreen={isMobile}>
+        <DialogTitle>Invite an Employee</DialogTitle>
+        <DialogContent>
+          {empError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {empError?.response?.data?.error ?? 'Failed to send invitation. Please try again.'}
+            </Alert>
+          )}
+          <EmployeeInviteForm onSubmit={handleEmployeeInvite} loading={invitingEmp} />
         </DialogContent>
       </Dialog>
     </PageContainer>

@@ -156,6 +156,7 @@ export default function DashboardPage() {
   const user = useAuthStore((s) => s.user)
   const navigate = useNavigate()
   const isLandlord = user?.role === 'landlord'
+  const isEmployee = user?.role === 'employee'
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
@@ -177,12 +178,16 @@ export default function DashboardPage() {
           <Alert
             severity="info"
             action={
-              <Button size="small" variant="contained" onClick={() => navigate('/profile?upgrade=1')}>
-                Upgrade Plan
-              </Button>
+              !isEmployee && (
+                <Button size="small" variant="contained" onClick={() => navigate('/profile?upgrade=1')}>
+                  Upgrade Plan
+                </Button>
+              )
             }
           >
-            Portfolio analytics are available on the Starter plan ($15/mo). Upgrade to unlock your dashboard metrics.
+            {isEmployee
+              ? 'Portfolio analytics require an active subscription. Contact your employer to upgrade.'
+              : 'Portfolio analytics are available on the Starter plan ($15/mo). Upgrade to unlock your dashboard metrics.'}
           </Alert>
         ) : (
           <Alert severity="error">

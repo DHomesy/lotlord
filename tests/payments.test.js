@@ -217,3 +217,82 @@ describe('POST /api/v1/payments/stripe/payment-intent/me  (tenant only)', () => 
     expect(res.status).toBe(400);
   });
 });
+
+// ── Receipt download ──────────────────────────────────────────────────────────
+
+describe('GET /api/v1/payments/:id/receipt', () => {
+  it('unauthenticated request returns 401', async () => {
+    const res = await request(app).get(`/api/v1/payments/${paymentAId}/receipt`);
+    expect(res.status).toBe(401);
+  });
+
+  it('landlordA can download a receipt for their own payment', async () => {
+    const res = await request(app)
+      .get(`/api/v1/payments/${paymentAId}/receipt`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+  });
+
+  it('landlordB cannot download a receipt for landlordA payment (403)', async () => {
+    const res = await request(app)
+      .get(`/api/v1/payments/${paymentAId}/receipt`)
+      .set('Authorization', `Bearer ${fx.landlordB.token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('tenantA can download a receipt for their own payment', async () => {
+    const res = await request(app)
+      .get(`/api/v1/payments/${paymentAId}/receipt`)
+      .set('Authorization', `Bearer ${fx.tenantA.token}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+  });
+
+  it('tenantB cannot download a receipt belonging to tenantA (403)', async () => {
+    const res = await request(app)
+      .get(`/api/v1/payments/${paymentAId}/receipt`)
+      .set('Authorization', `Bearer ${fx.tenantB.token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 404 for a non-existent payment ID', async () => {
+    const { v4: uuidv4 } = require('uuid');
+    const res = await request(app)
+      .get(`/api/v1/payments/${uuidv4()}/receipt`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /api/v1/payments/:id/receipt — employee scoping', () => {
+  it('employeeA (employer=landlordA) can download receipt for landlordA payment', async () => {
+    const res = await request(app)
+      .get(`/api/v1/payments/${paymentAId}/receipt`)
+      .set('Authorization', `Bearer ${fx.employeeA.token}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+  });
+
+  it('employeeA cannot download receipt for a landlordB payment (403)', async () => {
+    // Create a payment under landlordB's lease so we have a valid target
+    const { v4: uuidv4 } = require('uuid');
+    const chargeBId  = uuidv4();
+    const paymentBId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, charge_type, amount, due_date)
+       VALUES ($1, $2, $3, 'rent', 1200, CURRENT_DATE + INTERVAL '2 months')`,
+      [chargeBId, fx.unitB.id, fx.leaseB.id],
+    );
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, $3, 1200, CURRENT_DATE, 'cash', 'completed')`,
+      [paymentBId, fx.leaseB.id, chargeBId],
+    );
+
+    const res = await request(app)
+      .get(`/api/v1/payments/${paymentBId}/receipt`)
+      .set('Authorization', `Bearer ${fx.employeeA.token}`);
+    expect(res.status).toBe(403);
+  });
+});

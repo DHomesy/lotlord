@@ -1,11 +1,25 @@
 const invitationService = require('../services/invitationService');
 const { cookieOptions, COOKIE_NAME } = require('../config/cookies');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 async function createInvitation(req, res, next) {
   try {
     const { firstName, lastName, email, phone, unitId } = req.body;
     const invitation = await invitationService.createInvitation(
-      { invitedBy: req.user.sub, firstName, lastName, email, phone, unitId },
+      // resolveOwnerId ensures employee invitations are owned by the employer,
+      // so landlords can see/resend/delete them from their own invitation list.
+      { invitedBy: resolveOwnerId(req.user), firstName, lastName, email, phone, unitId },
+      req.user,
+    );
+    res.status(201).json(invitation);
+  } catch (err) { next(err); }
+}
+
+async function createEmployeeInvitation(req, res, next) {
+  try {
+    const { firstName, lastName, email, phone } = req.body;
+    const invitation = await invitationService.createEmployeeInvitation(
+      { invitedBy: req.user.sub, firstName, lastName, email, phone },
       req.user,
     );
     res.status(201).json(invitation);
@@ -15,8 +29,8 @@ async function createInvitation(req, res, next) {
 async function listInvitations(req, res, next) {
   try {
     const { page = 1, limit = 20 } = req.query;
-    // Landlords see only their own invitations; admins see all
-    const invitedBy = req.user.role === 'landlord' ? req.user.sub : null;
+    // Landlords and employees see only their employer's invitations; admins see all
+    const invitedBy = (req.user.role === 'landlord' || req.user.role === 'employee') ? resolveOwnerId(req.user) : null;
     const invitations = await invitationService.listInvitations({
       page: Number(page),
       limit: Number(limit),
@@ -67,4 +81,4 @@ async function deleteInvitation(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { createInvitation, listInvitations, getInvitation, acceptInvitation, resendInvitation, deleteInvitation };
+module.exports = { createInvitation, createEmployeeInvitation, listInvitations, getInvitation, acceptInvitation, resendInvitation, deleteInvitation };

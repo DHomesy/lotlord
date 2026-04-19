@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const unitRepo = require('../dal/unitRepository');
 const propertyRepo = require('../dal/propertyRepository');
 const { query } = require('../config/db');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 /**
  * Throws 422 if the property is multi-family and already has 4 units.
@@ -36,11 +37,11 @@ async function listUnits({ propertyId, status, page, limit }, user) {
       err.status = 404;
       throw err;
     }
-    if (user?.role === 'landlord' && property.owner_id !== user.sub) {
+    if ((user?.role === 'landlord' || user?.role === 'employee') && property.owner_id !== resolveOwnerId(user)) {
       const err = new Error('Forbidden'); err.status = 403; throw err;
     }
   }
-  const ownerId = user?.role === 'landlord' ? user.sub : undefined;
+  const ownerId = (user?.role === 'landlord' || user?.role === 'employee') ? resolveOwnerId(user) : undefined;
   return unitRepo.findAll({ propertyId, status, page, limit, ownerId });
 }
 
@@ -62,7 +63,7 @@ async function createUnit(data, user) {
     err.status = 404;
     throw err;
   }
-  if (user?.role === 'landlord' && property.owner_id !== user.sub) {
+  if ((user?.role === 'landlord' || user?.role === 'employee') && property.owner_id !== resolveOwnerId(user)) {
     const err = new Error('Forbidden'); err.status = 403; throw err;
   }
 
@@ -76,9 +77,9 @@ async function createUnit(data, user) {
 
 async function updateUnit(id, data, user) {
   const unit = await getUnit(id);
-  if (user?.role === 'landlord') {
+  if (user?.role === 'landlord' || user?.role === 'employee') {
     const property = await propertyRepo.findById(unit.property_id);
-    if (!property || property.owner_id !== user.sub) {
+    if (!property || property.owner_id !== resolveOwnerId(user)) {
       const err = new Error('Forbidden'); err.status = 403; throw err;
     }
   }
@@ -98,8 +99,8 @@ async function deleteUnit(id, user) {
   // signal returned to the controller (property_type).
   const property = await propertyRepo.findById(unit.property_id);
 
-  if (user?.role === 'landlord') {
-    if (!property || property.owner_id !== user.sub) {
+  if (user?.role === 'landlord' || user?.role === 'employee') {
+    if (!property || property.owner_id !== resolveOwnerId(user)) {
       const err = new Error('Forbidden'); err.status = 403; throw err;
     }
   }

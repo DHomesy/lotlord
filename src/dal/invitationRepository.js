@@ -1,14 +1,14 @@
 const { query } = require('../config/db');
 const { parsePagination } = require('../lib/pagination');
 
-async function create({ id, token, invitedBy, firstName, lastName, email, phone, unitId, expiresAt }) {
+async function create({ id, token, invitedBy, firstName, lastName, email, phone, unitId, expiresAt, type = 'tenant' }) {
   const { rows } = await query(
     `INSERT INTO tenant_invitations
-       (id, token, invited_by, first_name, last_name, email, phone, unit_id, expires_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       (id, token, invited_by, first_name, last_name, email, phone, unit_id, expires_at, type)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
      RETURNING *`,
     [id, token, invitedBy, firstName || null, lastName || null,
-     email || null, phone || null, unitId || null, expiresAt],
+     email || null, phone || null, unitId || null, expiresAt, type],
   );
   return rows[0];
 }

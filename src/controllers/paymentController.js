@@ -4,6 +4,8 @@ const tenantRepo   = require('../dal/tenantRepository');
 const leaseRepo    = require('../dal/leaseRepository');
 const ledgerRepo   = require('../dal/ledgerRepository');
 const stripeService = require('../services/stripeService');
+const PDFDocument   = require('pdfkit');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 async function listPayments(req, res, next) {
   try {
@@ -17,8 +19,8 @@ async function listPayments(req, res, next) {
       if (!tenantRecord || tenantRecord.id !== lease.tenant_record_id) {
         return res.status(403).json({ error: 'Forbidden' });
       }
-    } else if (req.user.role === 'landlord') {
-      if (lease.owner_id !== req.user.sub) return res.status(403).json({ error: 'Forbidden' });
+    } else if (req.user.role === 'landlord' || req.user.role === 'employee') {
+      if (lease.owner_id !== resolveOwnerId(req.user)) return res.status(403).json({ error: 'Forbidden' });
     }
 
     const payments = await paymentRepo.findByLeaseId(leaseId, { page: Number(page), limit: Number(limit) });
@@ -37,8 +39,8 @@ async function getPayment(req, res, next) {
       if (!tenantRecord || tenantRecord.id !== lease?.tenant_record_id) {
         return res.status(403).json({ error: 'Forbidden' });
       }
-    } else if (req.user.role === 'landlord') {
-      if (!lease || lease.owner_id !== req.user.sub) return res.status(403).json({ error: 'Forbidden' });
+    } else if (req.user.role === 'landlord' || req.user.role === 'employee') {
+      if (!lease || lease.owner_id !== resolveOwnerId(req.user)) return res.status(403).json({ error: 'Forbidden' });
     }
 
     res.json(payment);
@@ -48,9 +50,9 @@ async function getPayment(req, res, next) {
 async function createManualPayment(req, res, next) {
   try {
     const { leaseId, amountPaid, paymentDate, paymentMethod, chargeId, notes } = req.body;
-    if (req.user.role === 'landlord') {
+    if (req.user.role === 'landlord' || req.user.role === 'employee') {
       const lease = await leaseRepo.findById(leaseId);
-      if (!lease || lease.owner_id !== req.user.sub) {
+      if (!lease || lease.owner_id !== resolveOwnerId(req.user)) {
         return res.status(403).json({ error: 'Forbidden' });
       }
     }
@@ -185,6 +187,100 @@ async function getConnectStatus(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * GET /payments/:id/receipt
+ * Streams a PDF receipt for the given payment.
+ * - Tenant: may download their own payments
+ * - Landlord/employee: may download payments scoped to their properties
+ * - Admin: unrestricted
+ */
+async function getReceipt(req, res, next) {
+  try {
+    const payment = await paymentRepo.findForReceipt(req.params.id);
+    if (!payment) return res.status(404).json({ error: 'Payment not found' });
+
+    // Access control
+    if (req.user.role === 'tenant') {
+      const tenantRecord = await tenantRepo.findByUserId(req.user.sub);
+      const lease = await leaseRepo.findById(payment.lease_id);
+      if (!tenantRecord || tenantRecord.id !== lease?.tenant_record_id) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    } else if (req.user.role === 'landlord' || req.user.role === 'employee') {
+      if (payment.owner_id !== resolveOwnerId(req.user)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    }
+
+    const tenantName = [payment.tenant_first_name, payment.tenant_last_name].filter(Boolean).join(' ') || payment.tenant_email;
+    const landlordName = [payment.landlord_first_name, payment.landlord_last_name].filter(Boolean).join(' ') || 'LotLord';
+    const formattedAmount = `$${Number(payment.amount_paid).toFixed(2)}`;
+    const formattedDate = new Date(payment.payment_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const method = (payment.payment_method || 'payment').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+    const doc = new PDFDocument({ size: 'LETTER', margin: 60 });
+
+    doc.on('error', (err) => {
+      if (!res.headersSent) {
+        return res.status(500).json({ error: 'Failed to generate PDF' });
+      }
+      res.end();
+      console.error('[getReceipt] pdfkit error after pipe:', err.message);
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="receipt-${payment.id}.pdf"`);
+    doc.pipe(res);
+
+    // Header
+    doc.font('Helvetica-Bold').fontSize(24).text('LotLord', 60, 60);
+    doc.font('Helvetica').fontSize(11).fillColor('#555').text('Property Management Platform', 60, 89);
+    doc.moveTo(60, 110).lineTo(555, 110).lineWidth(1).strokeColor('#ddd').stroke();
+
+    // Title
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(18).text('PAYMENT RECEIPT', 60, 125);
+    doc.font('Helvetica').fontSize(11).fillColor('#555').text(`Receipt for payment ID: ${payment.id}`, 60, 148);
+
+    // PAID stamp
+    doc.save()
+       .translate(430, 120)
+       .rotate(-15)
+       .roundedRect(0, 0, 100, 40, 4)
+       .lineWidth(3).strokeColor('#2e7d32').stroke()
+       .font('Helvetica-Bold').fontSize(20).fillColor('#2e7d32')
+       .text('PAID', 18, 10)
+       .restore();
+
+    doc.moveTo(60, 175).lineTo(555, 175).lineWidth(0.5).strokeColor('#ddd').stroke();
+
+    // Details table
+    const lineH = 22;
+    let y = 190;
+    const col1 = 60, col2 = 220;
+
+    function row(label, value) {
+      doc.font('Helvetica-Bold').fontSize(11).fillColor('#333').text(label, col1, y);
+      doc.font('Helvetica').fontSize(11).fillColor('#000').text(value, col2, y);
+      y += lineH;
+    }
+
+    row('Tenant',          tenantName);
+    row('Property',        payment.property_name || '—');
+    row('Unit',            payment.unit_number   || '—');
+    row('Payment Date',    formattedDate);
+    row('Payment Method',  method);
+    row('Amount Paid',     formattedAmount);
+    row('Managed by',      landlordName);
+    if (payment.notes) row('Notes', payment.notes);
+
+    doc.moveTo(60, y + 5).lineTo(555, y + 5).lineWidth(0.5).strokeColor('#ddd').stroke();
+    doc.font('Helvetica').fontSize(9).fillColor('#aaa')
+       .text('This is an official payment receipt generated by LotLord. Please retain for your records.', 60, y + 15, { width: 495 });
+
+    doc.end();
+  } catch (err) { next(err); }
+}
+
 module.exports = {
   listPayments,
   getPayment,
@@ -198,4 +294,5 @@ module.exports = {
   createConnectOnboardingLink,
   createConnectLoginLink,
   getConnectStatus,
+  getReceipt,
 };

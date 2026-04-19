@@ -35,6 +35,9 @@ function signToken(user) {
       firstName:     user.first_name || null,
       // Include verification status so middleware can check without a DB query
       emailVerified: !!user.email_verified_at,
+      // For employees: include employer_id so resolveOwnerId() works in middleware
+      // without a DB round-trip.
+      employerId:    user.employer_id ?? null,
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN },
@@ -66,6 +69,12 @@ async function register({ email, password, firstName, lastName, phone, role, acc
 
   const passwordHash = await bcrypt.hash(password, 12);
 
+  // Employees are created via the invite flow only — block self-registration.
+  if (role === 'employee') {
+    const err = new Error('Employee accounts are created via invitation only');
+    err.status = 400;
+    throw err;
+  }
   const normalizedRole = role === 'tenant' ? 'tenant' : 'landlord';
 
   const dbClient = await getClient();

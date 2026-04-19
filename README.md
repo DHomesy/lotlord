@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.5.14 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.6.1 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -267,14 +267,35 @@ users
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
   email           TEXT UNIQUE NOT NULL
   password_hash   TEXT NOT NULL
-  role            TEXT NOT NULL CHECK (role IN ('admin', 'landlord', 'tenant'))
+  role            TEXT NOT NULL CHECK (role IN ('admin', 'landlord', 'tenant', 'employee'))
   first_name      TEXT
   last_name       TEXT
   phone           TEXT
   avatar_url      TEXT
+  employer_id     UUID REFERENCES users(id) ON DELETE SET NULL  -- employees only (migration 025)
+  stripe_account_id          TEXT   -- Stripe Connect Express account (landlords)
+  stripe_account_onboarded   BOOLEAN NOT NULL DEFAULT FALSE
+  stripe_billing_customer_id TEXT   -- SaaS subscription billing customer (landlords)
+  subscription_status TEXT
+  subscription_plan   TEXT
+  email_bounced       BOOLEAN NOT NULL DEFAULT FALSE
   created_at      TIMESTAMPTZ DEFAULT NOW()
   updated_at      TIMESTAMPTZ DEFAULT NOW()
   deleted_at      TIMESTAMPTZ  -- soft delete
+
+tenant_invitations
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
+  invited_by    UUID REFERENCES users(id)
+  email         TEXT
+  phone         TEXT
+  first_name    TEXT
+  last_name     TEXT
+  unit_id       UUID REFERENCES units(id)
+  token         UUID NOT NULL UNIQUE DEFAULT gen_random_uuid()
+  type          TEXT CHECK (type IN ('tenant', 'employee')) DEFAULT 'tenant'  -- migration 026
+  accepted_at   TIMESTAMPTZ
+  expires_at    TIMESTAMPTZ
+  created_at    TIMESTAMPTZ DEFAULT NOW()
 ```
 
 ---
@@ -601,9 +622,10 @@ Base URL: `/api/v1`
 | Units | `GET /properties/:id/units`, `POST /properties/:id/units`, `PATCH /units/:id` |
 | Tenants | `GET /tenants`, `POST /tenants`, `GET /tenants/:id`, `PATCH /tenants/:id` |
 | Leases | `GET /leases`, `POST /leases`, `GET /leases/:id`, `PATCH /leases/:id`, `GET /leases/:id/co-tenants`, `POST /leases/:id/co-tenants`, `DELETE /leases/:id/co-tenants/:tenantId` |
-| Payments | `GET /payments?leaseId=`, `POST /payments` (manual), `GET /payments/:id`, `POST /payments/stripe/setup-intent`, `POST /payments/stripe/payment-intent` |
-| Ledger | `GET /ledger?leaseId=` (audit trail), `GET /ledger/portfolio` (income summary — admin sees all; landlord scoped to own properties) |
+| Payments | `GET /payments?leaseId=`, `POST /payments` (manual), `GET /payments/:id`, `GET /payments/:id/receipt` (PDF), `POST /payments/stripe/setup-intent`, `POST /payments/stripe/payment-intent` |
+| Ledger | `GET /ledger?leaseId=` (audit trail), `GET /ledger/statement?leaseId=&from=&to=` (date-range JSON), `GET /ledger/statement/pdf?leaseId=&from=&to=` (PDF), `GET /ledger/portfolio` (income summary — admin sees all; landlord scoped to own properties) |
 | Charges | `GET /charges` (filter by leaseId/unitId/tenantId/propertyId), `POST /charges` (admin or landlord), `GET /charges/:id`, `PATCH /charges/:id` (edit description/due_date/type), `POST /charges/:id/void` (soft-delete; appends ledger credit if lease-linked) |
+| Invitations | `POST /invitations` (tenant invite), `POST /invitations/employee` (employee invite — landlord/admin only), `GET /invitations`, `POST /invitations/:id/resend`, `DELETE /invitations/:id`, `POST /invitations/validate` (public — token in body), `POST /invitations/accept` (public) |
 | Maintenance | `GET /maintenance`, `POST /maintenance`, `GET /maintenance/:id`, `PATCH /maintenance/:id` |
 | Maintenance Attachments | `GET /maintenance/:id/attachments`, `POST /maintenance/:id/attachments` (`multipart/form-data`, field: `file`), `DELETE /maintenance/:id/attachments/:attachmentId` |
 | Documents | `GET /documents`, `POST /documents`, `DELETE /documents/:id` |
@@ -717,7 +739,9 @@ See **[CHANGELOG.md](CHANGELOG.md)** for the full versioned release history.
   - **Tenant maintenance photo uploads**: `uploadAttachment()` added to `frontend/src/api/maintenance.js`; `MaintenanceForm` gains optional `showPhotos` prop (file input, up to 5 files, 20 MB each, `capture="environment"` for mobile rear camera, image/PDF accept); `TenantMaintenancePage` two-step submit: create request → parallel upload each file; partial-failure warning shown if any upload fails.
   - **Merged tenant Billing page**: `/my/billing` now hosts `TenantBillingPage` combining both Charges (Outstanding/All tabs + Pay button) and Payment History in one page; old `/my/charges` and `/my/payments` routes redirect to `/my/billing`; `TenantShell` nav updated (single "Billing" tab with `RequestQuoteIcon`); tab `variant` changed from `scrollable` to `standard` — 5 tabs fit without horizontal scroll on mobile.
   - **Duplicate payment prevention**: `paymentRepository` gains `findPendingByChargeId()` and `findCompletedByChargeId()`; `createMyPaymentIntent` returns 409 if a pending or completed payment already exists for the charge; `ledgerRepository.findCharges()` uses a `LATERAL` join to prioritise `completed` over `pending` payments and surfaces `pending` as a distinct charge status; Pay button hidden for any charge that is not `unpaid`.
-- [ ] **33. AI agent** — wire up OpenAI integration to Twilio inbound SMS handler, conversation management
+- [x] **33. Employee role + payment receipts + account statement PDF** — Full employee role (`migrations/025_employee_role.sql` + `026_invitation_type.sql`); employee data scoping via `resolveOwnerId`; `POST /invitations/employee`; `GET /payments/:id/receipt` (pdfkit PDF); `GET /ledger/statement` (JSON) + `GET /ledger/statement/pdf` (pdfkit PDF); 57 new tests (192 total, 14 suites). See CHANGELOG 1.6.0 for full details.
+- [x] **34. Frontend role-gating audit** — Employee role UI completion: ChargesPage void guard, Sidebar Subscriptions for landlords, UsersPage `'employee'` role fix, ProfilePage employee info card, PaymentsPage connect banner gating, DashboardPage employee upgrade CTA, LedgerPage Property/Unit meta card, TenantsPage Team Members tab + employee invite dialog. `createEmployeeInvitation` API + hook. See CHANGELOG 1.6.1.
+- [ ] **35. AI agent** — wire up OpenAI integration to Twilio inbound SMS handler, conversation management
 
 ---
 
@@ -725,7 +749,6 @@ See **[CHANGELOG.md](CHANGELOG.md)** for the full versioned release history.
 
 See **[ROADMAP.md](ROADMAP.md)** for architecture and implementation plans for:
 - AI agent for tenant communications (OpenAI + Twilio/SES)
-- Role-based access control — `staff` / property manager role
 - Per-table change tracking (`created_by` / `updated_by` on all entities)
 - Per-property Twilio number management
 
@@ -747,7 +770,7 @@ The React SPA lives in `frontend/` alongside this API. Full documentation — te
 | Forms | React Hook Form + Zod — all create/edit dialogs |
 | HTTP | Axios — shared instance with Bearer token injection + quiet 401 → refresh → retry |
 | Auth tokens | Access token in JS memory (15 min) + httpOnly refresh cookie (30 days) |
-| Roles → portals | `admin`/`landlord` → permanent sidebar shell at `/`; `tenant` → top-nav shell at `/my` |
+| Roles → portals | `admin`/`landlord`/`employee` → permanent sidebar shell at `/`; `tenant` → top-nav shell at `/my`. Employees share the admin shell but cannot see Subscriptions, Audit, Notification Templates, or Users. |
 
 **Scaffolded structure:**
 

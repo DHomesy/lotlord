@@ -1,4 +1,5 @@
 const propertyService = require('../services/propertyService');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 async function listProperties(req, res, next) {
   try {
@@ -11,7 +12,7 @@ async function listProperties(req, res, next) {
 async function getProperty(req, res, next) {
   try {
     const property = await propertyService.getProperty(req.params.id);
-    if (req.user.role === 'landlord' && property.owner_id !== req.user.sub) {
+    if ((req.user.role === 'landlord' || req.user.role === 'employee') && property.owner_id !== resolveOwnerId(req.user)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     res.json(property);

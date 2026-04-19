@@ -8,6 +8,65 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.6.1] — 2026-04-19 — Frontend role-gating audit, employee UI, LedgerPage property meta
+
+### Added
+- **TenantsPage — Team Members tab** — landlord/admin can now invite employees directly from the Tenants page. A new "Team Members" tab lists all employee-type invitations (pending / accepted / expired) with status chips. An "Invite Employee" dialog collects name + email, calls `POST /invitations/employee`, and explains the employee's access scope. Employees are hidden from this tab (they cannot recruit other employees).
+- **`createEmployeeInvitation` API function + hook** — `frontend/src/api/invitations.js` gains `createEmployeeInvitation`; `frontend/src/hooks/useInvitations.js` gains `useCreateEmployeeInvitation`. Both were missing — the employee invite endpoint existed in the backend but was unreachable from the UI.
+- **LedgerPage — Property / Unit meta card** — the LedgerTab summary block now shows a "Property / Unit" card alongside Tenant and Current Balance, including address. Fields sourced from `leaseRepo.findById` which already returns `property_name`, `unit_number`, `address_line1`.
+
+### Fixed
+- **ChargesPage — employees could void charges** — the Void button had no role guard; employees could soft-delete charges they have no authority to void. Void button is now hidden entirely for `role === 'employee'`. `shouldLoad` also now includes employees so they can view charges without the admin "select a filter first" block.
+- **ProfilePage — employees saw blank Stripe sections** — employees landing on Profile saw an empty payout and subscription area. They now see an info card: "You are a team member operating under your employer's account. Billing, payout settings, and subscription management are handled by your employer."
+- **PaymentsPage (admin/billing) — employees saw the connect-not-set-up banner** — the warning alert "Your Stripe payout account is not set up" was shown to employees who cannot act on it. Banner is now conditionally hidden for `role === 'employee'`; employees see an info alert directing them to their employer instead.
+- **DashboardPage — employees saw landlord upgrade CTA** — the 402 upgrade prompt ("Portfolio analytics are available on the Starter plan…") included an "Upgrade Plan" button for employees, who cannot manage subscriptions. Button hidden for employees; message updated: "Contact your employer to upgrade."
+- **UsersPage — stale `'staff'` role in Zod schema** — the create-user form schema was `z.enum(['admin', 'staff', 'tenant'])` and the dropdown showed "Staff". Updated to `'employee'` throughout.
+- **Sidebar — Subscriptions hidden from landlords** — the Subscriptions nav item had `roles: ['admin']` only, meaning landlords had no sidebar link to their own subscription page. Fixed to `roles: ['admin', 'landlord']`.
+
+---
+## [1.6.0] — 2026-04-19 — Employee role, payment receipts, account statement PDF, bug fixes, test expansion
+
+### Added
+- **Employee role** — full invite-only employee system for landlords to delegate property management access:
+  - `migrations/025_employee_role.sql` — extends `users.role` CHECK to include `'employee'`; adds `employer_id UUID REFERENCES users(id) ON DELETE SET NULL`; index on `employer_id`.
+  - `migrations/026_invitation_type.sql` — adds `type TEXT CHECK ('tenant','employee') DEFAULT 'tenant'` to `tenant_invitations`.
+  - `src/lib/authHelpers.js` (new) — `resolveOwnerId(user)`: returns `user.employerId` for employees, `user.sub` for all other roles. Throws 401 if an employee token is missing `employerId` (prevents stale pre-sprint tokens from silently scoping to wrong data).
+  - `src/services/authService.js` — `signToken()` includes `employerId` claim when `role === 'employee'`.
+  - Auth middleware (`requiresStarter`, `requiresEnterprise`, `requiresConnectOnboarded`, `checkPlanLimit`) — all use `resolveOwnerId(req.user)` so employee billing/plan checks read the employer's subscription, not the employee's own row.
+  - All services and controllers updated to use `resolveOwnerId` for owner-scoped queries (properties, units, leases, tenants, charges, payments, ledger, documents, maintenance, invitations).
+  - `POST /invitations/employee` — landlord/admin only; creates a `type='employee'` invitation row.
+  - `POST /invitations/accept` — branches on `inv.type`: employee path creates `role='employee'` user with `employer_id = inv.invited_by`, no tenant record; tenant path unchanged.
+  - Frontend: employee sees all landlord routes except Subscriptions, Audit, Notification Templates, Users; ProfilePage hides Stripe Connect + subscription sections.
+- **Payment receipt PDF** — `GET /payments/:id/receipt` streams a pdfkit PDF receipt (LotLord header, property/unit, tenant, amount, PAID stamp). Auth: tenant (own payment), landlord/employee (own property), admin (unrestricted).
+- **Account statement PDF (S9)** — `GET /ledger/statement/pdf?leaseId=&from=&to=` streams a multi-page pdfkit financial accounting statement:
+  - Same access control as `GET /ledger/statement`.
+  - Document includes: tenant/landlord/property meta block, date-filtered ledger entry table (Date | Description | Type | Charges | Payments | Running Balance), page-break guard, official footer.
+  - pdfkit `doc.on('error')` handler prevents partial responses from hanging the client if generation fails after the pipe starts.
+  - Filename: `statement-<leaseId-short>-<from>-<to>.pdf`.
+- **Frontend statement PDF button** — "Download Statement (PDF)" button on tenant Payments page replaced the previous CSV export; calls `GET /ledger/statement/pdf` and triggers a browser file download via blob URL.
+- **`GET /ledger/statement`** — JSON date-filtered ledger entries for a lease. Returns `{ leaseId, from, to, entries[] }`. Same RBAC as the ledger endpoint.
+
+### Fixed
+- **`getReceipt` tenant access check field mismatch** — `leaseRepo.findById` returns `tenant_record_id` (aliased column) but the access guard was comparing against `lease.tenant_id`. Every legitimate tenant received 403 when downloading their own receipt. Fixed to `lease.tenant_record_id`.
+- **`resolveOwnerId` silent fallback removed** — stale employee JWTs without `employerId` claim previously fell back to `user.sub`, silently scoping the employee to their own (empty) data. Now throws `{ status: 401, message: 'Employee token missing employerId claim' }` to force re-login.
+- **`createInvitation` implicit type** — `invitationRepo.create()` was called without `type` in `createInvitation()`, relying on the repo default. Now explicitly passes `type: 'tenant'` to prevent silent breakage if the repo signature changes.
+- **`migrate.js` SSL misconfiguration** — `rejectUnauthorized` was hardcoded to `false` in the migration runner regardless of environment. Fixed to match `db.js`: reads `DATABASE_SSL_REJECT_UNAUTHORIZED` env var; defaults to `true` (secure) in production.
+- **Ledger statement response test shape** — statement tests were asserting `Array.isArray(res.body)` but the endpoint wraps entries in `{ leaseId, from, to, entries }`. Fixed all assertions to check `res.body.entries`.
+- **`ledger_entries` test fixture** — `balance_after` column is NOT NULL; test insert was omitting it, crashing `beforeAll` and failing all 13 ledger tests. Fixed insert to include `balance_after: 0`.
+
+### Tests
+- **`tests/authHelpers.test.js`** (new) — 7 pure-unit tests for `resolveOwnerId`: all roles, employee with/without `employerId`, throw on missing claim.
+- **`tests/middleware.test.js`** (new) — 21 pure-unit tests (no DB, jest mock for `userRepo`):
+  - `authorize()`: allowed role, disallowed role, missing `req.user`, employee through employee-permitted route, employee blocked from landlord-only route.
+  - `requiresStarter()`: admin bypass, active/trialing pass, null/cancelled billing blocks, **employee billing check uses `employerId` not `sub`**, employee employer with no subscription blocked, missing `req.user`.
+- **`tests/employee.test.js`** (new) — 11 integration tests covering employee invite gate (landlord-only), property/unit scoping (employer's data only), plan limit billing reads employer.
+- **`tests/invitations.test.js`** — added 3 employee acceptance tests: creates `role=employee` user with correct `employer_id`, double-accept returns 410, missing `acceptedTerms` returns 400.
+- **`tests/payments.test.js`** — added 8 receipt IDOR tests (tenant own → 200+PDF, cross-tenant → 403, landlord own → 200+PDF, cross-landlord → 403, unauthenticated → 401, 404 for missing; employee scoping: own employer → 200, other landlord → 403).
+- **`tests/ledger.test.js`** — added 10 statement JSON tests (IDOR, date filter, empty range) + 10 statement PDF tests (IDOR, date filter, 400/401/404 guards, employee scoping).
+- **`tests/helpers/setup.js`** — added `fx.employeeA` fixture: `role='employee'` user with `employer_id = landlordAId`; JWT includes `employerId` claim. `makeToken()` accepts extra claims via spread.
+- Total test count: **135 tests → 192 tests across 14 suites**, all passing.
+
+---
 ## [1.5.14] — 2026-04-18 — ACH micro-deposit verification, maintenance notifications, subscription webhook lifecycle, security audit
 
 ### Added

@@ -1,6 +1,7 @@
 const unitService = require('../services/unitService');
 const propertyRepo = require('../dal/propertyRepository');
 const stripeService = require('../services/stripeService');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 async function listUnits(req, res, next) {
   try {
@@ -13,9 +14,9 @@ async function listUnits(req, res, next) {
 async function getUnit(req, res, next) {
   try {
     const unit = await unitService.getUnit(req.params.id);
-    if (req.user.role === 'landlord') {
+    if (req.user.role === 'landlord' || req.user.role === 'employee') {
       const property = await propertyRepo.findById(unit.property_id);
-      if (!property || property.owner_id !== req.user.sub) {
+      if (!property || property.owner_id !== resolveOwnerId(req.user)) {
         return res.status(403).json({ error: 'Forbidden' });
       }
     }

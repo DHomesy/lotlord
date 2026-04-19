@@ -496,10 +496,37 @@ async function getPortfolioIncomeSummary({ propertyId, fromDate, toDate, ownerId
   });
 }
 
+/**
+ * Return ledger entries for a lease filtered by optional date range.
+ * Used for the tenant/landlord statement export.
+ */
+async function findStatementEntries(leaseId, { from, to } = {}) {
+  const values = [leaseId];
+  const conditions = ['le.lease_id = $1'];
+  if (from) conditions.push(`le.created_at >= $${values.push(from)}`);
+  if (to)   conditions.push(`le.created_at <  $${values.push(to)}::date + INTERVAL '1 day'`);
+  const { rows } = await query(
+    `SELECT
+       le.id,
+       le.entry_type   AS type,
+       le.description,
+       le.amount,
+       le.balance_after AS balance,
+       le.created_at   AS date
+     FROM ledger_entries le
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY le.created_at ASC
+     LIMIT 5000`,
+    values,
+  );
+  return rows;
+}
+
 module.exports = {
   appendEntry,
   getCurrentBalance,
   findByLeaseId,
+  findStatementEntries,
   findUnpaidCharges,
   createCharge,
   findChargeById,

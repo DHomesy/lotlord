@@ -17,7 +17,7 @@ export default function ProtectedRoute({ allowedRoles }) {
     return <Navigate to={home} replace />
   }
 
-  // Block unverified landlords — admins and tenants are exempt
+  // Block unverified landlords — admins, tenants, and employees are exempt
   if (user.role === 'landlord' && !user.emailVerified) {
     return <Navigate to="/verify-email-pending" replace />
   }

@@ -34,9 +34,9 @@ export const router = createBrowserRouter([
       { path: '/terms',                    element: <TermsPage /> },
       { path: '/privacy',                  element: <PrivacyPage /> },
 
-      // Admin + Landlord
+      // Admin + Landlord + Employee
       {
-        element: <ProtectedRoute allowedRoles={['admin', 'landlord']} />,
+        element: <ProtectedRoute allowedRoles={['admin', 'landlord', 'employee']} />,
         children: [
           {
             element: <AdminShell />,

@@ -62,19 +62,21 @@ async function setup() {
 
   const JWT_SECRET = process.env.JWT_SECRET || 'test-secret-do-not-use-in-production';
 
-  function makeToken(id, role, email) {
-    return jwt.sign({ sub: id, email, role }, JWT_SECRET, { expiresIn: '1h' });
+  function makeToken(id, role, email, extra = {}) {
+    return jwt.sign({ sub: id, email, role, ...extra }, JWT_SECRET, { expiresIn: '1h' });
   }
 
   const passwordHash = await bcrypt.hash('TestPassword1!', 10);
 
   // ── Users ──────────────────────────────────────────────────────────────────
-  const adminId       = uuidv4();
-  const landlordAId   = uuidv4();
-  const landlordBId   = uuidv4();
-  const tenantAUserId = uuidv4();
-  const tenantBUserId = uuidv4();
+  const adminId        = uuidv4();
+  const landlordAId    = uuidv4();
+  const landlordBId    = uuidv4();
+  const tenantAUserId  = uuidv4();
+  const tenantBUserId  = uuidv4();
+  const employeeAId    = uuidv4();
 
+  // Insert base users first (no employer_id references yet)
   await pool.query(
     `INSERT INTO users (id, email, password_hash, role, first_name, last_name, accepted_terms_at)
      VALUES
@@ -84,6 +86,13 @@ async function setup() {
        ($4, 'test_tenant_a@test.invalid',    $6, 'tenant',   'Test', 'TenantA',   NOW()),
        ($5, 'test_tenant_b@test.invalid',    $6, 'tenant',   'Test', 'TenantB',   NOW())`,
     [adminId, landlordAId, landlordBId, tenantAUserId, tenantBUserId, passwordHash],
+  );
+
+  // Insert employee after landlordA exists (employer_id FK)
+  await pool.query(
+    `INSERT INTO users (id, email, password_hash, role, first_name, last_name, employer_id, accepted_terms_at)
+     VALUES ($1, 'test_employee_a@test.invalid', $2, 'employee', 'Test', 'EmployeeA', $3, NOW())`,
+    [employeeAId, passwordHash, landlordAId],
   );
 
   // ── Properties ─────────────────────────────────────────────────────────────
@@ -146,11 +155,12 @@ async function setup() {
   );
 
   // ── JWTs ───────────────────────────────────────────────────────────────────
-  const adminToken   = makeToken(adminId,       'admin',    'test_admin@test.invalid');
-  const tokenA       = makeToken(landlordAId,   'landlord', 'test_landlord_a@test.invalid');
-  const tokenB       = makeToken(landlordBId,   'landlord', 'test_landlord_b@test.invalid');
-  const tenantAToken = makeToken(tenantAUserId, 'tenant',   'test_tenant_a@test.invalid');
-  const tenantBToken = makeToken(tenantBUserId, 'tenant',   'test_tenant_b@test.invalid');
+  const adminToken     = makeToken(adminId,       'admin',    'test_admin@test.invalid');
+  const tokenA         = makeToken(landlordAId,   'landlord', 'test_landlord_a@test.invalid');
+  const tokenB         = makeToken(landlordBId,   'landlord', 'test_landlord_b@test.invalid');
+  const tenantAToken   = makeToken(tenantAUserId, 'tenant',   'test_tenant_a@test.invalid');
+  const tenantBToken   = makeToken(tenantBUserId, 'tenant',   'test_tenant_b@test.invalid');
+  const employeeAToken = makeToken(employeeAId,   'employee', 'test_employee_a@test.invalid', { employerId: landlordAId });
 
   async function teardown() {
     await cleanTestFixtures(pool);
@@ -173,6 +183,7 @@ async function setup() {
     leaseB:    { id: leaseBId },
     inviteA:   { id: inviteAId },
     inviteB:   { id: inviteBId },
+    employeeA: { id: employeeAId, token: employeeAToken },
   };
 }
 

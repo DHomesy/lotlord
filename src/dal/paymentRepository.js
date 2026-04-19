@@ -67,4 +67,51 @@ async function findCompletedByChargeId(chargeId) {
   return rows[0] || null;
 }
 
-module.exports = { findByLeaseId, findById, create, updateStatus, findByStripePaymentIntentId, findPendingByChargeId, findCompletedByChargeId };
+/**
+ * Fetch a payment with all data needed to generate a PDF receipt:
+ * tenant name, unit, property, landlord name, lease period.
+ */
+async function findForReceipt(id) {
+  const { rows } = await query(
+    `SELECT
+       p.id,
+       p.lease_id,
+       p.charge_id,
+       p.amount_paid,
+       p.payment_date,
+       p.payment_method,
+       p.status,
+       p.notes,
+       p.created_at,
+       -- lease context
+       l.start_date        AS lease_start,
+       l.end_date          AS lease_end,
+       l.monthly_rent,
+       -- tenant
+       tu.first_name       AS tenant_first_name,
+       tu.last_name        AS tenant_last_name,
+       tu.email            AS tenant_email,
+       -- unit
+       u.unit_number,
+       -- property
+       pr.name             AS property_name,
+       pr.address_line1    AS property_address,
+       pr.owner_id,
+       -- landlord name
+       lu.first_name       AS landlord_first_name,
+       lu.last_name        AS landlord_last_name
+     FROM rent_payments    p
+     JOIN leases           l  ON l.id  = p.lease_id
+     JOIN tenants          t  ON t.id  = l.tenant_id
+     JOIN users            tu ON tu.id = t.user_id
+     JOIN units            u  ON u.id  = l.unit_id
+     JOIN properties       pr ON pr.id = u.property_id
+     JOIN users            lu ON lu.id = pr.owner_id
+     WHERE p.id = $1
+     LIMIT 1`,
+    [id],
+  );
+  return rows[0] || null;
+}
+
+module.exports = { findByLeaseId, findById, findForReceipt, create, updateStatus, findByStripePaymentIntentId, findPendingByChargeId, findCompletedByChargeId };

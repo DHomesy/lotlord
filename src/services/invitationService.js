@@ -24,6 +24,7 @@ const { getClient } = require('../config/db');
 const { sendEmail } = require('../integrations/email');
 const { sendSms } = require('../integrations/twilio');
 const { FRONTEND_URL } = require('../config/env');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -53,11 +54,11 @@ async function createInvitation({ invitedBy, firstName, lastName, email, phone, 
   }
 
   // Validate unit ownership before creating the invitation
-  if (unitId && user?.role === 'landlord') {
+  if (unitId && (user?.role === 'landlord' || user?.role === 'employee')) {
     const unit = await unitRepo.findById(unitId);
     if (!unit) throw appErr('Unit not found', 404);
     const property = await propertyRepo.findById(unit.property_id);
-    if (!property || property.owner_id !== user.sub) {
+    if (!property || property.owner_id !== resolveOwnerId(user)) {
       throw appErr('You do not have permission to invite tenants to this unit', 403);
     }
   }
@@ -94,6 +95,7 @@ async function createInvitation({ invitedBy, firstName, lastName, email, phone, 
     phone,
     unitId: unitId || null,
     expiresAt,
+    type: 'tenant',
   });
 
   const signupUrl = `${FRONTEND_URL}/accept-invite/${token}`;
@@ -167,6 +169,7 @@ async function getInvitation(token) {
   if (new Date(inv.expires_at) < new Date()) throw appErr('This invitation link has expired', 410);
 
   return {
+    type:            inv.type ?? 'tenant',
     firstName:       inv.first_name,
     lastName:        inv.last_name,
     email:           inv.email,
@@ -207,27 +210,46 @@ async function acceptInvitation(token, { firstName, lastName, email, password, p
   let user, tenant;
   try {
     await dbClient.query('BEGIN');
-    user = await userRepo.create({
-      id: uuidv4(),
-      email: resolvedEmail,
-      passwordHash,
-      role: 'tenant',
-      firstName: firstName || inv.first_name || '',
-      lastName: lastName || inv.last_name || '',
-      phone: phone || inv.phone || null,
-      acceptedTermsAt,
-    }, dbClient);
 
-    // Create the tenant record linked to the new user, storing their opt-in choices
-    tenant = await tenantRepo.create({
-      id: uuidv4(),
-      userId: user.id,
-      emailOptIn,
-      smsOptIn,
-    }, dbClient);
+    if (inv.type === 'employee') {
+      // Employee invite: create a user with role='employee', linked to the inviting landlord
+      user = await userRepo.create({
+        id: uuidv4(),
+        email: resolvedEmail,
+        passwordHash,
+        role: 'employee',
+        firstName: firstName || inv.first_name || '',
+        lastName: lastName || inv.last_name || '',
+        phone: phone || inv.phone || null,
+        acceptedTermsAt,
+        employerId: inv.invited_by,
+      }, dbClient);
+      // No tenant record for employees
+      await invitationRepo.accept(token, null, dbClient);
+    } else {
+      user = await userRepo.create({
+        id: uuidv4(),
+        email: resolvedEmail,
+        passwordHash,
+        role: 'tenant',
+        firstName: firstName || inv.first_name || '',
+        lastName: lastName || inv.last_name || '',
+        phone: phone || inv.phone || null,
+        acceptedTermsAt,
+      }, dbClient);
 
-    // Backfill invitation with the new tenant id + mark accepted
-    await invitationRepo.accept(token, tenant.id, dbClient);
+      // Create the tenant record linked to the new user, storing their opt-in choices
+      tenant = await tenantRepo.create({
+        id: uuidv4(),
+        userId: user.id,
+        emailOptIn,
+        smsOptIn,
+      }, dbClient);
+
+      // Backfill invitation with the new tenant id + mark accepted
+      await invitationRepo.accept(token, tenant.id, dbClient);
+    }
+
     await dbClient.query('COMMIT');
   } catch (err) {
     await dbClient.query('ROLLBACK');
@@ -256,7 +278,7 @@ async function resendInvitation(id, user) {
   const inv = await invitationRepo.findById(id);
 
   if (!inv) throw appErr('Invitation not found', 404);
-  if (user?.role === 'landlord' && inv.invited_by !== user.sub) {
+  if ((user?.role === 'landlord' || user?.role === 'employee') && inv.invited_by !== resolveOwnerId(user)) {
     throw appErr('Forbidden', 403);
   }
   if (inv.accepted_at) throw appErr('This invitation has already been accepted and cannot be resent', 409);
@@ -329,7 +351,7 @@ async function deleteInvitation(id, user) {
     err.status = 404;
     throw err;
   }
-  if (user?.role === 'landlord' && inv.invited_by !== user.sub) {
+  if ((user?.role === 'landlord' || user?.role === 'employee') && inv.invited_by !== resolveOwnerId(user)) {
     throw appErr('Forbidden', 403);
   }
   if (inv.accepted_at) {
@@ -340,4 +362,102 @@ async function deleteInvitation(id, user) {
   await invitationRepo.remove(id);
 }
 
-module.exports = { createInvitation, getInvitation, acceptInvitation, listInvitations, resendInvitation, deleteInvitation };
+/**
+ * Create and dispatch an employee invitation.
+ * - Landlord/admin only (employees cannot invite other employees)
+ * - Creates a tenant_invitations row with type='employee'
+ * - Sends an email invite with a signup link
+ */
+async function createEmployeeInvitation({ invitedBy, firstName, lastName, email, phone }, user) {
+  if (!email && !phone) {
+    throw appErr('At least one of email or phone is required to send an invitation', 400);
+  }
+
+  if (email) {
+    const existingUser = await userRepo.findByEmail(email);
+    if (existingUser) {
+      throw appErr(`A user with email ${email} already exists.`, 409);
+    }
+
+    const pendingInvite = await invitationRepo.findPendingByEmail(email);
+    if (pendingInvite) {
+      throw appErr(
+        `A pending invitation was already sent to ${email}. Use the resend button to send a fresh link.`,
+        409,
+      );
+    }
+  }
+
+  const token = crypto.randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  const invitation = await invitationRepo.create({
+    id: uuidv4(),
+    token,
+    invitedBy,
+    firstName,
+    lastName,
+    email,
+    phone,
+    unitId: null,
+    expiresAt,
+    type: 'employee',
+  });
+
+  const signupUrl = `${FRONTEND_URL}/accept-invite/${token}`;
+  const name = firstName ? `Hi ${escapeHtml(firstName)},` : 'Hi there,';
+
+  let employerName = 'Your employer';
+  if (invitedBy) {
+    try {
+      const employer = await userRepo.findById(invitedBy);
+      if (employer) {
+        const full = [employer.first_name, employer.last_name].filter(Boolean).join(' ');
+        if (full) employerName = escapeHtml(full);
+      }
+    } catch (_) { /* non-fatal */ }
+  }
+
+  const deliveryErrors = [];
+
+  if (email) {
+    try {
+      await sendEmail({
+        to: email,
+        subject: "You've been invited to join LotLord as a team member",
+        html: `
+          <p>${name}</p>
+          <p>${employerName} has added you as a team member on LotLord property management.</p>
+          <p>Click the link below to create your account. This link expires in <strong>7 days</strong>.</p>
+          <p><a href="${signupUrl}" style="font-size:16px;">Accept Invitation →</a></p>
+          <p style="color:#888;font-size:12px;">If you did not expect this email, you can safely ignore it.</p>
+          <p style="color:#888;font-size:12px;">Sent on behalf of ${employerName} via LotLord.</p>
+        `,
+        text: `${name} ${employerName} has invited you to join LotLord. Create your account here: ${signupUrl} (expires in 7 days)`,
+      });
+    } catch (err) {
+      console.error('[invitations] employee email delivery failed:', err.message);
+      deliveryErrors.push({ channel: 'email', message: err.message });
+    }
+  }
+
+  if (phone) {
+    try {
+      await sendSms({
+        to: phone,
+        body: `You've been invited to join LotLord as a team member. Create your account here: ${signupUrl}`,
+      });
+    } catch (err) {
+      console.error('[invitations] employee SMS delivery failed:', err.message);
+      deliveryErrors.push({ channel: 'sms', message: err.message });
+    }
+  }
+
+  return {
+    ...invitation,
+    signupUrl,
+    ...(deliveryErrors.length > 0 && { deliveryWarning: deliveryErrors }),
+  };
+}
+
+module.exports = { createInvitation, createEmployeeInvitation, getInvitation, acceptInvitation, listInvitations, resendInvitation, deleteInvitation };

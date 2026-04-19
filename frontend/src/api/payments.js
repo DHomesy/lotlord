@@ -6,6 +6,10 @@ export const createPaymentIntent        = (data)      => http.post(`${base}/stri
 // Tenant self-service: pay their own charge (lease resolved server-side)
 export const createMyPaymentIntent      = (data)      => http.post(`${base}/stripe/payment-intent/me`, data).then((r) => r.data)
 
+// GET /payments/:id/receipt — returns a PDF blob
+export const getReceipt = (id) =>
+  http.get(`${base}/${id}/receipt`, { responseType: 'blob' }).then((r) => r.data)
+
 // ── Stripe ACH setup ──────────────────────────────────────────────────────────
 // Admin creates a SetupIntent on behalf of a specific tenant
 export const createSetupIntent          = (tenantId)  => http.post(`${base}/stripe/setup-intent`, { tenantId }).then((r) => r.data)

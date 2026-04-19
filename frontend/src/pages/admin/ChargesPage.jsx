@@ -133,6 +133,7 @@ export default function ChargesPage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const isLandlord = user?.role === 'landlord'
+  const isEmployee = user?.role === 'employee'
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
@@ -153,7 +154,7 @@ export default function ChargesPage() {
   // Landlords always load (ownerId scoping happens server-side).
   // Admins require at least a property or lease selection to avoid huge unscoped queries.
   const adminHasFilter = !!(filterPropertyId || filterLeaseId)
-  const shouldLoad = isLandlord || adminHasFilter
+  const shouldLoad = isLandlord || isEmployee || adminHasFilter
 
   // Build backend query params. unpaidOnly handled server-side for the Unpaid filter;
   // Paid and Voided are filtered client-side from the full dataset.
@@ -225,6 +226,7 @@ export default function ChargesPage() {
                 </IconButton>
               </span>
             </Tooltip>
+            {!isEmployee && (
             <Tooltip title="Void charge">
               <span>
                 <IconButton size="small" color="error" disabled={!canAct} onClick={() => setVoidTarget(row)}>
@@ -232,6 +234,7 @@ export default function ChargesPage() {
                 </IconButton>
               </span>
             </Tooltip>
+            )}
           </Stack>
         )
       },

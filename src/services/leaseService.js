@@ -6,6 +6,7 @@ const propertyRepo = require('../dal/propertyRepository');
 const { getClient } = require('../config/db');
 const ledgerRepo = require('../dal/ledgerRepository');
 const audit = require('./auditService');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
 async function listLeases({ tenantId, unitId, status, page, limit, ownerId }) {
   return leaseRepo.findAll({ tenantId, unitId, status, page, limit, ownerId });
@@ -39,9 +40,9 @@ async function createLease(data, createdBy, user) {
     throw err;
   }
 
-  if (user?.role === 'landlord') {
+  if (user?.role === 'landlord' || user?.role === 'employee') {
     const property = await propertyRepo.findById(unit.property_id);
-    if (!property || property.owner_id !== user.sub) {
+    if (!property || property.owner_id !== resolveOwnerId(user)) {
       const err = new Error('You do not have permission to create a lease for this unit');
       err.status = 403; throw err;
     }
@@ -83,7 +84,7 @@ async function createLease(data, createdBy, user) {
 
 async function updateLease(id, data, user) {
   const lease = await getLease(id);
-  if (user?.role === 'landlord' && lease.owner_id !== user.sub) {
+  if ((user?.role === 'landlord' || user?.role === 'employee') && lease.owner_id !== resolveOwnerId(user)) {
     const err = new Error('Forbidden'); err.status = 403; throw err;
   }
 
