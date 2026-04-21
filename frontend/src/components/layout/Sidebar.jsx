@@ -17,7 +17,6 @@ import PeopleIcon         from '@mui/icons-material/People'
 import DescriptionIcon    from '@mui/icons-material/Description'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import RequestQuoteIcon   from '@mui/icons-material/RequestQuote'
-import PaymentIcon        from '@mui/icons-material/Payment'
 import BuildIcon          from '@mui/icons-material/Build'
 import FolderIcon         from '@mui/icons-material/Folder'
 import MailIcon           from '@mui/icons-material/Mail'
@@ -46,9 +45,8 @@ const NAV_GROUPS = [
   {
     label: 'Finance',
     items: [
-      { label: 'Ledger',   path: '/ledger',   icon: <AccountBalanceIcon /> },
-      { label: 'Charges',  path: '/charges',  icon: <RequestQuoteIcon /> },
-      { label: 'Payments', path: '/payments', icon: <PaymentIcon /> },
+      { label: 'Ledger',  path: '/ledger',  icon: <AccountBalanceIcon /> },
+      { label: 'Charges', path: '/charges', icon: <RequestQuoteIcon /> },
     ],
   },
   {

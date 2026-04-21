@@ -8,6 +8,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.7.1] — 2026-04-21 — Payments tab consolidated into Profile
+
+### Changed
+- **Payments tab removed from Finance nav** — the standalone `/payments` (Stripe ACH bank account setup) page has been removed from the Finance sidebar group. Finance now contains only **Ledger** and **Charges**, reducing nav noise.
+- **Profile — Tenant Bank Accounts section added** — ACH bank account management (tenant picker, saved bank accounts, Connect Bank dialog) is now embedded in `ProfilePage` as a new "Tenant Bank Accounts" section, positioned between Payout Account and Subscription. The section is landlord-only; employees continue to see the existing employer-managed info alert.
+- **`/payments` route redirects to `/profile`** — any bookmarked or linked `/payments` URLs are automatically redirected so no hard 404s occur.
+
+---
 ## [1.7.0] — 2026-04-21 — UX polish sprint: Team page, Messages redesign, Ledger audit, Navbar restructure
 
 ### Added

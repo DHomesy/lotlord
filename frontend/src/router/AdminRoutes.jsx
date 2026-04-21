@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react'
+import { Navigate } from 'react-router-dom'
 import LoadingOverlay from '../components/common/LoadingOverlay'
 import ChunkErrorBoundary from '../components/common/ChunkErrorBoundary'
 
@@ -11,7 +12,6 @@ const LeasesPage          = lazy(() => import('../pages/admin/LeasesPage'))
 const EditLeasePage        = lazy(() => import('../pages/admin/EditLeasePage'))
 const LedgerPage          = lazy(() => import('../pages/admin/LedgerPage'))
 const ChargesPage         = lazy(() => import('../pages/admin/ChargesPage'))
-const PaymentsPage        = lazy(() => import('../pages/admin/PaymentsPage'))
 const MaintenancePage     = lazy(() => import('../pages/admin/MaintenancePage'))
 const DocumentsPage       = lazy(() => import('../pages/admin/DocumentsPage'))
 const NotificationsPage             = lazy(() => import('../pages/admin/NotificationsPage'))
@@ -39,7 +39,7 @@ const adminRoutes = [
   { path: '/leases/:id/edit',   element: wrap(<EditLeasePage />) },
   { path: '/ledger',            element: wrap(<LedgerPage />) },
   { path: '/charges',           element: wrap(<ChargesPage />) },
-  { path: '/payments',          element: wrap(<PaymentsPage />) },
+  { path: '/payments',          element: <Navigate to="/profile" replace /> },
   { path: '/maintenance',       element: wrap(<MaintenancePage />) },
   { path: '/documents',         element: wrap(<DocumentsPage />) },
   { path: '/notifications',              element: wrap(<NotificationsPage />) },

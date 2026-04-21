@@ -1,6 +1,6 @@
 {
   "name": "property-manager",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Full-stack property management platform — API server",
   "main": "src/index.js",
   "scripts": {
