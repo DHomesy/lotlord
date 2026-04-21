@@ -11,28 +11,21 @@ import { useProperties } from '../../hooks/useProperties'
 import { useMySubscription } from '../../hooks/useBilling'
 import { hasStarter } from '../../lib/plans'
 import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../../store/authStore'
 
 // ─── Lease Ledger columns ─────────────────────────────────────────────────────
 
+const fmtMoney = (v) => {
+  const n = Number(v)
+  return n < 0 ? `-$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `$${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+}
+
 const ledgerColumns = [
-  { field: 'created_at', headerName: 'Date', width: 130, valueFormatter: (v) => v?.slice(0, 10) },
+  { field: 'effective_date', headerName: 'Date', width: 120, valueFormatter: (v) => v?.slice(0, 10) },
   { field: 'entry_type', headerName: 'Type', width: 110, renderCell: ({ value }) => <StatusChip status={value} /> },
   { field: 'description', headerName: 'Description', flex: 1.5 },
-  {
-    field: 'amount',
-    headerName: 'Amount',
-    width: 130,
-    valueFormatter: (v) => {
-      const n = Number(v)
-      return n < 0 ? `-$${Math.abs(n).toLocaleString()}` : `$${n.toLocaleString()}`
-    },
-  },
-  {
-    field: 'balance_after',
-    headerName: 'Balance After',
-    width: 140,
-    valueFormatter: (v) => `$${Number(v).toLocaleString()}`,
-  },
+  { field: 'amount',        headerName: 'Amount',       width: 130, valueFormatter: fmtMoney },
+  { field: 'balance_after', headerName: 'Balance',      width: 130, valueFormatter: fmtMoney },
   { field: 'created_by_name', headerName: 'Recorded By', width: 150 },
 ]
 
@@ -65,7 +58,8 @@ function PortfolioTab() {
 
   const { data: subscription } = useMySubscription()
   const navigate = useNavigate()
-  const isStarter = hasStarter(subscription)
+  const user = useAuthStore((s) => s.user)
+  const isStarter = hasStarter(subscription) || user?.role === 'admin'
 
   const { data: propsData } = useProperties()
   const properties = Array.isArray(propsData) ? propsData : (propsData?.properties ?? [])

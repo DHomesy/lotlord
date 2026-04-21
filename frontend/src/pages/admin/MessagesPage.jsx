@@ -1,26 +1,36 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   Box, Paper, Stack, Typography, List, ListItemButton, ListItemText,
   ListItemAvatar, Avatar, Badge, Divider, TextField, Button, Alert,
-  Chip, CircularProgress, IconButton, useTheme, useMediaQuery,
+  Chip, CircularProgress, IconButton, Tooltip, Tab, Tabs, useTheme, useMediaQuery,
   Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material'
-import AddIcon        from '@mui/icons-material/Add'
-import ArrowBackIcon  from '@mui/icons-material/ArrowBack'
-import SendIcon       from '@mui/icons-material/Send'
-import EmailIcon      from '@mui/icons-material/Email'
-import SmsIcon        from '@mui/icons-material/Sms'
-import PageContainer  from '../../components/layout/PageContainer'
-import LoadingOverlay from '../../components/common/LoadingOverlay'
-import TenantPicker   from '../../components/pickers/TenantPicker'
+import AddIcon           from '@mui/icons-material/Add'
+import ArrowBackIcon     from '@mui/icons-material/ArrowBack'
+import SendIcon          from '@mui/icons-material/Send'
+import EmailIcon         from '@mui/icons-material/Email'
+import SmsIcon           from '@mui/icons-material/Sms'
+import NotificationsIcon from '@mui/icons-material/Notifications'
+import ScheduleIcon      from '@mui/icons-material/Schedule'
+import OpenInNewIcon     from '@mui/icons-material/OpenInNew'
+import PageContainer     from '../../components/layout/PageContainer'
+import DataTable         from '../../components/common/DataTable'
+import StatusChip        from '../../components/common/StatusChip'
+import LoadingOverlay    from '../../components/common/LoadingOverlay'
+import TenantPicker      from '../../components/pickers/TenantPicker'
 import {
   useConversations,
   useConversation,
   useSendMessage,
+  useNotificationLog,
 } from '../../hooks/useNotifications'
+import { useMySubscription } from '../../hooks/useBilling'
+import { hasStarter } from '../../lib/plans'
+import { useAuthStore } from '../../store/authStore'
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 const schema = z.object({
@@ -366,16 +376,141 @@ function ThreadView({ tenantId, onBack }) {
   )
 }
 
+// ─── Notification Log tab ────────────────────────────────────────────────────
+
+const LOG_COLUMNS = [
+  { field: 'created_at', headerName: 'Sent',    width: 150, valueFormatter: (v) => v?.slice(0, 16).replace('T', ' ') },
+  { field: 'channel',    headerName: 'Channel', width: 90 },
+  { field: 'subject',    headerName: 'Subject', flex: 1.5 },
+  { field: 'status',     headerName: 'Status',  width: 110, renderCell: ({ value }) => <StatusChip status={value} /> },
+]
+
+// ─── Automation tab ──────────────────────────────────────────────────────────
+
+const AUTOMATIONS = [
+  {
+    name:        'Rent Reminder',
+    schedule:    'Daily at 8:00 AM',
+    description: 'Sends a reminder to each tenant with a charge due the following day.',
+    template:    'rent_due',
+    icon:        <NotificationsIcon color="primary" />,
+  },
+  {
+    name:        'Late Fee',
+    schedule:    'Daily at 9:00 AM',
+    description: 'Applies a late fee to balances that have exceeded the grace period.',
+    template:    null,
+    icon:        <ScheduleIcon color="warning" />,
+  },
+  {
+    name:        'Lease Expiry Warning',
+    schedule:    'Every Monday at 8:00 AM',
+    description: 'Notifies tenants whose lease expires within 60 or 30 days.',
+    template:    'lease_expiring',
+    icon:        <ScheduleIcon color="error" />,
+  },
+]
+
+function AutomationTab({ navigate, isPaid }) {
+  return (
+    <Stack spacing={2}>
+      {!isPaid && (
+        <Alert
+          severity="info"
+          action={
+            <Button size="small" variant="contained" onClick={() => navigate('/profile?upgrade=1')}>
+              Upgrade
+            </Button>
+          }
+        >
+          Automated notifications are delivered to tenants on the <strong>Starter plan ($15/mo)</strong> and above.
+          On the free plan the jobs still run but no messages are delivered.
+        </Alert>
+      )}
+
+      <Typography variant="body2" color="text.secondary">
+        The following jobs run automatically on a schedule. Each job uses a notification template —
+        create or edit templates on the{' '}
+        <Button
+          size="small"
+          variant="text"
+          endIcon={<OpenInNewIcon sx={{ fontSize: 14 }} />}
+          onClick={() => navigate('/notifications/templates')}
+          sx={{ p: 0, minWidth: 0, verticalAlign: 'baseline', textTransform: 'none', fontWeight: 600 }}
+        >
+          Templates
+        </Button>{' '}
+        page.
+      </Typography>
+
+      <Stack spacing={1.5}>
+        {AUTOMATIONS.map((job) => (
+          <Paper key={job.name} variant="outlined" sx={{ p: 2 }}>
+            <Stack direction="row" spacing={2} alignItems="flex-start">
+              <Box sx={{ mt: 0.25 }}>{job.icon}</Box>
+              <Box sx={{ flexGrow: 1 }}>
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={1}
+                  alignItems={{ sm: 'center' }}
+                  justifyContent="space-between"
+                >
+                  <Typography variant="body2" fontWeight={600}>{job.name}</Typography>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Chip
+                      icon={<ScheduleIcon sx={{ fontSize: 13 }} />}
+                      label={job.schedule}
+                      size="small"
+                      variant="outlined"
+                      sx={{ height: 22, fontSize: 11 }}
+                    />
+                    <Chip label="Active" size="small" color="success" sx={{ height: 22, fontSize: 11 }} />
+                  </Stack>
+                </Stack>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {job.description}
+                </Typography>
+                {job.template && (
+                  <Tooltip title="View or edit this template">
+                    <Button
+                      size="small"
+                      variant="text"
+                      endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
+                      onClick={() => navigate('/notifications/templates')}
+                      sx={{ mt: 0.5, p: 0, minWidth: 0, textTransform: 'none', fontSize: 12 }}
+                    >
+                      Template: <code style={{ marginLeft: 4 }}>{job.template}</code>
+                    </Button>
+                  </Tooltip>
+                )}
+              </Box>
+            </Stack>
+          </Paper>
+        ))}
+      </Stack>
+    </Stack>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function MessagesPage() {
   const theme    = useTheme()
+  const navigate = useNavigate()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
+
+  const [tab, setTab]                           = useState(0)
   const [selectedTenantId, setSelectedTenantId] = useState(null)
   const [composeOpen, setComposeOpen]           = useState(false)
 
-  const { data: conversations = [], isLoading } = useConversations()
+  const { data: conversations = [], isLoading: loadingConvs } = useConversations()
+  const { data: logData, isLoading: loadingLog }              = useNotificationLog()
+  const { data: subscription }                                = useMySubscription()
+  const user = useAuthStore((s) => s.user)
 
-  if (isLoading) return <LoadingOverlay />
+  const isPaid  = hasStarter(subscription) || user?.role === 'admin'
+  const logRows = Array.isArray(logData) ? logData : (logData?.log ?? [])
+
+  if (loadingConvs && tab === 0) return <LoadingOverlay />
 
   const showList   = !isMobile || !selectedTenantId
   const showThread = !isMobile || !!selectedTenantId
@@ -384,66 +519,106 @@ export default function MessagesPage() {
     <PageContainer
       title="Messages"
       actions={
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setComposeOpen(true)}>
-          New Message
-        </Button>
+        tab === 0 ? (
+          <Tooltip title={!isPaid ? 'Requires Starter plan' : ''}>
+            <span>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setComposeOpen(true)}
+                disabled={!isPaid}
+              >
+                New Message
+              </Button>
+            </span>
+          </Tooltip>
+        ) : null
       }
     >
-      <Paper
-        variant="outlined"
-        sx={{
-          display: 'flex',
-          height: 'calc(100vh - 160px)',
-          minHeight: 400,
-          overflow: 'hidden',
-        }}
-      >
-        {/* Left — conversation list */}
-        {showList && (
-          <Box
-            sx={{
-              width: { xs: '100%', md: 300 },
-              flexShrink: 0,
-              borderRight: { md: 1 },
-              borderColor: 'divider',
-              overflowY: 'auto',
-            }}
-          >
-            <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
-              <Typography variant="subtitle2" fontWeight={600}>Conversations</Typography>
-            </Box>
-            <ConversationList
-              conversations={conversations}
-              selectedTenantId={selectedTenantId}
-              onSelect={setSelectedTenantId}
-            />
-          </Box>
-        )}
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
+        <Tab label="Conversations" />
+        <Tab label="Notification Log" />
+        <Tab label="Automation" />
+      </Tabs>
 
-        {/* Right — thread view */}
-        {showThread && (
-          <Box sx={{ flexGrow: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            {selectedTenantId ? (
-              <ThreadView
-                tenantId={selectedTenantId}
-                onBack={isMobile ? () => setSelectedTenantId(null) : undefined}
-              />
-            ) : (
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Select a conversation to view it
-                </Typography>
+      {/* ── Conversations ─────────────────────────────────────────────────── */}
+      {tab === 0 && (
+        <>
+          {!isPaid && (
+            <Alert
+              severity="info"
+              sx={{ mb: 2 }}
+              action={
+                <Button size="small" variant="contained" onClick={() => navigate('/profile?upgrade=1')}>
+                  Upgrade
+                </Button>
+              }
+            >
+              Sending messages to tenants requires the <strong>Starter plan ($15/mo)</strong>.
+            </Alert>
+          )}
+          <Paper
+            variant="outlined"
+            sx={{ display: 'flex', height: 'calc(100vh - 240px)', minHeight: 400, overflow: 'hidden' }}
+          >
+            {/* Left — conversation list */}
+            {showList && (
+              <Box
+                sx={{
+                  width: { xs: '100%', md: 300 },
+                  flexShrink: 0,
+                  borderRight: { md: 1 },
+                  borderColor: 'divider',
+                  overflowY: 'auto',
+                }}
+              >
+                <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+                  <Typography variant="subtitle2" fontWeight={600}>Conversations</Typography>
+                </Box>
+                <ConversationList
+                  conversations={conversations}
+                  selectedTenantId={selectedTenantId}
+                  onSelect={setSelectedTenantId}
+                />
               </Box>
             )}
-          </Box>
-        )}
-      </Paper>
+            {/* Right — thread view */}
+            {showThread && (
+              <Box sx={{ flexGrow: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                {selectedTenantId ? (
+                  <ThreadView
+                    tenantId={selectedTenantId}
+                    onBack={isMobile ? () => setSelectedTenantId(null) : undefined}
+                  />
+                ) : (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Select a conversation to view it
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            )}
+          </Paper>
 
-      <NewConversationDialog
-        open={composeOpen}
-        onClose={() => setComposeOpen(false)}
-        onCreated={(tenantId) => setSelectedTenantId(tenantId)}
-      />
+          <NewConversationDialog
+            open={composeOpen}
+            onClose={() => setComposeOpen(false)}
+            onCreated={(tenantId) => { setSelectedTenantId(tenantId); setTab(0) }}
+          />
+        </>
+      )}
+
+      {/* ── Notification Log ──────────────────────────────────────────────── */}
+      {tab === 1 && (
+        <DataTable rows={logRows} columns={LOG_COLUMNS} loading={loadingLog} />
+      )}
+
+      {/* ── Automation ────────────────────────────────────────────────────── */}
+      {tab === 2 && (
+        <AutomationTab navigate={navigate} isPaid={isPaid} />
+      )}
     </PageContainer>
   )
 }
+

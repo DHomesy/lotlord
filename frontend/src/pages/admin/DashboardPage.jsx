@@ -160,7 +160,10 @@ export default function DashboardPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
-  const [wizardOpen, setWizardOpen] = useState(!localStorage.getItem('ll_onboarding_done') && isLandlord)
+  const [wizardOpen, setWizardOpen] = useState(() => {
+    const key = user?.id ? `ll_onboarding_done_${user.id}` : 'll_onboarding_done'
+    return !localStorage.getItem(key) && isLandlord
+  })
 
   if (isLoading) return <LoadingOverlay />
 
@@ -216,6 +219,7 @@ export default function DashboardPage() {
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
         onAddProperty={() => navigate('/properties')}
+        storageKey={user?.id ? `ll_onboarding_done_${user.id}` : 'll_onboarding_done'}
       />
 
       <LandlordSetupCard />

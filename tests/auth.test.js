@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../src/app');
 const { setup } = require('./helpers/setup');
+const { v4: uuidv4 } = require('uuid');
 
 // ── toPublicUser — pure unit tests (no DB) ────────────────────────────────────
 // Extracted via module internals so the function can be tested without an HTTP
@@ -149,5 +150,71 @@ describe('Pagination — does not crash on invalid page param', () => {
       .get('/api/v1/users?page=abc&limit=xyz')
       .set('Authorization', `Bearer ${fx.admin.token}`);
     expect(res.status).toBe(200);
+  });
+});
+
+// ── Refresh token invalidation on logout ──────────────────────────────────────
+
+describe('POST /api/v1/auth/refresh — token invalidation after logout', () => {
+  it('refresh token is invalidated after logout', async () => {
+    // 1. Login to obtain a real httpOnly refresh cookie
+    const loginRes = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'test_landlord_a@test.invalid', password: 'TestPassword1!' });
+    expect(loginRes.status).toBe(200);
+    const cookies = loginRes.headers['set-cookie'];
+    expect(cookies).toBeDefined();
+
+    // 2. Confirm the refresh token works before logout
+    const preLogout = await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', cookies);
+    expect(preLogout.status).toBe(200);
+
+    // 3. Logout — increments token_version, invalidating the cookie
+    await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', cookies);
+
+    // 4. Same old cookie must now be rejected
+    const postLogout = await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', cookies);
+    expect(postLogout.status).toBe(401);
+  });
+});
+
+// ── Password reset token single-use ──────────────────────────────────────────
+
+describe('POST /api/v1/auth/reset-password — token single use', () => {
+  it('reset token cannot be used a second time after a successful reset', async () => {
+    // Seed a valid reset token directly so we don't depend on email delivery
+    const token = uuidv4();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    await fx.pool.query(
+      `INSERT INTO password_reset_tokens (id, user_id, token, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [uuidv4(), fx.landlordB.id, token, expiresAt],
+    );
+
+    // 1. First use — should succeed
+    const firstRes = await request(app)
+      .post('/api/v1/auth/reset-password')
+      .send({ token, password: 'NewTestPass1!' });
+    expect(firstRes.status).toBe(200);
+
+    // 2. Second use with the same token — must fail
+    const secondRes = await request(app)
+      .post('/api/v1/auth/reset-password')
+      .send({ token, password: 'AnotherPass1!' });
+    expect(secondRes.status).toBe(400);
+
+    // Restore landlordB's password so other tests aren't affected
+    const bcrypt = require('bcryptjs');
+    const hash = await bcrypt.hash('TestPassword1!', 10);
+    await fx.pool.query(
+      'UPDATE users SET password_hash = $1 WHERE id = $2',
+      [hash, fx.landlordB.id],
+    );
   });
 });

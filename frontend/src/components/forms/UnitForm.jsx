@@ -46,7 +46,7 @@ export default function UnitForm({ onSubmit, defaultValues, loading, isEdit = fa
       />
       <Stack direction="row" spacing={2}>
         <TextField label="Bedrooms" type="number" {...register('bedrooms')} fullWidth />
-        <TextField label="Bathrooms" type="number" {...register('bathrooms')} fullWidth />
+        <TextField label="Bathrooms" type="number" {...register('bathrooms')} inputProps={{ step: 0.5, min: 0 }} fullWidth />
       </Stack>
       <TextField
         label="Monthly Rent ($)"

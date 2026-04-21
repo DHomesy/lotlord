@@ -232,7 +232,7 @@ All `create()` and `update()` DAL methods accept and persist `createdBy` / `upda
 
 ---
 
-*Last updated: May 2025*
+*Last updated: May 2026*
 
 
 ---
@@ -286,33 +286,9 @@ OPENAI_API_KEY=sk-...
 
 ---
 
-## Role-Based Access Control (RBAC)
+### ✅ Role-Based Access Control (RBAC) — shipped v1.6.0–1.6.1
 
-**Goal:** Add a `staff` / property manager role with scoped permissions. Needed when a landlord employs people to manage units on their behalf.
-
-**Current roles:** `admin` (full), `landlord` (own properties), `tenant` (own lease)
-
-**Proposed `staff` role:**
-- Can view all resources under their associated landlord's properties
-- Can create/update maintenance requests and notes
-- Cannot record payments, void charges, or access billing
-- Cannot delete properties, units, or tenants
-
-**Approach (simple — recommended first):**
-```sql
--- Update CHECK constraint
-ALTER TABLE users DROP CONSTRAINT users_role_check;
-ALTER TABLE users ADD CONSTRAINT users_role_check
-  CHECK (role IN ('admin', 'landlord', 'staff', 'tenant'));
-```
-
-Also requires a `staff_of_user_id UUID REFERENCES users(id)` column on users so staff can be scoped to a specific landlord's data.
-
-**Implementation Steps:**
-
-1. **Migration** — add `'staff'` to role CHECK; add `staff_of_user_id` FK
-2. **Backend** — update `authorize()` calls to include `'staff'` where appropriate; add ownership scoping
-3. **Frontend** — hide destructive actions (delete, void, payments) for staff users
+> Originally planned as a `staff` role; shipped as the `employee` role with invite-only onboarding, `employer_id` scoping, and full frontend role-gating. See CHANGELOG 1.6.0–1.6.1 for full details.
 
 ---
 
@@ -389,4 +365,4 @@ All queries become `WHERE organization_id = $1` instead of `WHERE owner_id = $1`
 
 ---
 
-*Last updated: April 13, 2026*
+*Last updated: May 2026*

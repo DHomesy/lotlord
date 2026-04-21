@@ -15,7 +15,7 @@ const schema = z.object({
   country: z.string().optional(),
 })
 
-export default function PropertyForm({ onSubmit, defaultValues, loading, subscription }) {
+export default function PropertyForm({ onSubmit, defaultValues, loading, subscription, userRole }) {
   const { register, handleSubmit, control, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
     defaultValues: defaultValues || { propertyType: 'single', country: 'US' },
@@ -23,7 +23,7 @@ export default function PropertyForm({ onSubmit, defaultValues, loading, subscri
 
   const propertyType = useWatch({ control, name: 'propertyType', defaultValue: defaultValues?.propertyType || 'single' })
   const isSingleFamily = propertyType === 'single'
-  const canUseCommercial = hasCommercial(subscription)
+  const canUseCommercial = hasCommercial(subscription) || userRole === 'admin'
 
   return (
     <Stack component="form" onSubmit={handleSubmit(onSubmit)} spacing={2} sx={{ pt: 1 }}>

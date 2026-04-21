@@ -129,10 +129,9 @@ async function getCharge(req, res, next) {
  * POST /api/v1/charges  (admin or landlord)
  *
  * Create a rent charge for a unit. unitId is always required — the charge
- * is unit-centric. leaseId is optional: when provided the charge is linked
- * to an active lease AND a 'charge' ledger entry is appended atomically
- * (updating the tenant's running balance). Without leaseId the charge is a
- * standalone billing item (utility, cleaning fee during vacancy, etc.).
+ * is unit-centric and must be linked to an active lease.
+ * If leaseId is omitted, the active lease on the unit is resolved automatically.
+ * Returns 422 if the unit has no active lease.
  *
  * Landlords may only create charges for units in their own properties.
  *
@@ -143,7 +142,7 @@ async function getCharge(req, res, next) {
  *     amount:       number (required, > 0)
  *     chargeType?:  'rent' | 'late_fee' | 'utility' | 'other'  (default 'rent')
  *     description?: string
- *     leaseId?:     string — link to active lease; triggers ledger entry
+ *     leaseId?:     string — explicit lease link; auto-resolved from unit if omitted
  *     tenantId?:    string — link to specific tenant
  *   }
  */
@@ -155,16 +154,16 @@ async function createCharge(req, res, next) {
       amount,
       chargeType = 'rent',
       description,
-      leaseId,
       tenantId,
     } = req.body;
+    let { leaseId } = req.body;
 
     // Landlords may only create charges for units they own
     await assertLandlordOwnsUnit(unitId, req.user);
 
-    // If a leaseId is supplied, verify it belongs to the same unit being charged.
-    // Without this, a landlord could link a charge to a lease on a different unit/property.
+    // Resolve active lease — required for all charges (ledger is lease-centric)
     if (leaseId) {
+      // Explicit leaseId: verify it belongs to the same unit
       const { rows: leaseRows } = await query(
         'SELECT unit_id FROM leases WHERE id = $1 LIMIT 1',
         [leaseId],
@@ -173,6 +172,19 @@ async function createCharge(req, res, next) {
       if (leaseRows[0].unit_id !== unitId) {
         return res.status(400).json({ error: 'leaseId does not belong to the supplied unitId' });
       }
+    } else {
+      // Auto-resolve: find the active/pending lease on this unit
+      const { rows: activeRows } = await query(
+        `SELECT id FROM leases WHERE unit_id = $1 AND status IN ('active', 'pending') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1`,
+        [unitId],
+      );
+      if (!activeRows[0]) {
+        return res.status(422).json({
+          error: 'No active lease found for this unit. Create a lease before adding charges.',
+          code:  'NO_ACTIVE_LEASE',
+        });
+      }
+      leaseId = activeRows[0].id;
     }
 
     const chargeId = uuidv4();
@@ -297,17 +309,40 @@ async function createChargesBatch(req, res, next) {
       await assertLandlordOwnsUnit(unitId, req.user);
     }
 
-    // Verify each unique leaseId belongs to the corresponding unitId
-    const checkedLeases = new Set();
-    for (const c of charges) {
-      if (c.leaseId && !checkedLeases.has(c.leaseId)) {
-        const { rows } = await query('SELECT unit_id FROM leases WHERE id = $1 LIMIT 1', [c.leaseId]);
-        if (!rows[0]) return res.status(404).json({ error: `Lease ${c.leaseId} not found` });
-        if (rows[0].unit_id !== c.unitId) {
+    // Verify each unique leaseId belongs to the corresponding unitId — bulk fetch
+    const uniqueLeaseIds = [...new Set(charges.map((c) => c.leaseId).filter(Boolean))];
+    if (uniqueLeaseIds.length > 0) {
+      const { rows: leaseRows } = await query(
+        'SELECT id, unit_id FROM leases WHERE id = ANY($1::uuid[])',
+        [uniqueLeaseIds],
+      );
+      const leaseMap = Object.fromEntries(leaseRows.map((r) => [r.id, r.unit_id]));
+      for (const c of charges) {
+        if (!c.leaseId) continue;
+        if (!leaseMap[c.leaseId]) return res.status(404).json({ error: `Lease ${c.leaseId} not found` });
+        if (leaseMap[c.leaseId] !== c.unitId) {
           return res.status(400).json({ error: 'leaseId does not belong to the supplied unitId' });
         }
-        checkedLeases.add(c.leaseId);
       }
+    }
+
+    // For any batch item missing leaseId, auto-resolve the active lease on the unit.
+    // Build a map: unitId → resolved leaseId (only for units that need resolution)
+    const resolvedLeaseIds = {};
+    for (const unitId of unitIds) {
+      const needsResolution = charges.some((c) => c.unitId === unitId && !c.leaseId);
+      if (!needsResolution) continue;
+      const { rows } = await query(
+        `SELECT id FROM leases WHERE unit_id = $1 AND status IN ('active', 'pending') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1`,
+        [unitId],
+      );
+      if (!rows[0]) {
+        return res.status(422).json({
+          error: `No active lease found for unit ${unitId}. Create a lease before adding charges.`,
+          code:  'NO_ACTIVE_LEASE',
+        });
+      }
+      resolvedLeaseIds[unitId] = rows[0].id;
     }
 
     const client = await getClient();
@@ -321,10 +356,11 @@ async function createChargesBatch(req, res, next) {
 
       for (const c of charges) {
         const chargeId = uuidv4();
+        const effectiveLeaseId = c.leaseId || resolvedLeaseIds[c.unitId] || null;
         const charge = await ledgerRepo.createCharge(client, {
           id:          chargeId,
           unitId:      c.unitId,
-          leaseId:     c.leaseId     || null,
+          leaseId:     effectiveLeaseId,
           tenantId:    c.tenantId    || null,
           dueDate:     c.dueDate,
           amount:      parseFloat(c.amount),
@@ -334,20 +370,20 @@ async function createChargesBatch(req, res, next) {
         });
         created.push(charge);
 
-        if (c.leaseId) {
+        if (effectiveLeaseId) {
           // Read the committed balance once per lease; accumulate in memory thereafter
-          if (balanceCache[c.leaseId] === undefined) {
-            balanceCache[c.leaseId] = await ledgerRepo.getCurrentBalance(c.leaseId);
+          if (balanceCache[effectiveLeaseId] === undefined) {
+            balanceCache[effectiveLeaseId] = await ledgerRepo.getCurrentBalance(effectiveLeaseId);
           }
-          balanceCache[c.leaseId] = parseFloat(
-            (balanceCache[c.leaseId] + parseFloat(c.amount)).toFixed(2),
+          balanceCache[effectiveLeaseId] = parseFloat(
+            (balanceCache[effectiveLeaseId] + parseFloat(c.amount)).toFixed(2),
           );
           await ledgerRepo.appendEntry(client, {
             id:           uuidv4(),
-            leaseId:      c.leaseId,
+            leaseId:      effectiveLeaseId,
             entryType:    'charge',
             amount:       parseFloat(c.amount),
-            balanceAfter: balanceCache[c.leaseId],
+            balanceAfter: balanceCache[effectiveLeaseId],
             description:  c.description || `${c.chargeType || 'rent'} charge — due ${c.dueDate}`,
             referenceId:  chargeId,
             createdBy:    req.user.sub,

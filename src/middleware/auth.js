@@ -122,6 +122,7 @@ const PLAN_LIMITS = {
   properties: { free: 1,  starter: 25, enterprise: Infinity, commercial: Infinity },
   units:      { free: 4,  starter: Infinity, enterprise: Infinity, commercial: Infinity },
   tenants:    { free: 4,  starter: Infinity, enterprise: Infinity, commercial: Infinity },
+  employees:  { free: 0,  starter: 5, enterprise: Infinity, commercial: Infinity },
 };
 
 /**
@@ -165,7 +166,7 @@ async function requiresCommercialPlan(req, res, next) {
  * Example: router.post('/', authenticate, checkPlanLimit('properties'), handler)
  */
 function checkPlanLimit(resource) {
-  const allowedResources = ['properties', 'units', 'tenants'];
+  const allowedResources = ['properties', 'units', 'tenants', 'employees'];
   if (!allowedResources.includes(resource)) {
     throw new Error(`checkPlanLimit: unsupported resource "${resource}"`);
   }
@@ -205,6 +206,10 @@ function checkPlanLimit(resource) {
             AND p.deleted_at IS NULL
         `;
         countParams = [effectiveOwnerId];
+      } else if (resource === 'employees') {
+        // Count active employees under this landlord
+        countQuery  = 'SELECT COUNT(*)::int AS cnt FROM users WHERE employer_id = $1 AND deleted_at IS NULL';
+        countParams = [effectiveOwnerId];
       } else {
         // tenants: count active (non-terminated) leases under this landlord's properties
         countQuery = `
@@ -223,7 +228,9 @@ function checkPlanLimit(resource) {
         const planLabel   = plan === 'starter' ? 'Starter' : 'Free';
         const upgradeHint = plan === 'starter'
           ? 'Upgrade to Enterprise or Commercial for unlimited access.'
-          : `Upgrade to Starter (up to 25 ${resource}) or Enterprise/Commercial (unlimited) to add more.`;
+          : resource === 'employees'
+            ? 'Upgrade to Starter ($15/mo) to add up to 5 employees, or Enterprise/Commercial for unlimited.'
+            : `Upgrade to Starter (up to 25 ${resource}) or Enterprise/Commercial (unlimited) to add more.`;
         return res.status(402).json({
           error:   `${planLabel} plan is limited to ${max} ${resource}. ${upgradeHint}`,
           code:    'PLAN_LIMIT',

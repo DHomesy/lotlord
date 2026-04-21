@@ -322,20 +322,28 @@ async function deleteTemplate(id) {
 // ── Conversations ─────────────────────────────────────────────────────────────
 
 /**
+/**
  * List all tenants we have ever sent or received a message from/to,
  * with the most recent message summary per tenant.
+ * @param {string|null} ownerId  null = admin (all), UUID = landlord/employee employer
  */
-async function getConversations() {
-  return notificationRepo.findConversations();
+async function getConversations(ownerId = null) {
+  return notificationRepo.findConversations(ownerId);
 }
 
 /**
  * Full message thread for a specific tenant (by tenantId).
  * Looks up the tenant's user_id, then fetches all log entries for that user.
+ * Verifies the tenant belongs to ownerId's properties when ownerId is provided.
  */
-async function getConversation(tenantId) {
+async function getConversation(tenantId, ownerId = null) {
   const tenant = await tenantRepo.findById(tenantId);
   if (!tenant) throw notFound('Tenant not found');
+  // Scope check for landlord/employee callers
+  if (ownerId) {
+    const owned = await notificationRepo.tenantBelongsToOwner(tenantId, ownerId);
+    if (!owned) throw Object.assign(new Error('Forbidden'), { status: 403 });
+  }
   const messages = await notificationRepo.findConversationThread(tenant.user_id);
   return { tenant, messages };
 }
@@ -424,8 +432,8 @@ async function sendMessage({ tenantId, subject, body, senderId }) {
 
 // ── Log ───────────────────────────────────────────────────────────────────────
 
-async function getLog({ recipientId, channel, status, page, limit } = {}) {
-  return notificationRepo.findLog({ recipientId, channel, status, page, limit });
+async function getLog({ recipientId, channel, status, page, limit, ownerId = null } = {}) {
+  return notificationRepo.findLog({ recipientId, channel, status, page, limit, ownerId });
 }
 
 async function getLogEntry(id) {

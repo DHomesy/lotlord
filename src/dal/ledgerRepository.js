@@ -20,14 +20,29 @@ async function getCurrentBalance(leaseId) {
   return rows[0] ? parseFloat(rows[0].balance_after) : 0;
 }
 
-/** Return the full ledger history for a lease, oldest first. */
+/** Return the full ledger history for a lease, oldest first.
+ * effective_date is the business-meaningful date:
+ *   charge  → due_date from the linked rent_charge
+ *   payment → payment_date from the linked rent_payment
+ *   credit / adjustment → falls back to created_at
+ */
 async function findByLeaseId(leaseId) {
   const { rows } = await query(
-    `SELECT le.*, u.first_name || ' ' || u.last_name AS created_by_name
+    `SELECT le.*,
+            COALESCE(
+              CASE
+                WHEN le.entry_type = 'charge'  THEN rc.due_date::TEXT
+                WHEN le.entry_type = 'payment' THEN rp.payment_date::TEXT
+              END,
+              le.created_at::DATE::TEXT
+            ) AS effective_date,
+            u.first_name || ' ' || u.last_name AS created_by_name
      FROM ledger_entries le
-     LEFT JOIN users u ON u.id = le.created_by
+     LEFT JOIN users u         ON u.id  = le.created_by
+     LEFT JOIN rent_charges rc ON rc.id = le.reference_id AND le.entry_type = 'charge'
+     LEFT JOIN rent_payments rp ON rp.id = le.reference_id AND le.entry_type = 'payment'
      WHERE le.lease_id = $1
-     ORDER BY le.created_at ASC`,
+     ORDER BY effective_date ASC, le.created_at ASC`,
     [leaseId],
   );
   return rows;

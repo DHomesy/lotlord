@@ -20,13 +20,13 @@ import RequestQuoteIcon   from '@mui/icons-material/RequestQuote'
 import PaymentIcon        from '@mui/icons-material/Payment'
 import BuildIcon          from '@mui/icons-material/Build'
 import FolderIcon         from '@mui/icons-material/Folder'
-import NotificationsIcon  from '@mui/icons-material/Notifications'
 import MailIcon           from '@mui/icons-material/Mail'
 import ArticleIcon        from '@mui/icons-material/Article'
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts'
 import PersonIcon         from '@mui/icons-material/Person'
 import CardMembershipIcon from '@mui/icons-material/CardMembership'
 import HistoryIcon        from '@mui/icons-material/History'
+import GroupsIcon         from '@mui/icons-material/Groups'
 
 // ─── Nav item groups ───────────────────────────────────────────────────────────
 
@@ -37,6 +37,7 @@ const NAV_GROUPS = [
       { label: 'Dashboard',   path: '/dashboard',   icon: <DashboardIcon /> },
       { label: 'Properties',  path: '/properties',  icon: <ApartmentIcon /> },
       { label: 'Tenants',     path: '/tenants',     icon: <PeopleIcon /> },
+      { label: 'Team',        path: '/team',        icon: <GroupsIcon />, roles: ['admin', 'landlord'] },
       { label: 'Leases',      path: '/leases',      icon: <DescriptionIcon /> },
       { label: 'Maintenance', path: '/maintenance', icon: <BuildIcon /> },
       { label: 'Documents',   path: '/documents',   icon: <FolderIcon /> },
@@ -44,23 +45,26 @@ const NAV_GROUPS = [
   },
   {
     label: 'Finance',
-    roles: ['admin', 'landlord', 'employee'],
     items: [
-      { label: 'Ledger',    path: '/ledger',    icon: <AccountBalanceIcon />, roles: ['admin', 'landlord', 'employee'] },
-      { label: 'Charges',   path: '/charges',   icon: <RequestQuoteIcon />,  roles: ['admin', 'landlord', 'employee'] },
-      { label: 'Payments',  path: '/payments',  icon: <PaymentIcon />,       roles: ['admin', 'landlord', 'employee'] },
+      { label: 'Ledger',   path: '/ledger',   icon: <AccountBalanceIcon /> },
+      { label: 'Charges',  path: '/charges',  icon: <RequestQuoteIcon /> },
+      { label: 'Payments', path: '/payments', icon: <PaymentIcon /> },
     ],
   },
   {
-    label: 'Admin',
-    roles: ['admin', 'landlord', 'employee'],
+    label: 'Communication',
     items: [
-      { label: 'Notifications', path: '/notifications',           icon: <NotificationsIcon />, roles: ['admin', 'landlord', 'employee'] },
-      { label: 'Templates',     path: '/notifications/templates', icon: <ArticleIcon />,       roles: ['admin'] },
-      { label: 'Messages',      path: '/messages',                icon: <MailIcon />,          roles: ['admin', 'landlord', 'employee'] },
-      { label: 'Users',         path: '/users',                   icon: <ManageAccountsIcon />, roles: ['admin'] },
-      { label: 'Subscriptions', path: '/subscriptions',           icon: <CardMembershipIcon />, roles: ['admin', 'landlord'] },
-      { label: 'Audit Log',     path: '/audit',                   icon: <HistoryIcon />,        roles: ['admin'] },
+      { label: 'Messages',  path: '/messages',                icon: <MailIcon /> },
+      { label: 'Templates', path: '/notifications/templates', icon: <ArticleIcon />, roles: ['admin'] },
+    ],
+  },
+  {
+    label: 'Settings',
+    roles: ['admin'],
+    items: [
+      { label: 'Users',         path: '/users',          icon: <ManageAccountsIcon /> },
+      { label: 'Subscriptions', path: '/subscriptions',  icon: <CardMembershipIcon /> },
+      { label: 'Audit',         path: '/audit',          icon: <HistoryIcon /> },
     ],
   },
   {
@@ -148,7 +152,7 @@ export default function Sidebar({ role, user, onNavClick }) {
               <List disablePadding>
                 {visibleItems.map((item) => {
                   const active = location.pathname === item.path ||
-                    (item.path !== '/dashboard' && location.pathname.startsWith(item.path))
+                    (item.path !== '/dashboard' && location.pathname.startsWith(item.path + '/'))
                   return (
                     <ListItem key={item.path} disablePadding>
                       <ListItemButton

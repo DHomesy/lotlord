@@ -16,6 +16,22 @@ function validate(req, res, next) {
   next();
 }
 
+/**
+ * Reusable currency validator: positive number, max 2 decimal places, max $999,999.99.
+ * Usage: currencyField('amount')  or  currencyField('amount', { optional: true })
+ */
+function currencyField(fieldName, { optional = false, min = 0.01 } = {}) {
+  let chain = optional
+    ? body(fieldName).optional({ nullable: true }).isFloat({ min: 0, max: 999999.99 })
+    : body(fieldName).isFloat({ min, max: 999999.99 });
+  return chain
+    .custom((v) => {
+      if (v === undefined || v === null) return true;
+      return /^\d+(\.\d{1,2})?$/.test(String(v));
+    })
+    .withMessage(`${fieldName} must be a valid USD amount (max 2 decimal places)`);
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 const registerValidators = [
   body('email').isEmail().normalizeEmail(),
@@ -56,8 +72,8 @@ const createPropertyValidators = [
 const createUnitValidators = [
   body('propertyId').isUUID(),
   body('unitNumber').trim().notEmpty(),
-  body('rentAmount').isFloat({ min: 0 }),
-  body('depositAmount').optional().isFloat({ min: 0 }),
+  currencyField('rentAmount', { min: 0 }),
+  currencyField('depositAmount', { optional: true, min: 0 }),
   body('bedrooms').optional().isInt({ min: 0 }),
   body('bathrooms').optional().isFloat({ min: 0 }),
   body('sqFt').optional().isInt({ min: 0 }),
@@ -99,9 +115,9 @@ const createLeaseValidators = [
   body('tenantId').isUUID(),
   body('startDate').isISO8601().toDate(),
   body('endDate').isISO8601().toDate(),
-  body('monthlyRent').isFloat({ min: 0 }),
-  body('depositAmount').optional().isFloat({ min: 0 }),
-  body('lateFeeAmount').optional().isFloat({ min: 0 }),
+  currencyField('monthlyRent', { min: 0 }),
+  currencyField('depositAmount', { optional: true, min: 0 }),
+  currencyField('lateFeeAmount', { optional: true, min: 0 }),
   body('lateFeeGraceDays').optional().isInt({ min: 0 }),
 ];
 
@@ -112,9 +128,9 @@ const updateLeaseValidators = [
     .withMessage('depositStatus must be one of: held, returned, applied'),
   body('signedAt').optional({ nullable: true }).isISO8601().toDate(),
   body('documentUrl').optional({ nullable: true }).isURL(),
-  body('monthlyRent').optional().isFloat({ min: 0 }),
+  currencyField('monthlyRent', { optional: true, min: 0 }),
   body('endDate').optional().isISO8601().toDate(),
-  body('lateFeeAmount').optional().isFloat({ min: 0 }),
+  currencyField('lateFeeAmount', { optional: true, min: 0 }),
   body('lateFeeGraceDays').optional().isInt({ min: 0 }),
 ];
 
@@ -138,8 +154,8 @@ const updateUnitValidators = [
   body('bedrooms').optional({ nullable: true }).isInt({ min: 0 }),
   body('bathrooms').optional({ nullable: true }).isFloat({ min: 0 }),
   body('sqFt').optional({ nullable: true }).isInt({ min: 0 }),
-  body('rentAmount').optional().isFloat({ min: 0 }),
-  body('depositAmount').optional({ nullable: true }).isFloat({ min: 0 }),
+  currencyField('rentAmount', { optional: true, min: 0 }),
+  currencyField('depositAmount', { optional: true, min: 0 }),
   body('status').optional().isIn(['vacant', 'occupied', 'maintenance'])
     .withMessage('status must be one of: vacant, occupied, maintenance'),
 ];
@@ -164,7 +180,7 @@ const updateTenantValidators = [
 // ── Payments ──────────────────────────────────────────────────────────────────
 const createPaymentValidators = [
   body('leaseId').isUUID(),
-  body('amountPaid').isFloat({ min: 0.01 }),
+  currencyField('amountPaid'),
   body('paymentDate').isISO8601().toDate(),
   body('paymentMethod').isIn(['stripe_ach', 'stripe_card', 'check', 'cash', 'other']),
   body('chargeId').optional().isUUID(),
@@ -246,7 +262,7 @@ const createPaymentIntentValidators = [
 const createChargeValidators = [
   body('unitId').isUUID().withMessage('unitId must be a valid UUID'),
   body('dueDate').isDate().withMessage('dueDate must be a valid date (YYYY-MM-DD)'),
-  body('amount').isFloat({ gt: 0 }).withMessage('amount must be a positive number'),
+  currencyField('amount'),
   body('chargeType')
     .optional()
     .isIn(['rent', 'late_fee', 'utility', 'other'])
@@ -267,8 +283,9 @@ const createChargesBatchValidators = [
     .isDate()
     .withMessage('Each charge must have a valid dueDate (YYYY-MM-DD)'),
   body('charges.*.amount')
-    .isFloat({ gt: 0 })
-    .withMessage('Each charge must have amount > 0'),
+    .isFloat({ gt: 0, max: 999999.99 })
+    .custom((v) => v === undefined || /^\d+(\.\d{1,2})?$/.test(String(v)))
+    .withMessage('Each charge must have amount > 0 with max 2 decimal places'),
   body('charges.*.chargeType')
     .optional()
     .isIn(['rent', 'late_fee', 'utility', 'other'])

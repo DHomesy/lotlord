@@ -86,7 +86,7 @@ async function updateTemplate(id, fields) {
 
 // ── Log ───────────────────────────────────────────────────────────────────────
 
-async function findLog({ recipientId, channel, status, page = 1, limit = 20 } = {}) {
+async function findLog({ recipientId, channel, status, page = 1, limit = 20, ownerId = null } = {}) {
   const { limit: lim, offset } = parsePagination(page, limit);
   const values = [lim, offset];
   const conditions = ['1=1'];
@@ -95,6 +95,19 @@ async function findLog({ recipientId, channel, status, page = 1, limit = 20 } = 
   if (recipientId) { conditions.push(`l.recipient_id = $${idx++}`); values.push(recipientId); }
   if (channel)     { conditions.push(`l.channel = $${idx++}`);      values.push(channel); }
   if (status)      { conditions.push(`l.status = $${idx++}`);       values.push(status); }
+  // Scope to landlord/employee: only show entries for tenants whose leases belong to this owner
+  if (ownerId)     {
+    conditions.push(
+      `l.recipient_id IN (
+         SELECT u2.id FROM tenants t2
+         JOIN leases ls ON ls.tenant_id = t2.id
+         JOIN units un ON un.id = ls.unit_id
+         JOIN properties p ON p.id = un.property_id AND p.owner_id = $${idx++}
+         JOIN users u2 ON u2.id = t2.user_id
+       )`,
+    );
+    values.push(ownerId);
+  }
 
   const { rows } = await query(
     `SELECT l.*,
@@ -172,7 +185,7 @@ async function deleteTemplate(id) {
  *   status = 'received'                    → 'inbound'  (tenant wrote to us)
  *   status IN ('queued','sent','failed')   → 'outbound' (we wrote to tenant)
  */
-async function findConversations() {
+async function findConversations(ownerId = null) {
   const { rows } = await query(`
     WITH last_msg AS (
       SELECT DISTINCT ON (l.recipient_id)
@@ -211,9 +224,13 @@ async function findConversations() {
     JOIN   users u   ON u.id = t.user_id
     JOIN   last_msg lm ON lm.recipient_id = u.id
     LEFT JOIN unread ur ON ur.recipient_id = u.id
+    ${ownerId ? `
+    JOIN leases ls ON ls.tenant_id = t.id
+    JOIN units un ON un.id = ls.unit_id
+    JOIN properties p ON p.id = un.property_id AND p.owner_id = $1` : ''}
     WHERE  t.deleted_at IS NULL
     ORDER  BY lm.created_at DESC
-  `);
+  `, ownerId ? [ownerId] : []);
   return rows;
 }
 
@@ -233,6 +250,24 @@ async function findConversationThread(userId) {
   return rows;
 }
 
+/**
+ * Returns true if the given tenant (by tenantId) has at least one lease on a
+ * property owned by ownerId. Used to scope conversation access for landlords.
+ */
+async function tenantBelongsToOwner(tenantId, ownerId) {
+  const { rows } = await query(
+    `SELECT 1
+       FROM tenants t
+       JOIN leases ls ON ls.tenant_id = t.id
+       JOIN units un ON un.id = ls.unit_id
+       JOIN properties p ON p.id = un.property_id
+      WHERE t.id = $1 AND p.owner_id = $2
+      LIMIT 1`,
+    [tenantId, ownerId],
+  );
+  return rows.length > 0;
+}
+
 module.exports = {
   findAllTemplates,
   findTemplateById,
@@ -246,4 +281,5 @@ module.exports = {
   updateLogEntry,
   findConversations,
   findConversationThread,
+  tenantBelongsToOwner,
 };

@@ -21,12 +21,14 @@ const DISMISS_KEY = 'll_setup_done'
  * - Self-contained: fetches its own data — can be rendered anywhere.
  * - Only shown for role='landlord' (never for admin).
  * - Dismissable via the × button. Auto-dismisses once all steps complete.
- * - Dismissal is persisted to localStorage.
+ * - Dismissal is persisted to localStorage, keyed by user ID so it resets per account.
  */
 export default function LandlordSetupCard() {
   const user = useAuthStore((s) => s.user)
   const navigate = useNavigate()
-  const [dismissed, setDismissed] = useState(!!localStorage.getItem(DISMISS_KEY))
+  // Key dismissal per user so QA / new accounts always see the card fresh
+  const dismissKey = user?.id ? `${DISMISS_KEY}_${user.id}` : DISMISS_KEY
+  const [dismissed, setDismissed] = useState(!!localStorage.getItem(dismissKey))
 
   const { data: propsData } = useProperties()
   const { data: unitsData } = useUnits()
@@ -82,12 +84,12 @@ export default function LandlordSetupCard() {
 
   // Auto-dismiss and persist when all steps are done
   if (allDone) {
-    localStorage.setItem(DISMISS_KEY, '1')
+    localStorage.setItem(dismissKey, '1')
     return null
   }
 
   const handleDismiss = () => {
-    localStorage.setItem(DISMISS_KEY, '1')
+    localStorage.setItem(dismissKey, '1')
     setDismissed(true)
   }
 

@@ -8,7 +8,7 @@ router.post('/',  authenticate, authorize('admin', 'landlord', 'employee'), chec
 router.get('/',   authenticate, authorize('admin', 'landlord', 'employee'),                                          controller.listInvitations);
 
 // Create employee invitation (landlord/admin ONLY — employees cannot hire other employees)
-router.post('/employee', authenticate, authorize('admin', 'landlord'), createInvitationValidators, validate, controller.createEmployeeInvitation);
+router.post('/employee', authenticate, authorize('admin', 'landlord'), checkPlanLimit('employees'), createInvitationValidators, validate, controller.createEmployeeInvitation);
 
 // Resend or delete an existing invitation
 router.post('/:id/resend',  authenticate, authorize('admin', 'landlord', 'employee'), controller.resendInvitation);

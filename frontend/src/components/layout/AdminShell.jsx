@@ -63,7 +63,7 @@ export default function AdminShell() {
           sx={{
             width: DRAWER_WIDTH,
             flexShrink: 0,
-            '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box' },
+            '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box', overflow: 'hidden' },
           }}
         >
           <Toolbar />

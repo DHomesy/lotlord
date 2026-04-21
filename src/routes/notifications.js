@@ -11,6 +11,8 @@ const {
 
 // All notification routes are admin-only
 const adminOnly = [authenticate, authorize('admin')];
+// Messages and log are accessible to landlords and employees too
+const anyStaff  = [authenticate, authorize('admin', 'landlord', 'employee')];
 
 // ── Templates ───────────────────────────────────────────────────────────────
 router.get('/templates',        ...adminOnly,                                          controller.listTemplates);
@@ -20,16 +22,16 @@ router.patch('/templates/:id',  ...adminOnly, updateTemplateValidators, validate
 router.delete('/templates/:id', ...adminOnly,                                          controller.deleteTemplate);
 
 // ── Messages (admin-initiated conversations) ─────────────────────────────────
-router.get('/messages',           ...adminOnly, controller.listConversations);
-router.get('/messages/:tenantId', ...adminOnly, controller.getConversation);
-router.post('/messages',          ...adminOnly, controller.sendMessage);
+router.get('/messages',           ...anyStaff, controller.listConversations);
+router.get('/messages/:tenantId', ...anyStaff, controller.getConversation);
+router.post('/messages',          ...anyStaff, controller.sendMessage);
 
 // ── Send ─────────────────────────────────────────────────────────────────────
 router.post('/send',          ...adminOnly, sendNotificationValidators, validate,     controller.send);
 router.post('/send-sms',      ...adminOnly, sendSmsValidators, validate,              controller.sendSms);
 
 // ── Log ─────────────────────────────────────────────────────────────────────
-router.get('/log',            ...adminOnly,                                          controller.getLog);
-router.get('/log/:id',        ...adminOnly,                                          controller.getLogEntry);
+router.get('/log',            ...anyStaff,                                           controller.getLog);
+router.get('/log/:id',        ...anyStaff,                                           controller.getLogEntry);
 
 module.exports = router;

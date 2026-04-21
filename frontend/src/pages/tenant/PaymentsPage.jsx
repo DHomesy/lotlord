@@ -50,8 +50,8 @@ function ReceiptButton({ paymentId }) {
 }
 
 const columns = [
-  { field: 'created_at', headerName: 'Date', width: 130, valueFormatter: (v) => v?.slice(0, 10) },
-  { field: 'amount_paid', headerName: 'Amount', width: 130, valueFormatter: (v) => `$${Number(v).toLocaleString()}` },
+  { field: 'payment_date', headerName: 'Date', width: 130, valueFormatter: (v) => v?.slice(0, 10) },
+  { field: 'amount_paid', headerName: 'Amount', width: 130, valueFormatter: (v) => `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2 })}` },
   { field: 'payment_method', headerName: 'Method', width: 140 },
   { field: 'status', headerName: 'Status', width: 120, renderCell: ({ value }) => <StatusChip status={value} /> },
   { field: 'notes', headerName: 'Notes', flex: 1 },

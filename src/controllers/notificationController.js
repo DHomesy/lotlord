@@ -1,6 +1,11 @@
 const notificationService = require('../services/notificationService');
+const notificationRepo    = require('../dal/notificationRepository');
+const { resolveOwnerId } = require('../lib/authHelpers');
 
-// ── Templates ─────────────────────────────────────────────────────────────────
+// Admin gets a null ownerId (sees everything). Landlords/employees get their own id.
+function scopeOwnerId(user) {
+  return user.role === 'admin' ? null : resolveOwnerId(user);
+}
 
 async function listTemplates(req, res, next) {
   try {
@@ -93,7 +98,7 @@ async function deleteTemplate(req, res, next) {
  */
 async function listConversations(req, res, next) {
   try {
-    const conversations = await notificationService.getConversations();
+    const conversations = await notificationService.getConversations(scopeOwnerId(req.user));
     res.json(conversations);
   } catch (err) { next(err); }
 }
@@ -104,19 +109,27 @@ async function listConversations(req, res, next) {
  */
 async function getConversation(req, res, next) {
   try {
-    const data = await notificationService.getConversation(req.params.tenantId);
+    const data = await notificationService.getConversation(req.params.tenantId, scopeOwnerId(req.user));
     res.json(data);
   } catch (err) { next(err); }
 }
 
 /**
  * POST /notifications/messages
- * Admin sends a message to a tenant via their opted-in channel(s).
+/**
+ * Admin/landlord/employee sends a message to a tenant via their opted-in channel(s).
+ * Landlords and employees may only message tenants belonging to their own properties.
  * Body: { tenantId, subject, body }
  */
 async function sendMessage(req, res, next) {
   try {
     const { tenantId, subject, body } = req.body;
+    const ownerId = scopeOwnerId(req.user);
+    // Scope check: landlords/employees can only message their own tenants
+    if (ownerId) {
+      const owned = await notificationRepo.tenantBelongsToOwner(tenantId, ownerId);
+      if (!owned) return res.status(403).json({ error: 'Forbidden' });
+    }
     const results = await notificationService.sendMessage({
       tenantId,
       subject,
@@ -133,7 +146,9 @@ async function getLog(req, res, next) {
   try {
     const { recipientId, channel, status, page = 1, limit = 20 } = req.query;
     const log = await notificationService.getLog({
-      recipientId, channel, status, page: Number(page), limit: Number(limit),
+      recipientId, channel, status,
+      page: Number(page), limit: Number(limit),
+      ownerId: scopeOwnerId(req.user),
     });
     res.json(log);
   } catch (err) { next(err); }

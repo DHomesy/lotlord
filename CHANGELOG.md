@@ -8,6 +8,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.7.0] — 2026-04-21 — UX polish sprint: Team page, Messages redesign, Ledger audit, Navbar restructure
+
+### Added
+- **Team Members page** (`/team`) — dedicated route for employee management, replacing the old "Team Members" tab on `TenantsPage`. Shows active members (accepted employee invitations), pending invitations, and expired invitations with status chips. Includes an "Invite Employee" button (plan-gated for free tier), resend, and revoke actions. Visible to admin and landlord roles only.
+- **MessagesPage — 3-tab rebuild** — `MessagesPage` rebuilt from a single-panel inbox into a three-tab layout:
+  - **Conversations** — existing inbox/thread UI with paygate for free-tier users.
+  - **Notification Log** — full filterable log of all sent/received notifications (absorbs the former standalone Notifications page). Available to admin, landlord, and employee roles.
+  - **Automation** — read-only cards showing scheduled automation rules (Rent Reminder, Late Fee, Lease Expiry) with schedule, description, and a link to the notification template. Paygate alert for free tier.
+- **Sidebar nav groups** — navigation restructured into four labelled groups: **Core** (Dashboard, Properties, Tenants, Team, Leases, Maintenance, Documents), **Finance** (Ledger, Charges, Payments), **Communication** (Messages, Templates), **Settings** (Users, Subscriptions, Audit — admin-only). Ungrouped: Profile.
+
+### Changed
+- **Ledger date accuracy** — `findByLeaseId` now computes `effective_date` via LEFT JOINs: charge entries use `rent_charges.due_date`, payment entries use `rent_payments.payment_date`. Ledger rows are ordered by `effective_date ASC, created_at ASC`. The `Date` column in `LedgerPage` now reads `effective_date` instead of `created_at`.
+- **Money formatting** — shared `fmtMoney` formatter introduced in `LedgerPage`: uses `Intl.NumberFormat` with `minimumFractionDigits: 2`; handles negative amounts correctly as `-$500.00` (was `$-500`). Portfolio summary uses the same formatter.
+- **Tenant Payments date column** — the `Date` column now reads `payment_date` (the actual payment date) instead of `created_at` (the DB row insert time).
+- **TenantsPage** — stripped of all Team Members tab code. Now shows tenant invitations only, filtered to `type !== 'employee'`, keeping the UI unambiguous.
+- **Notification Log route access** — `GET /notifications/log` extended to `anyStaff` middleware (`admin`, `landlord`, `employee`) so employees can view the log via the Messages tab.
+
+### Fixed
+- **Sidebar active-state bug** — nav items using `startsWith(item.path)` would highlight multiple items (e.g. `/notifications` highlighted when on `/notifications/templates`). Fixed to `startsWith(item.path + '/')` with an exact-match fallback.
+- **Notifications nav item removed** — `NotificationsPage` no longer has a sidebar link. Notification history is now accessible via Messages → Notification Log tab, keeping the nav clean.
+
+---
 ## [1.6.1] — 2026-04-19 — Frontend role-gating audit, employee UI, LedgerPage property meta
 
 ### Added

@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.6.1 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.7.0 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -90,7 +90,7 @@ npm run dev
 
 ## Architecture Overview
 
-Property Manager is structured as a **three-tier application**:
+LotLord is structured as a **three-tier application**:
 
 | Tier | Technology | Responsibility |
 |---|---|---|
@@ -741,7 +741,8 @@ See **[CHANGELOG.md](CHANGELOG.md)** for the full versioned release history.
   - **Duplicate payment prevention**: `paymentRepository` gains `findPendingByChargeId()` and `findCompletedByChargeId()`; `createMyPaymentIntent` returns 409 if a pending or completed payment already exists for the charge; `ledgerRepository.findCharges()` uses a `LATERAL` join to prioritise `completed` over `pending` payments and surfaces `pending` as a distinct charge status; Pay button hidden for any charge that is not `unpaid`.
 - [x] **33. Employee role + payment receipts + account statement PDF** — Full employee role (`migrations/025_employee_role.sql` + `026_invitation_type.sql`); employee data scoping via `resolveOwnerId`; `POST /invitations/employee`; `GET /payments/:id/receipt` (pdfkit PDF); `GET /ledger/statement` (JSON) + `GET /ledger/statement/pdf` (pdfkit PDF); 57 new tests (192 total, 14 suites). See CHANGELOG 1.6.0 for full details.
 - [x] **34. Frontend role-gating audit** — Employee role UI completion: ChargesPage void guard, Sidebar Subscriptions for landlords, UsersPage `'employee'` role fix, ProfilePage employee info card, PaymentsPage connect banner gating, DashboardPage employee upgrade CTA, LedgerPage Property/Unit meta card, TenantsPage Team Members tab + employee invite dialog. `createEmployeeInvitation` API + hook. See CHANGELOG 1.6.1.
-- [ ] **35. AI agent** — wire up OpenAI integration to Twilio inbound SMS handler, conversation management
+- [x] **35. UX polish sprint (v1.7.0)** — Team Members page at `/team` (own sidebar item; landlord/admin only); sidebar nav restructured into Core/Finance/Communication/Settings groups with active-state bug fix; MessagesPage rebuilt with Conversations/Notification Log/Automation tabs (notification log folded in, automation schedule cards, paygate for free tier); TenantsPage stripped to tenants-only; ledger `effective_date` (charge `due_date` / payment `payment_date` via JOIN), `fmtMoney` shared formatter; tenant Payments `payment_date` column; `GET /notifications/log` opened to all staff roles. See CHANGELOG 1.7.0.
+- [ ] **36. AI agent** — wire up OpenAI integration to Twilio inbound SMS handler, conversation management
 
 ---
 
@@ -791,7 +792,7 @@ frontend/src/
 │   └── forms/               ← PropertyForm, UnitForm, TenantForm, LeaseForm, MaintenanceForm
 ├── pages/
 │   ├── auth/LoginPage.jsx
-│   ├── admin/               ← 13 pages (Dashboard, Properties, Tenants, Leases, Ledger, …)
+│   ├── admin/               ← 14+ pages (Dashboard, Properties, Tenants, Team, Leases, Ledger, …)
 │   └── tenant/              ← 5 pages (Dashboard, Payments, Maintenance, Documents, Profile)
 └── router/
     ├── index.jsx            ← createBrowserRouter, role redirects

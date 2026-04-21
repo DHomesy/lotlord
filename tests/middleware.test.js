@@ -212,3 +212,70 @@ describe('requiresStarter()', () => {
     expect(next).not.toHaveBeenCalled();
   });
 });
+
+// ── checkPlanLimit() ──────────────────────────────────────────────────────────
+
+const { checkPlanLimit } = require('../src/middleware/auth');
+
+describe('checkPlanLimit()', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('admin bypasses plan limit check without calling DB', async () => {
+    const req  = { user: { role: 'admin', sub: 'admin-id' } };
+    const res  = mockRes();
+    const next = mockNext();
+
+    await checkPlanLimit('properties')(req, res, next);
+
+    expect(userRepo.findBillingStatus).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('admin can add employees regardless of plan (bypass)', async () => {
+    const req  = { user: { role: 'admin', sub: 'admin-id' } };
+    const res  = mockRes();
+    const next = mockNext();
+
+    await checkPlanLimit('employees')(req, res, next);
+
+    expect(userRepo.findBillingStatus).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 401 when req.user is missing', async () => {
+    const req  = {};
+    const res  = mockRes();
+    const next = mockNext();
+
+    await checkPlanLimit('properties')(req, res, next);
+
+    expect(res._status).toBe(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('throws for unsupported resource name', () => {
+    expect(() => checkPlanLimit('invoices')).toThrow(/unsupported resource/);
+  });
+});
+
+// ── resolveOwnerId() ──────────────────────────────────────────────────────────
+
+const { resolveOwnerId } = require('../src/lib/authHelpers');
+
+describe('resolveOwnerId()', () => {
+  it('returns sub for a landlord', () => {
+    expect(resolveOwnerId({ sub: 'landlord-id', role: 'landlord' })).toBe('landlord-id');
+  });
+
+  it('returns sub for an admin', () => {
+    expect(resolveOwnerId({ sub: 'admin-id', role: 'admin' })).toBe('admin-id');
+  });
+
+  it('returns employerId for an employee', () => {
+    expect(resolveOwnerId({ sub: 'emp-id', role: 'employee', employerId: 'employer-id' })).toBe('employer-id');
+  });
+
+  it('throws 401 when employee has no employerId claim', () => {
+    expect(() => resolveOwnerId({ sub: 'emp-id', role: 'employee' })).toThrow('Employee token missing employerId claim');
+  });
+});

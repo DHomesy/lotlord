@@ -1,15 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   TextField, Stack, Button, Alert, Typography,
-  Card, CardContent, Divider, Box, CircularProgress, Chip,
+  Card, CardContent, CardActionArea, Divider, Box, CircularProgress, Chip, Grid,
 } from '@mui/material'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import CardMembershipIcon from '@mui/icons-material/CardMembership'
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
+import ManageAccountsIcon from '@mui/icons-material/ManageAccounts'
+import HistoryIcon from '@mui/icons-material/History'
+import PeopleIcon from '@mui/icons-material/People'
 import PageContainer from '../../components/layout/PageContainer'
 import { useAuthStore } from '../../store/authStore'
 import { useUpdateMe, useChangePassword } from '../../hooks/useUsers'
@@ -29,6 +34,7 @@ const passwordSchema = z.object({
 
 export default function AdminProfilePage() {
   const user = useAuthStore((s) => s.user)
+  const navigate   = useNavigate()
   const isAdmin    = user?.role === 'admin'
   const isLandlord = user?.role === 'landlord'
   const isEmployee = user?.role === 'employee'
@@ -147,7 +153,44 @@ export default function AdminProfilePage() {
         </Button>
       </Stack>
 
-      {/* ── Payout Setup (landlord only — Stripe Connect Express) ── */}
+      {/* ── Admin Account (admin only) ── */}
+      {isAdmin && (
+        <>
+          <Divider sx={{ my: 4 }} />
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
+            <AdminPanelSettingsIcon color="primary" />
+            <Typography variant="h6">Admin Account</Typography>
+          </Stack>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Your account has unrestricted access to all features and plan tiers. Subscription and
+            billing checks are bypassed for admin.
+          </Typography>
+          <Grid container spacing={2} sx={{ maxWidth: 600 }}>
+            {[
+              { label: 'User Management',  desc: 'Create and manage user accounts',   icon: <ManageAccountsIcon color="action" />, path: '/users' },
+              { label: 'Audit Log',        desc: 'Review all system activity',         icon: <HistoryIcon color="action" />,        path: '/audit' },
+              { label: 'Subscriptions',    desc: 'View landlord subscription statuses', icon: <CardMembershipIcon color="action" />, path: '/subscriptions' },
+              { label: 'Team Members',     desc: 'Manage employee invitations',         icon: <PeopleIcon color="action" />,         path: '/team' },
+            ].map(({ label, desc, icon, path }) => (
+              <Grid item xs={12} sm={6} key={path}>
+                <Card variant="outlined" sx={{ height: '100%', '&:hover': { borderColor: 'primary.main' } }}>
+                  <CardActionArea onClick={() => navigate(path)} sx={{ p: 2, height: '100%', alignItems: 'flex-start', display: 'flex' }}>
+                    <CardContent sx={{ p: '0 !important' }}>
+                      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 0.5 }}>
+                        {icon}
+                        <Typography variant="body2" fontWeight={600}>{label}</Typography>
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">{desc}</Typography>
+                    </CardContent>
+                  </CardActionArea>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </>
+      )}
+
+      {/* ── Employee info (employee only) ── */}
       {isEmployee && (
         <>
           <Divider sx={{ my: 4 }} />

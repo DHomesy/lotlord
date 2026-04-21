@@ -16,6 +16,7 @@ import PropertyForm from '../../components/forms/PropertyForm'
 import { useProperties, useCreateProperty } from '../../hooks/useProperties'
 import { useCreateUnit } from '../../hooks/useUnits'
 import { useMySubscription } from '../../hooks/useBilling'
+import { useAuthStore } from '../../store/authStore'
 
 const columns = [
   { field: 'name', headerName: 'Name', flex: 1, minWidth: 150 },
@@ -50,6 +51,7 @@ export default function PropertiesPage() {
   const { mutateAsync: create, isPending: isCreating } = useCreateProperty()
   const { mutateAsync: createUnit, isPending: isCreatingUnit } = useCreateUnit()
   const { data: subscription } = useMySubscription()
+  const user = useAuthStore((s) => s.user)
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
@@ -143,7 +145,7 @@ export default function PropertiesPage() {
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle>New Property</DialogTitle>
         <DialogContent>
-          <PropertyForm onSubmit={handleCreate} loading={isCreating || isCreatingUnit} subscription={subscription} />
+          <PropertyForm onSubmit={handleCreate} loading={isCreating || isCreatingUnit} subscription={subscription} userRole={user?.role} />
         </DialogContent>
       </Dialog>
 

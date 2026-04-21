@@ -20,6 +20,7 @@ const MessagesPage                  = lazy(() => import('../pages/admin/Messages
 const UsersPage                     = lazy(() => import('../pages/admin/UsersPage'))
 const AdminProfilePage              = lazy(() => import('../pages/admin/ProfilePage'))
 const SubscriptionsPage             = lazy(() => import('../pages/admin/SubscriptionsPage'))
+const TeamPage                      = lazy(() => import('../pages/admin/TeamPage'))
 const AuditLogPage                  = lazy(() => import('../pages/admin/AuditLogPage'))
 
 const wrap = (el) => (
@@ -45,6 +46,7 @@ const adminRoutes = [
   { path: '/notifications/templates',    element: wrap(<NotificationTemplatesPage />) },
   { path: '/messages',                   element: wrap(<MessagesPage />) },
   { path: '/users',                      element: wrap(<UsersPage />) },
+  { path: '/team',                        element: wrap(<TeamPage />) },
   { path: '/subscriptions',              element: wrap(<SubscriptionsPage />) },
   { path: '/audit',                      element: wrap(<AuditLogPage />) },
   { path: '/profile',                    element: wrap(<AdminProfilePage />) },

@@ -73,25 +73,25 @@ const STEPS = [
   },
 ]
 
-const STORAGE_KEY = 'll_onboarding_done'
+const DEFAULT_STORAGE_KEY = 'll_onboarding_done'
 
-export default function OnboardingWizard({ open, onClose, onAddProperty }) {
+export default function OnboardingWizard({ open, onClose, onAddProperty, storageKey = DEFAULT_STORAGE_KEY }) {
   const [step, setStep] = useState(0)
   const navigate = useNavigate()
 
   const handleFinish = () => {
-    localStorage.setItem(STORAGE_KEY, '1')
+    localStorage.setItem(storageKey, '1')
     onClose()
   }
 
   const handleGoToProfile = () => {
-    localStorage.setItem(STORAGE_KEY, '1')
+    localStorage.setItem(storageKey, '1')
     onClose()
     navigate('/profile')
   }
 
   const handleAddProperty = () => {
-    localStorage.setItem(STORAGE_KEY, '1')
+    localStorage.setItem(storageKey, '1')
     onClose()
     if (onAddProperty) onAddProperty()
   }
