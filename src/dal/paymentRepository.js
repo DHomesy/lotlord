@@ -68,6 +68,20 @@ async function findCompletedByChargeId(chargeId) {
 }
 
 /**
+ * Sum of all completed payments for a charge — used to determine whether a
+ * charge is fully settled (allowing partial payments when total < charge.amount).
+ */
+async function getTotalPaidForCharge(chargeId) {
+  const { rows } = await query(
+    `SELECT COALESCE(SUM(amount_paid), 0) AS total_paid
+     FROM rent_payments
+     WHERE charge_id = $1 AND status = 'completed'`,
+    [chargeId],
+  );
+  return rows[0] ? parseFloat(rows[0].total_paid) : 0;
+}
+
+/**
  * Fetch a payment with all data needed to generate a PDF receipt:
  * tenant name, unit, property, landlord name, lease period.
  */
@@ -114,4 +128,4 @@ async function findForReceipt(id) {
   return rows[0] || null;
 }
 
-module.exports = { findByLeaseId, findById, findForReceipt, create, updateStatus, findByStripePaymentIntentId, findPendingByChargeId, findCompletedByChargeId };
+module.exports = { findByLeaseId, findById, findForReceipt, create, updateStatus, findByStripePaymentIntentId, findPendingByChargeId, findCompletedByChargeId, getTotalPaidForCharge };

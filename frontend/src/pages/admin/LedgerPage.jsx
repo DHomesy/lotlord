@@ -166,9 +166,10 @@ function LedgerTab() {
   const [leaseId, setLeaseId] = useState(null)
   const { data, isLoading } = useLedger(leaseId ? { leaseId } : undefined)
 
-  const entries = Array.isArray(data) ? data : (data?.entries ?? [])
-  const balance = data?.currentBalance ?? null
-  const lease   = data?.lease ?? null
+  const entries      = Array.isArray(data) ? data : (data?.entries ?? [])
+  const balance       = data?.currentBalance ?? null
+  const amountDueNow = data?.amountDueNow ?? null
+  const lease        = data?.lease ?? null
 
   return (
     <Stack spacing={2}>
@@ -202,14 +203,21 @@ function LedgerTab() {
             )}
           </Paper>
           <Paper variant="outlined" sx={{ px: 2.5, py: 1.5, minWidth: 200 }}>
-            <Typography variant="caption" color="text.secondary">Current Balance</Typography>
+            <Typography variant="caption" color="text.secondary">Amount Due Today</Typography>
             <Typography
               variant="body1"
               fontWeight={600}
-              color={balance > 0 ? 'error.main' : 'success.main'}
+              color={amountDueNow > 0 ? 'error.main' : 'success.main'}
             >
-              {balance !== null ? `$${Number(balance).toLocaleString()}` : '—'}
+              {amountDueNow !== null ? fmtMoney(amountDueNow) : '—'}
             </Typography>
+          </Paper>
+          <Paper variant="outlined" sx={{ px: 2.5, py: 1.5, minWidth: 200 }}>
+            <Typography variant="caption" color="text.secondary">Ledger Balance</Typography>
+            <Typography variant="body1" fontWeight={600} color="text.secondary">
+              {balance !== null ? fmtMoney(balance) : '—'}
+            </Typography>
+            <Typography variant="caption" color="text.disabled">Includes future charges</Typography>
           </Paper>
         </Stack>
       )}

@@ -20,6 +20,37 @@ async function getCurrentBalance(leaseId) {
   return rows[0] ? parseFloat(rows[0].balance_after) : 0;
 }
 
+/**
+ * Amount actually due today: sum of non-voided charges with due_date <= TODAY
+ * minus sum of completed payments. Excludes future-dated charges.
+ *
+ * Uses separate subqueries intentionally — a simple LEFT JOIN between
+ * rent_charges and rent_payments would multiply rc.amount for charges with
+ * multiple partial payments, producing an inflated result.
+ */
+async function getAmountDueNow(leaseId) {
+  const { rows } = await query(
+    `SELECT
+       COALESCE((
+         SELECT SUM(rc.amount)
+           FROM rent_charges rc
+          WHERE rc.lease_id = $1
+            AND rc.voided_at IS NULL
+            AND rc.due_date <= CURRENT_DATE
+       ), 0)
+       - COALESCE((
+         SELECT SUM(rp.amount_paid)
+           FROM rent_payments rp
+           JOIN rent_charges rc ON rc.id = rp.charge_id
+          WHERE rc.lease_id = $1
+            AND rp.status = 'completed'
+       ), 0)
+     AS amount_due`,
+    [leaseId],
+  );
+  return rows[0] ? parseFloat(rows[0].amount_due) : 0;
+}
+
 /** Return the full ledger history for a lease, oldest first.
  * effective_date is the business-meaningful date:
  *   charge  → due_date from the linked rent_charge
@@ -253,14 +284,21 @@ async function findCharges({ leaseId, unitId, tenantId, propertyId, forTenantId,
   }
 
   if (unpaidOnly) {
-    // Exclude charges with any active payment (pending ACH or already completed)
+    // Include unpaid AND partially-paid charges that still need payment.
+    // Exclude: voided, fully paid, or charges with an in-flight pending payment.
+    conditions.push(`rc.voided_at IS NULL`);
     conditions.push(
-      `rc.id NOT IN (
-         SELECT charge_id FROM rent_payments
-          WHERE status IN ('completed', 'pending') AND charge_id IS NOT NULL
+      `NOT EXISTS (
+         SELECT 1 FROM rent_payments
+          WHERE charge_id = rc.id AND status = 'pending'
        )`,
     );
-    conditions.push(`rc.voided_at IS NULL`);
+    conditions.push(
+      `COALESCE((
+         SELECT SUM(amount_paid) FROM rent_payments
+          WHERE charge_id = rc.id AND status = 'completed'
+       ), 0) < rc.amount`,
+    );
   }
 
   const { rows } = await query(
@@ -273,15 +311,23 @@ async function findCharges({ leaseId, unitId, tenantId, propertyId, forTenantId,
             rp.payment_method,
             rp.status                    AS payment_status,
             rp.stripe_payment_intent_id,
+            rp_agg.total_paid,
             CASE
-              WHEN rc.voided_at IS NOT NULL THEN 'voided'
-              WHEN rp.status = 'completed'  THEN 'paid'
-              WHEN rp.status = 'pending'    THEN 'pending'
+              WHEN rc.voided_at IS NOT NULL                      THEN 'voided'
+              WHEN rp_agg.total_paid >= rc.amount               THEN 'paid'
+              WHEN rp_agg.has_pending                            THEN 'pending'
+              WHEN rp_agg.total_paid > 0                        THEN 'partial'
               ELSE 'unpaid'
             END                          AS status
        FROM rent_charges rc
        JOIN units u      ON u.id = rc.unit_id
        JOIN properties p ON p.id = u.property_id
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(SUM(amount_paid) FILTER (WHERE status = 'completed'), 0) AS total_paid,
+                bool_or(status = 'pending') AS has_pending
+           FROM rent_payments
+          WHERE charge_id = rc.id
+       ) rp_agg ON TRUE
        LEFT JOIN LATERAL (
          SELECT * FROM rent_payments
           WHERE charge_id = rc.id
@@ -540,6 +586,7 @@ async function findStatementEntries(leaseId, { from, to } = {}) {
 module.exports = {
   appendEntry,
   getCurrentBalance,
+  getAmountDueNow,
   findByLeaseId,
   findStatementEntries,
   findUnpaidCharges,

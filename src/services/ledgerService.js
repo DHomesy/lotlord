@@ -9,10 +9,11 @@ const audit = require('./auditService');
  * Get the full ledger history + current balance for a lease.
  */
 async function getLedger(leaseId) {
-  const [lease, entries, balance] = await Promise.all([
+  const [lease, entries, balance, amountDueNow] = await Promise.all([
     leaseRepo.findById(leaseId),
     ledgerRepo.findByLeaseId(leaseId),
     ledgerRepo.getCurrentBalance(leaseId),
+    ledgerRepo.getAmountDueNow(leaseId),
   ]);
 
   if (!lease) {
@@ -21,7 +22,7 @@ async function getLedger(leaseId) {
     throw err;
   }
 
-  return { lease, entries, currentBalance: balance };
+  return { lease, entries, currentBalance: balance, amountDueNow };
 }
 
 /**
@@ -52,8 +53,14 @@ async function recordManualPayment(data, createdBy) {
     if (!charge) throw Object.assign(new Error('Charge not found'), { status: 404 });
     if (charge.lease_id !== data.leaseId) throw Object.assign(new Error('Charge does not belong to this lease'), { status: 400 });
     if (charge.voided_at) throw Object.assign(new Error('Cannot record payment against a voided charge'), { status: 409 });
-    const completed = await paymentRepo.findCompletedByChargeId(data.chargeId);
-    if (completed) throw Object.assign(new Error('This charge has already been paid'), { status: 409 });
+    const totalPaidSoFar = await paymentRepo.getTotalPaidForCharge(data.chargeId);
+    if (totalPaidSoFar >= parseFloat(charge.amount)) {
+      throw Object.assign(new Error('This charge has already been paid in full'), { status: 409 });
+    }
+    const remaining = parseFloat(charge.amount) - totalPaidSoFar;
+    if (parseFloat(data.amountPaid) > remaining) {
+      throw Object.assign(new Error('Amount exceeds the remaining balance on this charge'), { status: 400 });
+    }
   }
 
   const client = await getClient();

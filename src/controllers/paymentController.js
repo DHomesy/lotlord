@@ -120,7 +120,7 @@ async function listMyPaymentMethods(req, res, next) {
 // Resolves the tenant + active lease from JWT; no user-supplied leaseId accepted.
 async function createMyPaymentIntent(req, res, next) {
   try {
-    const { chargeId, paymentMethodId } = req.body;
+    const { chargeId, paymentMethodId, amount } = req.body;
     if (!paymentMethodId) return res.status(400).json({ error: 'paymentMethodId is required' });
 
     // 1. Resolve tenant from JWT
@@ -132,30 +132,55 @@ async function createMyPaymentIntent(req, res, next) {
     const lease  = leases[0];
     if (!lease) return res.status(404).json({ error: 'No active lease found' });
 
-    // 3. If chargeId provided, verify it belongs to this lease and is not already being paid
+    // 3. If chargeId provided, verify it belongs to this lease and is not already fully paid
+    let charge = null;
+    let chargeTotalPaid = 0;
     if (chargeId) {
-      const charge = await ledgerRepo.findChargeById(chargeId);
-      if (!charge)                      return res.status(404).json({ error: 'Charge not found' });
-      if (charge.lease_id !== lease.id) return res.status(403).json({ error: 'Charge does not belong to your lease' });
-      if (charge.voided_at)             return res.status(400).json({ error: 'This charge has been voided' });
+      charge = await ledgerRepo.findChargeById(chargeId);
+      if (!charge)                        return res.status(404).json({ error: 'Charge not found' });
+      if (charge.lease_id !== lease.id)   return res.status(403).json({ error: 'Charge does not belong to your lease' });
+      if (charge.voided_at)               return res.status(400).json({ error: 'This charge has been voided' });
 
-      // Prevent duplicate payments
+      // Prevent duplicate in-flight payments
       const pendingPay = await paymentRepo.findPendingByChargeId(chargeId);
       if (pendingPay) {
         return res.status(409).json({
           error: 'A payment is already in progress for this charge. Please wait for it to settle before retrying.',
         });
       }
-      const completedPay = await paymentRepo.findCompletedByChargeId(chargeId);
-      if (completedPay) {
-        return res.status(409).json({ error: 'This charge has already been paid.' });
+      // Prevent re-paying a fully settled charge
+      chargeTotalPaid = await paymentRepo.getTotalPaidForCharge(chargeId);
+      if (chargeTotalPaid >= parseFloat(charge.amount)) {
+        return res.status(409).json({ error: 'This charge has already been paid in full.' });
       }
+    }
+
+    // 4. Validate optional partial amount
+    let resolvedAmount = null;
+    if (amount != null) {
+      const parsed = parseFloat(amount);
+      if (isNaN(parsed) || parsed <= 0) {
+        return res.status(400).json({ error: 'amount must be a positive number' });
+      }
+      if (charge) {
+        // Cap at remaining balance — prevents overpaying a partially-paid charge
+        const remaining = parseFloat(charge.amount) - chargeTotalPaid;
+        if (parsed > remaining) {
+          return res.status(400).json({ error: 'amount cannot exceed the remaining balance on this charge' });
+        }
+      }
+      // Safety cap when no specific charge is linked — prevent arbitrary large ACH debits
+      if (!charge && parsed > parseFloat(lease.monthly_rent)) {
+        return res.status(400).json({ error: 'amount cannot exceed monthly rent when no charge is specified' });
+      }
+      resolvedAmount = parsed;
     }
 
     const result = await stripeService.createPaymentIntent({
       leaseId:         lease.id,
       chargeId:        chargeId || null,
       paymentMethodId,
+      amount:          resolvedAmount,
       createdBy:       req.user.sub,
       ipAddress:       req.ip,
       userAgent:       req.get('user-agent'),

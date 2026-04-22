@@ -51,14 +51,14 @@ export default function AdminProfilePage() {
   const { data: subscription }                                                = useMySubscription()
   const { mutate: startCheckout,  isPending: startingCheckout  }             = useCreateCheckoutSession()
   const { mutate: openPortal,     isPending: openingPortal     }             = useCreateBillingPortalSession()
-  const { data: tenantData }                = useTenant(selectedTenantId)
-  const { data: bankMethods = [], isLoading: loadingBanks } = usePaymentMethods(selectedTenantId)
   const [connectBanner,  setConnectBanner]  = useState(null) // 'success' | 'refresh' | null
   const [billingBanner,  setBillingBanner]  = useState(null) // 'success' | 'canceled' | null
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
   const [selectedTenantId, setSelectedTenantId] = useState(null)
   const [bankOpen, setBankOpen] = useState(false)
   const subscriptionRef = useRef(null)
+  const { data: tenantData }                = useTenant(selectedTenantId)
+  const { data: bankMethods = [], isLoading: loadingBanks } = usePaymentMethods(selectedTenantId)
 
   // Detect return from Stripe Connect onboarding redirect
   useEffect(() => {

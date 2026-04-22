@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.7.0 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.7.1 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -742,7 +742,8 @@ See **[CHANGELOG.md](CHANGELOG.md)** for the full versioned release history.
 - [x] **33. Employee role + payment receipts + account statement PDF** — Full employee role (`migrations/025_employee_role.sql` + `026_invitation_type.sql`); employee data scoping via `resolveOwnerId`; `POST /invitations/employee`; `GET /payments/:id/receipt` (pdfkit PDF); `GET /ledger/statement` (JSON) + `GET /ledger/statement/pdf` (pdfkit PDF); 57 new tests (192 total, 14 suites). See CHANGELOG 1.6.0 for full details.
 - [x] **34. Frontend role-gating audit** — Employee role UI completion: ChargesPage void guard, Sidebar Subscriptions for landlords, UsersPage `'employee'` role fix, ProfilePage employee info card, PaymentsPage connect banner gating, DashboardPage employee upgrade CTA, LedgerPage Property/Unit meta card, TenantsPage Team Members tab + employee invite dialog. `createEmployeeInvitation` API + hook. See CHANGELOG 1.6.1.
 - [x] **35. UX polish sprint (v1.7.0)** — Team Members page at `/team` (own sidebar item; landlord/admin only); sidebar nav restructured into Core/Finance/Communication/Settings groups with active-state bug fix; MessagesPage rebuilt with Conversations/Notification Log/Automation tabs (notification log folded in, automation schedule cards, paygate for free tier); TenantsPage stripped to tenants-only; ledger `effective_date` (charge `due_date` / payment `payment_date` via JOIN), `fmtMoney` shared formatter; tenant Payments `payment_date` column; `GET /notifications/log` opened to all staff roles. See CHANGELOG 1.7.0.
-- [ ] **36. AI agent** — wire up OpenAI integration to Twilio inbound SMS handler, conversation management
+- [x] **36. Payments tab consolidated into Profile (v1.7.1)** — Removed standalone Payments page from Finance sidebar group. Finance now contains only Ledger and Charges. ACH bank account management (tenant picker, bank accounts list, Connect Bank dialog) embedded in `ProfilePage` as a new "Tenant Bank Accounts" section (landlord-only). `/payments` route redirects to `/profile`. See CHANGELOG 1.7.1.
+- [ ] **37. AI agent** — wire up OpenAI integration to Twilio inbound SMS handler, conversation management
 
 ---
 

@@ -182,7 +182,7 @@ const createPaymentValidators = [
   body('leaseId').isUUID(),
   currencyField('amountPaid'),
   body('paymentDate').isISO8601().toDate(),
-  body('paymentMethod').isIn(['stripe_ach', 'stripe_card', 'check', 'cash', 'other']),
+  body('paymentMethod').isIn(['stripe_ach', 'stripe_card', 'check', 'cash', 'zelle', 'other']),
   body('chargeId').optional().isUUID(),
   body('notes').optional().trim(),
 ];

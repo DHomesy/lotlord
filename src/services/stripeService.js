@@ -116,7 +116,7 @@ async function createSetupIntent(tenantId) {
  * @param {string}  opts.createdBy         - User ID of the actor (admin recording the intent)
  * @returns {{ clientSecret, paymentIntentId, paymentId, amountDollars, status }}
  */
-async function createPaymentIntent({ leaseId, chargeId, paymentMethodId, createdBy, ipAddress, userAgent }) {
+async function createPaymentIntent({ leaseId, chargeId, paymentMethodId, amount, createdBy, ipAddress, userAgent }) {
   const lease = await leaseRepo.findById(leaseId);
   if (!lease) throw Object.assign(new Error('Lease not found'), { status: 404 });
 
@@ -127,6 +127,10 @@ async function createPaymentIntent({ leaseId, chargeId, paymentMethodId, created
     if (!charge) throw Object.assign(new Error('Charge not found'), { status: 404 });
     if (charge.lease_id !== leaseId) throw Object.assign(new Error('Charge does not belong to this lease'), { status: 400 });
     amountDollars = parseFloat(charge.amount);
+  }
+  // Optional partial-payment override — validated by caller to not exceed charge.amount
+  if (amount != null) {
+    amountDollars = parseFloat(amount);
   }
   const amountCents = Math.round(amountDollars * 100);
 

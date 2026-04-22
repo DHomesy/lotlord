@@ -223,3 +223,79 @@ describe('POST /api/v1/charges/void-by-unit', () => {
     await fx.pool.query(`DELETE FROM units WHERE id = $1`, [freshUnitId]);
   });
 });
+
+// ── Partial charge status (v1.7.2) ───────────────────────────────────────────
+
+describe('GET /api/v1/charges — partial status (v1.7.2)', () => {
+  let partialChargeId;
+  let fullChargeId;
+
+  beforeAll(async () => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
+    // Charge that will receive a partial payment
+    partialChargeId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, tenant_id, charge_type, amount, due_date)
+       VALUES ($1, $2, $3, $4, 'rent', 1000, $5)`,
+      [partialChargeId, fx.unitA.id, fx.leaseA.id, fx.tenantA.tenantProfileId, tomorrow],
+    );
+    // Record a partial payment (500 of 1000)
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, $3, 500, CURRENT_DATE, 'cash', 'completed')`,
+      [uuidv4(), fx.leaseA.id, partialChargeId],
+    );
+
+    // Charge that will be fully paid
+    fullChargeId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, tenant_id, charge_type, amount, due_date)
+       VALUES ($1, $2, $3, $4, 'rent', 600, $5)`,
+      [fullChargeId, fx.unitA.id, fx.leaseA.id, fx.tenantA.tenantProfileId, tomorrow],
+    );
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, $3, 600, CURRENT_DATE, 'cash', 'completed')`,
+      [uuidv4(), fx.leaseA.id, fullChargeId],
+    );
+  });
+
+  it('returns status=partial for a partially-paid charge', async () => {
+    const res = await request(app)
+      .get(`/api/v1/charges?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    const charge = res.body.find((c) => c.id === partialChargeId);
+    expect(charge).toBeDefined();
+    expect(charge.status).toBe('partial');
+  });
+
+  it('returns status=paid for a fully-paid charge', async () => {
+    const res = await request(app)
+      .get(`/api/v1/charges?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    const charge = res.body.find((c) => c.id === fullChargeId);
+    expect(charge).toBeDefined();
+    expect(charge.status).toBe('paid');
+  });
+
+  it('unpaidOnly=true includes partial charges', async () => {
+    const res = await request(app)
+      .get(`/api/v1/charges?leaseId=${fx.leaseA.id}&unpaidOnly=true`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    const ids = res.body.map((c) => c.id);
+    expect(ids).toContain(partialChargeId);
+  });
+
+  it('unpaidOnly=true excludes fully-paid charges', async () => {
+    const res = await request(app)
+      .get(`/api/v1/charges?leaseId=${fx.leaseA.id}&unpaidOnly=true`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    const ids = res.body.map((c) => c.id);
+    expect(ids).not.toContain(fullChargeId);
+  });
+});

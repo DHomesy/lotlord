@@ -18,6 +18,80 @@ beforeAll(async () => {
 });
 afterAll(async () => { if (fx) await fx.teardown(); });
 
+describe('GET /api/v1/ledger — amountDueNow (v1.7.2)', () => {
+  let chargeOverdueId;
+  let chargeFutureId;
+
+  beforeAll(async () => {
+    // Overdue charge (due yesterday)
+    chargeOverdueId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, tenant_id, charge_type, amount, due_date)
+       VALUES ($1, $2, $3, $4, 'rent', 800, CURRENT_DATE - INTERVAL '1 day')`,
+      [chargeOverdueId, fx.unitA.id, fx.leaseA.id, fx.tenantA.tenantProfileId],
+    );
+    // Future charge (due next month — should be excluded from amountDueNow)
+    chargeFutureId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, tenant_id, charge_type, amount, due_date)
+       VALUES ($1, $2, $3, $4, 'rent', 900, CURRENT_DATE + INTERVAL '30 days')`,
+      [chargeFutureId, fx.unitA.id, fx.leaseA.id, fx.tenantA.tenantProfileId],
+    );
+  });
+
+  it('ledger response includes amountDueNow field', async () => {
+    const res = await request(app)
+      .get(`/api/v1/ledger?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    expect(typeof res.body.amountDueNow).toBe('number');
+  });
+
+  it('amountDueNow excludes future-dated charges', async () => {
+    const res = await request(app)
+      .get(`/api/v1/ledger?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    // amountDueNow must equal the overdue charge (800), not include future charge (900)
+    expect(res.body.amountDueNow).toBe(800);
+  });
+
+  it('amountDueNow decreases after a partial payment is recorded', async () => {
+    // Record a partial payment of 300 against the overdue charge
+    const partialPayId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, $3, 300, CURRENT_DATE, 'cash', 'completed')`,
+      [partialPayId, fx.leaseA.id, chargeOverdueId],
+    );
+
+    const res = await request(app)
+      .get(`/api/v1/ledger?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    // 800 (overdue) - 300 (paid) = 500
+    expect(res.body.amountDueNow).toBe(500);
+  });
+
+  it('amountDueNow is not inflated when a charge has multiple partial payments (regression)', async () => {
+    // Add a second partial payment of 200 (total paid = 500, remaining = 300)
+    const partialPay2Id = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, $3, 200, CURRENT_DATE, 'cash', 'completed')`,
+      [partialPay2Id, fx.leaseA.id, chargeOverdueId],
+    );
+
+    const res = await request(app)
+      .get(`/api/v1/ledger?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    // 800 (overdue) - 500 (total paid 300+200) = 300
+    // A LEFT JOIN bug would incorrectly inflate charge to 800*2=1600 and give a wrong number
+    expect(res.body.amountDueNow).toBe(300);
+  });
+});
+
 describe('GET /api/v1/ledger', () => {
   it('landlordA fetches ledger for own lease', async () => {
     const res = await request(app)

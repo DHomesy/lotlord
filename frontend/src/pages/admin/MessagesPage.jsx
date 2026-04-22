@@ -16,7 +16,7 @@ import EmailIcon         from '@mui/icons-material/Email'
 import SmsIcon           from '@mui/icons-material/Sms'
 import NotificationsIcon from '@mui/icons-material/Notifications'
 import ScheduleIcon      from '@mui/icons-material/Schedule'
-import OpenInNewIcon     from '@mui/icons-material/OpenInNew'
+
 import PageContainer     from '../../components/layout/PageContainer'
 import DataTable         from '../../components/common/DataTable'
 import StatusChip        from '../../components/common/StatusChip'
@@ -429,18 +429,8 @@ function AutomationTab({ navigate, isPaid }) {
       )}
 
       <Typography variant="body2" color="text.secondary">
-        The following jobs run automatically on a schedule. Each job uses a notification template —
-        create or edit templates on the{' '}
-        <Button
-          size="small"
-          variant="text"
-          endIcon={<OpenInNewIcon sx={{ fontSize: 14 }} />}
-          onClick={() => navigate('/notifications/templates')}
-          sx={{ p: 0, minWidth: 0, verticalAlign: 'baseline', textTransform: 'none', fontWeight: 600 }}
-        >
-          Templates
-        </Button>{' '}
-        page.
+        The following jobs run automatically on a schedule. Templates for these automations can be
+        managed under <strong>Communication → Templates</strong>.
       </Typography>
 
       <Stack spacing={1.5}>
@@ -470,19 +460,6 @@ function AutomationTab({ navigate, isPaid }) {
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                   {job.description}
                 </Typography>
-                {job.template && (
-                  <Tooltip title="View or edit this template">
-                    <Button
-                      size="small"
-                      variant="text"
-                      endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
-                      onClick={() => navigate('/notifications/templates')}
-                      sx={{ mt: 0.5, p: 0, minWidth: 0, textTransform: 'none', fontSize: 12 }}
-                    >
-                      Template: <code style={{ marginLeft: 4 }}>{job.template}</code>
-                    </Button>
-                  </Tooltip>
-                )}
               </Box>
             </Stack>
           </Paper>

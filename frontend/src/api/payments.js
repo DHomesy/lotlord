@@ -5,6 +5,8 @@ export const getPayments                = (params)    => http.get(base, { params
 export const createPaymentIntent        = (data)      => http.post(`${base}/stripe/payment-intent`, data).then((r) => r.data)
 // Tenant self-service: pay their own charge (lease resolved server-side)
 export const createMyPaymentIntent      = (data)      => http.post(`${base}/stripe/payment-intent/me`, data).then((r) => r.data)
+// Admin/landlord/employee: record a manual payment (cash, check, zelle, etc.)
+export const recordManualPayment        = (data)      => http.post(base, data).then((r) => r.data)
 
 // GET /payments/:id/receipt — returns a PDF blob
 export const getReceipt = (id) =>

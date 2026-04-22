@@ -8,6 +8,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.7.2] — 2026-04-22 — QA fixes: ledger balance, partial payments, manual recording, paygate
+
+### Added
+- **Partial payments (tenant)** — `PaymentDialog` on the tenant Charges page now includes an editable **Amount** field (default = full charge amount; for partially-paid charges, default = remaining balance). Tenants can submit any amount between $0.01 and the charge total. The backend `createMyPaymentIntent` validates and forwards the override to Stripe.
+- **Manual payment recording (admin/landlord/employee)** — a new **Record Payment** button (green `$` icon) appears on each unpaid or partial charge row in the admin Charges page. Opens `RecordPaymentDialog` with fields: Amount Paid, Payment Date, Method (cash/check/zelle/other), and Notes. Calls `POST /payments` and refreshes the charge + ledger views.
+- **Partial charge status** — `findCharges` now computes a `partial` status when the sum of completed payments is greater than $0 but less than the charge amount. The `unpaidOnly` filter now includes partial charges (both need further payment). `StatusChip` already had a `partial` variant (warning/orange).
+- **Ledger — Amount Due Today** — `GET /api/v1/ledger?leaseId=x` now returns `amountDueNow` alongside `currentBalance`. `amountDueNow` sums only non-voided charges with `due_date <= TODAY` minus completed payments, excluding future-dated charges. `LedgerPage` shows a new **Amount Due Today** card (colour-coded) and renames the old card to **Ledger Balance** with a note explaining it includes future charges.
+- **Team tab hidden for free landlords** — the Team nav item now requires the Starter plan. Free-tier landlords no longer see the Team link in the sidebar. `Sidebar.jsx` calls `useMySubscription()` (TanStack Query cache hit, no extra request) and filters items with `planRequired: 'starter'`.
+- **`zelle` payment method** — added to the `paymentMethod` enum in `createPaymentValidators` and to the `RecordPaymentDialog` method select.
+
+### Fixed
+- **Automation tab** — removed per-card "Template: rent_due" edit button and the nav link to the Templates page. Intro text updated to read-only direction.
+- **Manual payment against partial charge (Bug A — critical)** — `recordManualPayment` previously used `findCompletedByChargeId` to detect duplicate payments, which blocked any additional payment against a partially-paid charge. Replaced with `getTotalPaidForCharge` comparison: a 409 is returned only when `totalPaid >= charge.amount`; a 400 is returned when `amountPaid > remaining`. Cash/check/zelle partial-charge payments now work correctly.
+- **Stripe PI overpayment on partial charge (Bug B)** — `createMyPaymentIntent` validated `amount <= charge.amount` instead of `amount <= remaining balance`. A tenant could create a Stripe payment intent for more than the outstanding balance on a partially-paid charge. Now validates against remaining balance.
+- **Tenant PaymentDialog max amount (Bug C)** — `maxAmount` used the full charge amount for partial charges, allowing the tenant to enter more than the remaining balance. Now uses `charge.amount - charge.total_paid` when `charge.status === 'partial'`.
+- **Admin RecordPaymentDialog defaults (Bug D)** — the form reset used the full charge amount as default and max for partial charges. Now defaults to and caps at remaining balance.
+- **LedgerPage negative amount display (Bug E)** — the Amount Due Today and Ledger Balance summary cards used raw `$${value}` string interpolation, rendering negative values as `$-200`. Both now use the existing `fmtMoney()` helper (`-$200.00`).
+- **`zelle` DB constraint (migration 027)** — the `rent_payments_payment_method_check` constraint did not include `zelle`, causing DB errors when recording a zelle payment even though the validator accepted it. Migration 027 drops and recreates the constraint with `zelle` included.
+- **Tenant payment history date (Bug F)** — the Payment History table on the tenant Charges page used `created_at` (DB row insert timestamp) as the Date column instead of `payment_date` (the actual payment date field). Fixed to use `payment_date`, consistent with the 1.7.1 changelog intent.
+- **Void button shown on partial charges (Bug G)** — the admin Charges page showed the Void button for partial charges (status `partial`), but the backend correctly rejects any void attempt on a charge that already has a completed payment. The button now uses a separate `canVoid` guard that also excludes partial charges, eliminating the confusing 409 error. The Edit button retains its original `canEdit` guard (partial charges remain editable).
+
+---
 ## [1.7.1] — 2026-04-21 — Payments tab consolidated into Profile
 
 ### Changed

@@ -30,3 +30,16 @@ export function useCreateMyPaymentIntent() {
     },
   })
 }
+
+/** Admin/landlord/employee: record a manual cash/check/zelle payment */
+export function useRecordManualPayment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.recordManualPayment,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PAYMENTS_KEY })
+      qc.invalidateQueries({ queryKey: ['charges'] })
+      qc.invalidateQueries({ queryKey: ['ledger'] })
+    },
+  })
+}

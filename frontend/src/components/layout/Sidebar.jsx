@@ -1,4 +1,6 @@
 import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { useMySubscription } from '../../hooks/useBilling'
+import { hasStarter } from '../../lib/plans'
 import {
   Avatar,
   Box,
@@ -36,7 +38,7 @@ const NAV_GROUPS = [
       { label: 'Dashboard',   path: '/dashboard',   icon: <DashboardIcon /> },
       { label: 'Properties',  path: '/properties',  icon: <ApartmentIcon /> },
       { label: 'Tenants',     path: '/tenants',     icon: <PeopleIcon /> },
-      { label: 'Team',        path: '/team',        icon: <GroupsIcon />, roles: ['admin', 'landlord'] },
+      { label: 'Team',        path: '/team',        icon: <GroupsIcon />, roles: ['admin', 'landlord'], planRequired: 'starter' },
       { label: 'Leases',      path: '/leases',      icon: <DescriptionIcon /> },
       { label: 'Maintenance', path: '/maintenance', icon: <BuildIcon /> },
       { label: 'Documents',   path: '/documents',   icon: <FolderIcon /> },
@@ -77,6 +79,8 @@ const NAV_GROUPS = [
 
 export default function Sidebar({ role, user, onNavClick }) {
   const location = useLocation()
+  const { data: subscription } = useMySubscription()
+  const isPaid = role === 'admin' || hasStarter(subscription)
 
   const displayName = user?.firstName
     ? user.firstName
@@ -124,7 +128,8 @@ export default function Sidebar({ role, user, onNavClick }) {
           if (group.roles && !group.roles.includes(role)) return null
 
           const visibleItems = group.items.filter(
-            (item) => !item.roles || item.roles.includes(role),
+            (item) => (!item.roles || item.roles.includes(role)) &&
+              (!item.planRequired || isPaid),
           )
           if (!visibleItems.length) return null
 

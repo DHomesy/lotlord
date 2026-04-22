@@ -21,8 +21,18 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
   const navigate = useNavigate()
   const { data: methods = [] } = useMyPaymentMethods()
   const [selectedId, setSelectedId] = useState('')
+  const [amount, setAmount] = useState('')
   const [succeeded, setSucceeded] = useState(false)
   const { mutate: pay, isPending, error, reset } = useCreateMyPaymentIntent()
+
+  // Compute default amount: for partial charges use remaining balance; otherwise full charge
+  function defaultAmount(c) {
+    if (!c) return ''
+    if (c.status === 'partial' && c.total_paid != null) {
+      return String(Math.max(0, parseFloat(c.amount) - parseFloat(c.total_paid)))
+    }
+    return String(parseFloat(c.amount))
+  }
 
   // Reset state whenever the dialog opens for a new charge
   useEffect(() => {
@@ -30,6 +40,7 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
       setSucceeded(false)
       reset()
       setSelectedId(methods[0]?.id ?? '')
+      setAmount(defaultAmount(charge))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, charge?.id])
@@ -42,9 +53,18 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
     }
   }, [methods, selectedId])
 
+  const parsedAmount = parseFloat(amount)
+  // For partial charges use remaining balance as the ceiling; full amount otherwise
+  const maxAmount = charge
+    ? (charge.status === 'partial' && charge.total_paid != null
+        ? Math.max(0, parseFloat(charge.amount) - parseFloat(charge.total_paid))
+        : parseFloat(charge.amount))
+    : 0
+  const amountValid = !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= maxAmount
+
   function handlePay() {
     pay(
-      { chargeId: charge.id, paymentMethodId: selectedId },
+      { chargeId: charge.id, paymentMethodId: selectedId, amount: parsedAmount },
       { onSuccess: () => setSucceeded(true) },
     )
   }
@@ -57,7 +77,7 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
           <DialogTitle>Payment Initiated</DialogTitle>
           <DialogContent>
             <Alert severity="success">
-              Your ACH payment of <strong>${Number(charge.amount).toLocaleString()}</strong> is
+              Your ACH payment of <strong>${Number(parsedAmount || charge.amount).toLocaleString()}</strong> is
               processing. It typically takes 1-5 business days to settle.
             </Alert>
           </DialogContent>
@@ -67,7 +87,7 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
         </>
       ) : (
         <>
-          <DialogTitle>Pay ${Number(charge?.amount ?? 0).toLocaleString()}</DialogTitle>
+          <DialogTitle>Make a Payment</DialogTitle>
           <DialogContent>
             {methods.length === 0 ? (
               <Alert severity="info" sx={{ mt: 1 }}>
@@ -81,33 +101,60 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
                 </Button>
               </Alert>
             ) : (
-              <Stack spacing={1} sx={{ pt: 1 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Select a bank account:
-                </Typography>
-                <RadioGroup value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
-                  {methods.map((pm) => (
-                    <FormControlLabel
-                      key={pm.id}
-                      value={pm.id}
-                      disabled={!pm.verified}
-                      control={<Radio />}
-                      label={
-                        pm.verified
-                          ? `${pm.bankName} •••• ${pm.last4} (${pm.accountType})`
-                          : `${pm.bankName} •••• ${pm.last4} — verification pending`
-                      }
-                    />
-                  ))}
-                </RadioGroup>
+              <Stack spacing={2} sx={{ pt: 1 }}>
+                <Stack spacing={0.5}>
+                  <Typography variant="body2" color="text.secondary">
+                    Amount ($) — max ${maxAmount.toLocaleString()}
+                  </Typography>
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    min={0.01}
+                    max={maxAmount}
+                    step={0.01}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      fontSize: 16,
+                      border: '1px solid #ccc',
+                      borderRadius: 4,
+                    }}
+                  />
+                  {!amountValid && amount !== '' && (
+                    <Typography variant="caption" color="error">
+                      Enter an amount between $0.01 and ${maxAmount.toLocaleString()}.
+                    </Typography>
+                  )}
+                </Stack>
+                <Stack spacing={0.5}>
+                  <Typography variant="body2" color="text.secondary">
+                    Select a bank account:
+                  </Typography>
+                  <RadioGroup value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
+                    {methods.map((pm) => (
+                      <FormControlLabel
+                        key={pm.id}
+                        value={pm.id}
+                        disabled={!pm.verified}
+                        control={<Radio />}
+                        label={
+                          pm.verified
+                            ? `${pm.bankName} •••• ${pm.last4} (${pm.accountType})`
+                            : `${pm.bankName} •••• ${pm.last4} — verification pending`
+                        }
+                      />
+                    ))}
+                  </RadioGroup>
+                </Stack>
                 {methods.every((pm) => !pm.verified) && (
-                  <Alert severity="warning" sx={{ mt: 1 }}>
+                  <Alert severity="warning">
                     Your bank account is awaiting micro-deposit verification. Check your Profile
                     page for a verification link once the deposits appear (1–2 business days).
                   </Alert>
                 )}
                 {error && (
-                  <Alert severity="error" sx={{ mt: 1 }}>
+                  <Alert severity="error">
                     {error.response?.data?.error ?? 'Payment failed. Please try again.'}
                   </Alert>
                 )}
@@ -120,7 +167,7 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
               <Button
                 variant="contained"
                 onClick={handlePay}
-                disabled={!selectedId || isPending || methods.find((m) => m.id === selectedId)?.verified === false}
+                disabled={!selectedId || isPending || !amountValid || methods.find((m) => m.id === selectedId)?.verified === false}
                 startIcon={isPending ? <CircularProgress size={14} color="inherit" /> : <PaymentIcon />}
               >
                 {isPending ? 'Processing…' : 'Confirm Payment'}
@@ -167,7 +214,7 @@ export default function TenantChargesPage() {
       sortable: false,
       disableColumnMenu: true,
       renderCell: ({ row }) =>
-        row.status === 'unpaid' && !row.voided_at ? (
+        (row.status === 'unpaid' || row.status === 'partial') && !row.voided_at ? (
           <Button size="small" startIcon={<PaymentIcon />} onClick={() => setSelectedCharge(row)}>
             Pay
           </Button>
@@ -176,7 +223,7 @@ export default function TenantChargesPage() {
   ]
 
   const paymentColumns = [
-    { field: 'created_at', headerName: 'Date', width: 130, valueFormatter: (v) => v?.slice(0, 10) },
+    { field: 'payment_date', headerName: 'Date', width: 130, valueFormatter: (v) => v?.slice(0, 10) },
     { field: 'amount_paid', headerName: 'Amount', width: 130, valueFormatter: (v) => `$${Number(v).toLocaleString()}` },
     { field: 'payment_method', headerName: 'Method', width: 140 },
     { field: 'status', headerName: 'Status', width: 120, renderCell: ({ value }) => <StatusChip status={value} /> },

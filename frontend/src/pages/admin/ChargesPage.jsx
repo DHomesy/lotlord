@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
-  Alert, Box, Button, Dialog, DialogTitle, DialogContent,
+  Alert, Box, Button, CircularProgress, Dialog, DialogTitle, DialogContent,
   DialogActions, IconButton, MenuItem, Stack, TextField,
   ToggleButton, ToggleButtonGroup, Tooltip, Typography,
   useTheme, useMediaQuery,
@@ -11,6 +11,7 @@ import {
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import BlockIcon from '@mui/icons-material/Block'
+import PaymentsIcon from '@mui/icons-material/Payments'
 import { useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/layout/PageContainer'
 import DataTable from '../../components/common/DataTable'
@@ -20,6 +21,7 @@ import LeasePicker from '../../components/pickers/LeasePicker'
 import UnitPicker from '../../components/pickers/UnitPicker'
 import { useProperties } from '../../hooks/useProperties'
 import { useCharges, useCreateCharge, useUpdateCharge, useVoidCharge } from '../../hooks/useCharges'
+import { useRecordManualPayment } from '../../hooks/usePayments'
 import { useAuthStore } from '../../store/authStore'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -127,6 +129,130 @@ function EditChargeForm({ charge, onSubmit, loading, onCancel }) {
   )
 }
 
+// ─── Record Payment Dialog ─────────────────────────────────────────────────
+
+const recordSchema = z.object({
+  amountPaid:    z.coerce.number().positive('Amount must be positive'),
+  paymentDate:   z.string().min(1, 'Date is required'),
+  paymentMethod: z.enum(['cash', 'check', 'zelle', 'other']),
+  notes:         z.string().optional(),
+})
+
+function RecordPaymentDialog({ charge, open, onClose }) {
+  const { mutate: record, isPending, error, reset: resetMutation } = useRecordManualPayment()
+  const { register, handleSubmit, control, formState: { errors }, reset: resetForm } = useForm({
+    resolver: zodResolver(recordSchema),
+    defaultValues: {
+      amountPaid: '',
+      paymentDate: new Date().toISOString().slice(0, 10),
+      paymentMethod: 'cash',
+      notes: '',
+    },
+  })
+
+  // Reset form values each time the dialog opens for a (potentially different) charge
+  useEffect(() => {
+    if (open && charge) {
+      // For partially-paid charges default to the remaining balance, not the full amount
+      const remaining = charge.total_paid != null
+        ? Math.max(0, parseFloat(charge.amount) - parseFloat(charge.total_paid))
+        : parseFloat(charge.amount)
+      resetForm({
+        amountPaid: String(remaining),
+        paymentDate: new Date().toISOString().slice(0, 10),
+        paymentMethod: 'cash',
+        notes: '',
+      })
+      resetMutation()
+    }
+  }, [open, charge?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function onSubmit(values) {
+    record(
+      {
+        leaseId:       charge.lease_id,
+        chargeId:      charge.id,
+        amountPaid:    values.amountPaid,
+        paymentDate:   values.paymentDate,
+        paymentMethod: values.paymentMethod,
+        notes:         values.notes || undefined,
+      },
+      { onSuccess: () => { resetMutation(); onClose() } },
+    )
+  }
+
+  if (!charge) return null
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Record Payment</DialogTitle>
+      <Stack component="form" onSubmit={handleSubmit(onSubmit)}>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            <Typography variant="body2" color="text.secondary">
+              Charge: <strong>{charge.charge_type}</strong> — ${Number(charge.amount).toLocaleString()} due {charge.due_date?.slice(0, 10)}
+            </Typography>
+            <TextField
+              label="Amount Paid ($)"
+              type="number"
+              inputProps={{ step: '0.01', min: '0.01', max: String(Math.max(0, parseFloat(charge.amount) - parseFloat(charge.total_paid || 0))) }}
+              {...register('amountPaid')}
+              error={!!errors.amountPaid}
+              helperText={errors.amountPaid?.message}
+            />
+            <TextField
+              label="Payment Date"
+              type="date"
+              InputLabelProps={{ shrink: true }}
+              {...register('paymentDate')}
+              error={!!errors.paymentDate}
+              helperText={errors.paymentDate?.message}
+            />
+            <Controller
+              name="paymentMethod"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  label="Method"
+                  select
+                  {...field}
+                  error={!!errors.paymentMethod}
+                >
+                  {['cash', 'check', 'zelle', 'other'].map((m) => (
+                    <MenuItem key={m} value={m}>{m}</MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
+            <TextField
+              label="Notes (optional)"
+              multiline
+              rows={2}
+              {...register('notes')}
+            />
+            {error && (
+              <Alert severity="error">
+                {error.response?.data?.error ?? 'Failed to record payment. Please try again.'}
+              </Alert>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} disabled={isPending}>Cancel</Button>
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={isPending}
+            startIcon={isPending ? <CircularProgress size={14} color="inherit" /> : <PaymentsIcon />}
+          >
+            {isPending ? 'Saving…' : 'Record'}
+          </Button>
+        </DialogActions>
+      </Stack>
+    </Dialog>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ChargesPage() {
@@ -140,6 +266,7 @@ export default function ChargesPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editCharge, setEditCharge] = useState(null)
   const [voidTarget, setVoidTarget] = useState(null)
+  const [recordCharge, setRecordCharge] = useState(null)
 
   // Filter state
   const [filterPropertyId, setFilterPropertyId] = useState(null)
@@ -213,23 +340,34 @@ export default function ChargesPage() {
     {
       field: '_actions',
       headerName: '',
-      width: 90,
+      width: 120,
       sortable: false,
       renderCell: ({ row }) => {
-        const canAct = row.status !== 'voided' && row.status !== 'paid'
+        const canEdit = row.status !== 'voided' && row.status !== 'paid'
+      // Backend blocks voiding any charge that has a completed payment (partial included)
+      const canVoid = row.status !== 'voided' && row.status !== 'paid' && row.status !== 'partial'
         return (
           <Stack direction="row" spacing={0.5}>
             <Tooltip title="Edit">
               <span>
-                <IconButton size="small" disabled={!canAct} onClick={() => setEditCharge(row)}>
+                <IconButton size="small" disabled={!canEdit} onClick={() => setEditCharge(row)}>
                   <EditIcon fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
+            {(row.status === 'unpaid' || row.status === 'partial') && row.lease_id && (
+              <Tooltip title="Record Payment">
+                <span>
+                  <IconButton size="small" color="success" onClick={() => setRecordCharge(row)}>
+                    <PaymentsIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
             {!isEmployee && (
             <Tooltip title="Void charge">
               <span>
-                <IconButton size="small" color="error" disabled={!canAct} onClick={() => setVoidTarget(row)}>
+                <IconButton size="small" color="error" disabled={!canVoid} onClick={() => setVoidTarget(row)}>
                   <BlockIcon fontSize="small" />
                 </IconButton>
               </span>
@@ -369,6 +507,13 @@ export default function ChargesPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* ── Record Manual Payment Dialog ── */}
+      <RecordPaymentDialog
+        charge={recordCharge}
+        open={!!recordCharge}
+        onClose={() => setRecordCharge(null)}
+      />
     </PageContainer>
   )
 }
