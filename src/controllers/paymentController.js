@@ -9,7 +9,7 @@ const { resolveOwnerId } = require('../lib/authHelpers');
 
 async function listPayments(req, res, next) {
   try {
-    const { leaseId, page = 1, limit = 20 } = req.query;
+    const { leaseId, chargeId, page = 1, limit = 20 } = req.query;
     if (!leaseId) return res.status(400).json({ error: 'leaseId query param is required' });
 
     const lease = await leaseRepo.findById(leaseId);
@@ -23,7 +23,19 @@ async function listPayments(req, res, next) {
       if (lease.owner_id !== resolveOwnerId(req.user)) return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const payments = await paymentRepo.findByLeaseId(leaseId, { page: Number(page), limit: Number(limit) });
+    let payments;
+    if (chargeId) {
+      // Verify the charge belongs to the authorised lease before returning its payments.
+      // Without this check a caller could pass any chargeId with a leaseId they own and
+      // read payment history for a different tenant's charge.
+      const charge = await ledgerRepo.findChargeById(chargeId);
+      if (!charge || charge.lease_id !== leaseId) {
+        return res.status(403).json({ error: 'Charge does not belong to the specified lease' });
+      }
+      payments = await paymentRepo.findByChargeId(chargeId);
+    } else {
+      payments = await paymentRepo.findByLeaseId(leaseId, { page: Number(page), limit: Number(limit) });
+    }
     res.json(payments);
   } catch (err) { next(err); }
 }

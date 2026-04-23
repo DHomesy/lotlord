@@ -48,13 +48,13 @@ async function findById(id) {
   return rows[0] || null;
 }
 
-async function create({ id, unitId, tenantId, startDate, endDate, monthlyRent, depositAmount, lateFeeAmount, lateFeeGraceDays, documentUrl }) {
+async function create({ id, unitId, tenantId, startDate, endDate, monthlyRent, depositAmount, lateFeeAmount, lateFeeGraceDays, documentUrl, status = 'active' }) {
   const { rows } = await query(
     `INSERT INTO leases (id, unit_id, tenant_id, start_date, end_date, monthly_rent,
-                         deposit_amount, late_fee_amount, late_fee_grace_days, document_url)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+                         deposit_amount, late_fee_amount, late_fee_grace_days, document_url, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
     [id, unitId, tenantId, startDate, endDate, monthlyRent,
-     depositAmount || null, lateFeeAmount || 0, lateFeeGraceDays || 5, documentUrl || null],
+     depositAmount || null, lateFeeAmount || 0, lateFeeGraceDays || 5, documentUrl || null, status],
   );
   return rows[0];
 }

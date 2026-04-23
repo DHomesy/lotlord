@@ -1,16 +1,19 @@
-import { Grid, Card, CardContent, Typography, Divider, Box, Button, Alert } from '@mui/material'
+import { Grid, Card, CardContent, Typography, Divider, Box, Button, Alert, Chip } from '@mui/material'
 import HomeIcon from '@mui/icons-material/Home'
 import HouseIcon from '@mui/icons-material/House'
 import DescriptionIcon from '@mui/icons-material/Description'
 import BuildIcon from '@mui/icons-material/Build'
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 import { useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/layout/PageContainer'
 import StatusChip from '../../components/common/StatusChip'
 import LoadingOverlay from '../../components/common/LoadingOverlay'
 import { useMyLease } from '../../hooks/useTenants'
 import { useMyPaymentMethods } from '../../hooks/useStripeSetup'
+import { useLedger } from '../../hooks/useLedger'
+import { useCharges } from '../../hooks/useCharges'
 import { useAuthStore } from '../../store/authStore'
 
 function InfoCard({ label, value, children }) {
@@ -45,13 +48,10 @@ function NoLeaseEmptyState() {
     >
       <HouseIcon sx={{ fontSize: 72, color: 'text.disabled', mb: 2 }} />
       <Typography variant="h6" fontWeight={600} gutterBottom>
-        You're all set!
+        No lease found yet
       </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 380, mb: 1 }}>
-        Your landlord is finishing setting up your lease. It will appear here once it's active.
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-        You'll receive an email notification when everything is ready.
+      <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 380, mb: 4 }}>
+        Your landlord hasn&apos;t set up a lease for you yet. You&apos;ll receive an email as soon as one is ready.
       </Typography>
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
         <Button
@@ -73,15 +73,71 @@ function NoLeaseEmptyState() {
   )
 }
 
+function PendingLeaseState({ lease }) {
+  const navigate = useNavigate()
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+        <HourglassEmptyIcon color="warning" />
+        <Typography variant="h6">
+          {lease.property_name}
+          {lease.address_line1 ? ` \u2014 ${lease.address_line1}` : ''}
+        </Typography>
+        <Chip label="Pending" color="warning" size="small" />
+      </Box>
+
+      <Alert severity="warning" sx={{ mb: 3 }}>
+        Your lease is <strong>pending activation</strong>. Your landlord will activate it shortly
+        \u2014 you&apos;ll receive an email confirmation when it&apos;s ready.
+      </Alert>
+
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <InfoCard label="Unit" value={lease.unit_number} />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <InfoCard label="Monthly Rent">
+            <Typography variant="h6">${Number(lease.monthly_rent).toLocaleString()}</Typography>
+          </InfoCard>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <InfoCard label="Lease Start" value={lease.start_date?.slice(0, 10)} />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <InfoCard label="Lease End" value={lease.end_date?.slice(0, 10)} />
+        </Grid>
+      </Grid>
+
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+        <Button variant="outlined" startIcon={<DescriptionIcon />} onClick={() => navigate('/my/documents')}>
+          My Documents
+        </Button>
+        <Button variant="outlined" startIcon={<BuildIcon />} onClick={() => navigate('/my/maintenance')}>
+          Maintenance
+        </Button>
+      </Box>
+    </Box>
+  )
+}
+
 export default function TenantDashboardPage() {
   const user = useAuthStore((s) => s.user)
-  const { activeLease, leases, isLoading } = useMyLease()
+  const { tenantMe, activeLease, leases, isLoading } = useMyLease()
+  const pendingLease = leases?.find((l) => l.status === 'pending') ?? null
   const { data: paymentMethods } = useMyPaymentMethods()
+  const { data: ledgerData } = useLedger(activeLease ? { leaseId: activeLease.id } : undefined)
+  const { data: chargesData } = useCharges(tenantMe?.id ? { forTenantId: tenantMe.id } : undefined)
   const days = daysUntil(activeLease?.end_date)
   const navigate = useNavigate()
 
   const displayName = user?.firstName || user?.email || 'Tenant'
   const hasPaymentMethod = Array.isArray(paymentMethods) && paymentMethods.length > 0
+
+  const amountDueNow = ledgerData?.amountDueNow ?? null
+  const allCharges = Array.isArray(chargesData) ? chargesData : (chargesData?.charges ?? [])
+  const nextCharge = allCharges
+    .filter((c) => c.status === 'unpaid' && c.due_date > new Date().toISOString().slice(0, 10))
+    .sort((a, b) => a.due_date.localeCompare(b.due_date))[0] ?? null
 
   if (isLoading) return <LoadingOverlay />
 
@@ -135,12 +191,12 @@ export default function TenantDashboardPage() {
             )}
           </Grid>
 
-          {leases.filter((l) => l.status !== 'active').length > 0 && (
+          {leases.filter((l) => l.status !== 'active' && l.status !== 'pending').length > 0 && (
             <>
               <Divider sx={{ my: 3 }} />
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>Past Leases</Typography>
               <Grid container spacing={2}>
-                {leases.filter((l) => l.status !== 'active').map((l) => (
+                {leases.filter((l) => l.status !== 'active' && l.status !== 'pending').map((l) => (
                   <Grid item xs={12} sm={6} key={l.id}>
                     <Card variant="outlined">
                       <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -158,7 +214,44 @@ export default function TenantDashboardPage() {
               </Grid>
             </>
           )}
+
+          {/* ── Financial summary ── */}
+          {(amountDueNow !== null || nextCharge) && (
+            <>
+              <Divider sx={{ my: 3 }} />
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>Financial Summary</Typography>
+              <Grid container spacing={2}>
+                {amountDueNow !== null && (
+                  <Grid item xs={12} sm={6} md={3}>
+                    <InfoCard label="Amount Due Today">
+                      <Typography
+                        variant="h6"
+                        color={amountDueNow > 0 ? 'error.main' : 'success.main'}
+                        fontWeight={600}
+                      >
+                        {amountDueNow > 0 ? `$${Number(amountDueNow).toLocaleString()}` : 'All paid up!'}
+                      </Typography>
+                    </InfoCard>
+                  </Grid>
+                )}
+                {nextCharge && (
+                  <Grid item xs={12} sm={6} md={3}>
+                    <InfoCard label="Next Charge Due">
+                      <Typography variant="h6" fontWeight={600}>
+                        ${Number(nextCharge.amount).toLocaleString()}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {nextCharge.charge_type} — due {nextCharge.due_date?.slice(0, 10)}
+                      </Typography>
+                    </InfoCard>
+                  </Grid>
+                )}
+              </Grid>
+            </>
+          )}
         </Box>
+      ) : pendingLease ? (
+        <PendingLeaseState lease={pendingLease} />
       ) : (
         <NoLeaseEmptyState />
       )}

@@ -19,12 +19,9 @@ import PeopleIcon from '@mui/icons-material/People'
 import PageContainer from '../../components/layout/PageContainer'
 import { useAuthStore } from '../../store/authStore'
 import { useUpdateMe, useChangePassword } from '../../hooks/useUsers'
-import { useConnectStatus, useConnectOnboard, useConnectLogin, usePaymentMethods } from '../../hooks/useStripeSetup'
+import { useConnectStatus, useConnectOnboard, useConnectLogin } from '../../hooks/useStripeSetup'
 import { useMySubscription, useCreateCheckoutSession, useCreateBillingPortalSession } from '../../hooks/useBilling'
 import { PLANS, hasStarter, hasCommercial } from '../../lib/plans'
-import TenantPicker from '../../components/pickers/TenantPicker'
-import ConnectBankDialog from '../../components/billing/ConnectBankDialog'
-import { useTenant } from '../../hooks/useTenants'
 
 const profileSchema = z.object({
   name:  z.string().min(1, 'Name is required'),
@@ -54,11 +51,7 @@ export default function AdminProfilePage() {
   const [connectBanner,  setConnectBanner]  = useState(null) // 'success' | 'refresh' | null
   const [billingBanner,  setBillingBanner]  = useState(null) // 'success' | 'canceled' | null
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
-  const [selectedTenantId, setSelectedTenantId] = useState(null)
-  const [bankOpen, setBankOpen] = useState(false)
   const subscriptionRef = useRef(null)
-  const { data: tenantData }                = useTenant(selectedTenantId)
-  const { data: bankMethods = [], isLoading: loadingBanks } = usePaymentMethods(selectedTenantId)
 
   // Detect return from Stripe Connect onboarding redirect
   useEffect(() => {
@@ -120,6 +113,27 @@ export default function AdminProfilePage() {
         </Alert>
       )}
 
+      {/* ── Free-tier upgrade prompt (landlord only, shown when subscription is loaded and free) ── */}
+      {isLandlord && subscription !== undefined && !hasStarter(subscription) && (
+        <Alert
+          severity="info"
+          sx={{ mb: 3 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              variant="outlined"
+              onClick={() => subscriptionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              Upgrade Plan
+            </Button>
+          }
+        >
+          You&apos;re on the <strong>Free plan</strong>. Upgrade to Starter to unlock more
+          properties, team members, and portfolio analytics.
+        </Alert>
+      )}
 
       <Typography variant="h6" sx={{ mb: 2 }}>Profile</Typography>
       {profileSaved && <Alert severity="success" sx={{ mb: 2 }}>Saved!</Alert>}
@@ -290,88 +304,6 @@ export default function AdminProfilePage() {
         </Stack>
       )}
       </>)}
-
-      {/* ── Tenant Bank Accounts (landlord only — ACH setup) ── */}
-      {isLandlord && (
-        <>
-          <Divider sx={{ my: 4 }} />
-          <Typography variant="h6" sx={{ mb: 0.5 }}>Tenant Bank Accounts</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Connect ACH bank accounts for tenants so they can pay rent online. Select a tenant below
-            to view or add their saved bank accounts. Payment history is available in the{' '}
-            <strong>Ledger</strong>.
-          </Typography>
-
-          {!connectStatus?.onboarded && (
-            <Alert severity="warning" sx={{ mb: 2, maxWidth: 500 }}>
-              Complete your <strong>Payout Account</strong> setup above before connecting tenant
-              bank accounts.
-            </Alert>
-          )}
-
-          <Box sx={{ maxWidth: 460 }}>
-            <TenantPicker
-              value={selectedTenantId}
-              onChange={setSelectedTenantId}
-              label="Select Tenant"
-              disabled={!connectStatus?.onboarded}
-            />
-          </Box>
-
-          {selectedTenantId && (
-            <>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 2, mb: 1, maxWidth: 460 }}>
-                <Typography variant="subtitle1" fontWeight={600}>
-                  {tenantData
-                    ? `${tenantData.first_name ?? tenantData?.tenant?.first_name ?? ''} ${tenantData.last_name ?? tenantData?.tenant?.last_name ?? ''}`.trim()
-                    : 'Tenant'}{' '}— Bank Accounts
-                </Typography>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<AccountBalanceIcon />}
-                  onClick={() => setBankOpen(true)}
-                >
-                  {bankMethods.length > 0 ? 'Add Another' : 'Connect Bank'}
-                </Button>
-              </Stack>
-
-              {loadingBanks ? (
-                <CircularProgress size={20} sx={{ ml: 1 }} />
-              ) : bankMethods.length === 0 ? (
-                <Alert severity="info" sx={{ maxWidth: 460 }}>No bank account connected for this tenant.</Alert>
-              ) : (
-                <Stack spacing={1} sx={{ maxWidth: 460 }}>
-                  {bankMethods.map((pm) => (
-                    <Card key={pm.id} variant="outlined">
-                      <CardContent sx={{ py: '8px !important', display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                        <AccountBalanceIcon fontSize="small" color="action" />
-                        <Box sx={{ flex: 1 }}>
-                          <Typography variant="body2" fontWeight={500}>
-                            {pm.bankName} •••• {pm.last4}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">{pm.accountType}</Typography>
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </Stack>
-              )}
-
-              <ConnectBankDialog
-                open={bankOpen}
-                onClose={() => setBankOpen(false)}
-                tenantId={selectedTenantId}
-                tenantName={
-                  tenantData
-                    ? `${tenantData.first_name ?? tenantData?.tenant?.first_name ?? ''} ${tenantData.last_name ?? tenantData?.tenant?.last_name ?? ''}`.trim()
-                    : ''
-                }
-              />
-            </>
-          )}
-        </>
-      )}
 
       {/* ── Subscription (landlord only — SaaS plan) ── */}
       {isLandlord && (<>

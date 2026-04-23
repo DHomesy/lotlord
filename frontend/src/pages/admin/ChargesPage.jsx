@@ -12,6 +12,7 @@ import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import BlockIcon from '@mui/icons-material/Block'
 import PaymentsIcon from '@mui/icons-material/Payments'
+import HistoryIcon from '@mui/icons-material/History'
 import { useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/layout/PageContainer'
 import DataTable from '../../components/common/DataTable'
@@ -21,7 +22,7 @@ import LeasePicker from '../../components/pickers/LeasePicker'
 import UnitPicker from '../../components/pickers/UnitPicker'
 import { useProperties } from '../../hooks/useProperties'
 import { useCharges, useCreateCharge, useUpdateCharge, useVoidCharge } from '../../hooks/useCharges'
-import { useRecordManualPayment } from '../../hooks/usePayments'
+import { useRecordManualPayment, usePayments } from '../../hooks/usePayments'
 import { useAuthStore } from '../../store/authStore'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -183,14 +184,21 @@ function RecordPaymentDialog({ charge, open, onClose }) {
 
   if (!charge) return null
 
+  const remaining = charge.total_paid != null
+    ? Math.max(0, parseFloat(charge.amount) - parseFloat(charge.total_paid))
+    : parseFloat(charge.amount)
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Record Payment</DialogTitle>
+      <DialogTitle>Add Manual Payment</DialogTitle>
       <Stack component="form" onSubmit={handleSubmit(onSubmit)}>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 0.5 }}>
             <Typography variant="body2" color="text.secondary">
               Charge: <strong>{charge.charge_type}</strong> — ${Number(charge.amount).toLocaleString()} due {charge.due_date?.slice(0, 10)}
+              {charge.status === 'partial' && (
+                <> &mdash; <strong style={{ color: 'inherit' }}>Remaining: ${remaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></>
+              )}
             </Typography>
             <TextField
               label="Amount Paid ($)"
@@ -252,7 +260,71 @@ function RecordPaymentDialog({ charge, open, onClose }) {
     </Dialog>
   )
 }
+// ─── Charge Payment History Dialog ─────────────────────────────────────────
 
+function ChargePaymentHistoryDialog({ charge, open, onClose }) {
+  const { data: payments = [], isLoading } = usePayments(
+    open && charge ? { leaseId: charge.lease_id, chargeId: charge.id } : undefined,
+  )
+
+  if (!charge) return null
+
+  const totalPaid = parseFloat(charge.total_paid ?? 0)
+  const chargeAmt = parseFloat(charge.amount)
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>
+        Payment History
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+          {charge.charge_type} — ${chargeAmt.toLocaleString()} due {charge.due_date?.slice(0, 10)}
+          {' '}&mdash;{' '}
+          <strong>${totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> of{' '}
+          <strong>${chargeAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> collected
+        </Typography>
+      </DialogTitle>
+      <DialogContent>
+        {isLoading ? (
+          <CircularProgress size={24} />
+        ) : payments.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">No payments recorded for this charge.</Typography>
+        ) : (
+          <Stack spacing={1} sx={{ pt: 0.5 }}>
+            {payments.map((p) => (
+              <Stack
+                key={p.id}
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+                sx={{ py: 1, borderBottom: '1px solid', borderColor: 'divider' }}
+              >
+                <Box>
+                  <Typography variant="body2" fontWeight={500}>
+                    {p.payment_date?.slice(0, 10)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
+                    {p.payment_method}
+                  </Typography>
+                </Box>
+                <Stack alignItems="flex-end">
+                  <Typography variant="body2" fontWeight={600}>
+                    ${parseFloat(p.amount_paid).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </Typography>
+                  <Typography variant="caption" color={p.status === 'completed' ? 'success.main' : 'warning.main'} sx={{ textTransform: 'capitalize' }}>
+                    {p.status}
+                  </Typography>
+                </Stack>
+              </Stack>
+            ))}
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ChargesPage() {
@@ -267,6 +339,7 @@ export default function ChargesPage() {
   const [editCharge, setEditCharge] = useState(null)
   const [voidTarget, setVoidTarget] = useState(null)
   const [recordCharge, setRecordCharge] = useState(null)
+  const [historyCharge, setHistoryCharge] = useState(null)
 
   // Filter state
   const [filterPropertyId, setFilterPropertyId] = useState(null)
@@ -329,7 +402,26 @@ export default function ChargesPage() {
     { field: 'unit_number',   headerName: 'Unit',     width: 90 },
     { field: 'charge_type',   headerName: 'Type',     width: 110 },
     { field: 'description',   headerName: 'Description', flex: 1 },
-    { field: 'amount', headerName: 'Amount', width: 110, valueFormatter: (v) => `$${Number(v).toLocaleString()}` },
+    { field: 'amount', headerName: 'Amount', width: 140,
+      renderCell: ({ row }) => {
+        const full = Number(row.amount)
+        const paid = Number(row.total_paid ?? 0)
+        const remaining = Math.max(0, full - paid)
+        return (
+          <Box>
+            <Typography variant="body2">${full.toLocaleString()}</Typography>
+            {row.status === 'partial' && (
+              <Typography variant="caption" color="warning.main">
+                Remaining: ${remaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </Typography>
+            )}
+            {row.status === 'paid' && (
+              <Typography variant="caption" color="success.main">Paid in full</Typography>
+            )}
+          </Box>
+        )
+      },
+    },
     { field: 'due_date', headerName: 'Due', width: 120, valueFormatter: (v) => v?.slice(0, 10) },
     {
       field: 'status',
@@ -340,7 +432,7 @@ export default function ChargesPage() {
     {
       field: '_actions',
       headerName: '',
-      width: 120,
+      width: 160,
       sortable: false,
       renderCell: ({ row }) => {
         const canEdit = row.status !== 'voided' && row.status !== 'paid'
@@ -356,10 +448,19 @@ export default function ChargesPage() {
               </span>
             </Tooltip>
             {(row.status === 'unpaid' || row.status === 'partial') && row.lease_id && (
-              <Tooltip title="Record Payment">
+              <Tooltip title="Add Manual Payment">
                 <span>
                   <IconButton size="small" color="success" onClick={() => setRecordCharge(row)}>
                     <PaymentsIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
+            {(row.status === 'partial' || row.status === 'paid') && (
+              <Tooltip title="Payment History">
+                <span>
+                  <IconButton size="small" color="info" onClick={() => setHistoryCharge(row)}>
+                    <HistoryIcon fontSize="small" />
                   </IconButton>
                 </span>
               </Tooltip>
@@ -513,6 +614,13 @@ export default function ChargesPage() {
         charge={recordCharge}
         open={!!recordCharge}
         onClose={() => setRecordCharge(null)}
+      />
+
+      {/* ── Charge Payment History Dialog ── */}
+      <ChargePaymentHistoryDialog
+        charge={historyCharge}
+        open={!!historyCharge}
+        onClose={() => setHistoryCharge(null)}
       />
     </PageContainer>
   )

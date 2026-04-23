@@ -167,8 +167,8 @@ function LedgerTab() {
   const { data, isLoading } = useLedger(leaseId ? { leaseId } : undefined)
 
   const entries      = Array.isArray(data) ? data : (data?.entries ?? [])
-  const balance       = data?.currentBalance ?? null
   const amountDueNow = data?.amountDueNow ?? null
+  const totalPaid    = data?.totalPaid ?? null
   const lease        = data?.lease ?? null
 
   return (
@@ -213,11 +213,10 @@ function LedgerTab() {
             </Typography>
           </Paper>
           <Paper variant="outlined" sx={{ px: 2.5, py: 1.5, minWidth: 200 }}>
-            <Typography variant="caption" color="text.secondary">Ledger Balance</Typography>
-            <Typography variant="body1" fontWeight={600} color="text.secondary">
-              {balance !== null ? fmtMoney(balance) : '—'}
+            <Typography variant="caption" color="text.secondary">Total Collected</Typography>
+            <Typography variant="body1" fontWeight={600} color={totalPaid > 0 ? 'success.main' : 'text.secondary'}>
+              {totalPaid !== null ? fmtMoney(totalPaid) : '—'}
             </Typography>
-            <Typography variant="caption" color="text.disabled">Includes future charges</Typography>
           </Paper>
         </Stack>
       )}

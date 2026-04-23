@@ -122,6 +122,72 @@ describe('GET /api/v1/ledger', () => {
   });
 });
 
+// ── GET /api/v1/ledger — totalPaid field (v1.7.3) ────────────────────────────
+
+describe('GET /api/v1/ledger — totalPaid (v1.7.3)', () => {
+  let chargeId;
+
+  beforeAll(async () => {
+    chargeId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, charge_type, amount, due_date)
+       VALUES ($1, $2, $3, 'rent', 500, CURRENT_DATE - INTERVAL '10 days')`,
+      [chargeId, fx.unitA.id, fx.leaseA.id],
+    );
+    // Record two completed payments totalling 350
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES
+         ($1, $2, $3, 200, CURRENT_DATE - INTERVAL '5 days', 'cash', 'completed'),
+         ($4, $2, $3, 150, CURRENT_DATE,                     'cash', 'completed')`,
+      [uuidv4(), fx.leaseA.id, chargeId, uuidv4()],
+    );
+  });
+
+  it('ledger response includes totalPaid field', async () => {
+    const res = await request(app)
+      .get(`/api/v1/ledger?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    expect(typeof res.body.totalPaid).toBe('number');
+  });
+
+  it('totalPaid reflects sum of all completed payments for the lease', async () => {
+    const res = await request(app)
+      .get(`/api/v1/ledger?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    // The beforeAll in the amountDueNow suite added payments of 300+200=500.
+    // This suite adds 200+150=350. Total: 850. (Both suites share leaseA.)
+    expect(res.body.totalPaid).toBeGreaterThanOrEqual(350);
+  });
+
+  it('totalPaid excludes pending/failed payments', async () => {
+    const pendingPayId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, $3, 9999, CURRENT_DATE, 'cash', 'pending')`,
+      [pendingPayId, fx.leaseA.id, chargeId],
+    );
+    const res = await request(app)
+      .get(`/api/v1/ledger?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    // totalPaid must not include the pending $9999 payment
+    expect(res.body.totalPaid).toBeLessThan(9999);
+    // Cleanup
+    await fx.pool.query(`DELETE FROM rent_payments WHERE id = $1`, [pendingPayId]);
+  });
+
+  it('totalPaid is 0 for a lease with no completed payments', async () => {
+    const res = await request(app)
+      .get(`/api/v1/ledger?leaseId=${fx.leaseB.id}`)
+      .set('Authorization', `Bearer ${fx.landlordB.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.totalPaid).toBe(0);
+  });
+});
+
 // ── Statement endpoint ────────────────────────────────────────────────────────
 
 describe('GET /api/v1/ledger/statement', () => {

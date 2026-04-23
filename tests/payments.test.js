@@ -569,3 +569,88 @@ describe('POST /api/v1/payments — manual recording partial charge guard (v1.7.
     expect(res.status).toBe(400);
   });
 });
+
+// ── GET /payments?leaseId&chargeId — per-charge history (v1.7.3) ─────────────
+
+describe('GET /api/v1/payments?leaseId&chargeId (v1.7.3)', () => {
+  let chargeId;
+  let otherChargeId; // belongs to leaseB — used for cross-lease security test
+
+  beforeAll(async () => {
+    chargeId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, charge_type, amount, due_date)
+       VALUES ($1, $2, $3, 'rent', 1200, CURRENT_DATE + INTERVAL '5 days')`,
+      [chargeId, fx.unitA.id, fx.leaseA.id],
+    );
+    // Two payments on leaseA's charge
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES
+         ($1, $2, $3, 400, CURRENT_DATE - INTERVAL '2 days', 'cash', 'completed'),
+         ($4, $2, $3, 300, CURRENT_DATE,                     'cash', 'completed')`,
+      [uuidv4(), fx.leaseA.id, chargeId, uuidv4()],
+    );
+
+    // A charge on leaseB (different landlord) used to test the cross-lease guard
+    otherChargeId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, charge_type, amount, due_date)
+       VALUES ($1, $2, $3, 'rent', 999, CURRENT_DATE + INTERVAL '5 days')`,
+      [otherChargeId, fx.unitB.id, fx.leaseB.id],
+    );
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, $3, 999, CURRENT_DATE, 'cash', 'completed')`,
+      [uuidv4(), fx.leaseB.id, otherChargeId],
+    );
+  });
+
+  it('landlordA lists payments filtered by chargeId on own lease', async () => {
+    const res = await request(app)
+      .get(`/api/v1/payments?leaseId=${fx.leaseA.id}&chargeId=${chargeId}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBe(2);
+    res.body.forEach((p) => expect(p.charge_id).toBe(chargeId));
+  });
+
+  it('tenantA lists payments filtered by chargeId on own lease', async () => {
+    const res = await request(app)
+      .get(`/api/v1/payments?leaseId=${fx.leaseA.id}&chargeId=${chargeId}`)
+      .set('Authorization', `Bearer ${fx.tenantA.token}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('returns 403 when chargeId belongs to a different lease (cross-lease security guard)', async () => {
+    // landlordA is authorised for leaseA but passes a chargeId from leaseB
+    const res = await request(app)
+      .get(`/api/v1/payments?leaseId=${fx.leaseA.id}&chargeId=${otherChargeId}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('tenantA cannot use a chargeId from a lease they do not own', async () => {
+    const res = await request(app)
+      .get(`/api/v1/payments?leaseId=${fx.leaseB.id}&chargeId=${otherChargeId}`)
+      .set('Authorization', `Bearer ${fx.tenantA.token}`);
+    // leaseB is not tenantA's lease — should be rejected at the lease auth check
+    expect(res.status).toBe(403);
+  });
+
+  it('returns empty array for a chargeId with no payments', async () => {
+    const emptyChargeId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, charge_type, amount, due_date)
+       VALUES ($1, $2, $3, 'utility', 50, CURRENT_DATE + INTERVAL '10 days')`,
+      [emptyChargeId, fx.unitA.id, fx.leaseA.id],
+    );
+    const res = await request(app)
+      .get(`/api/v1/payments?leaseId=${fx.leaseA.id}&chargeId=${emptyChargeId}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+});

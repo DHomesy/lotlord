@@ -1,18 +1,21 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Button, Stack, TextField, MenuItem, Divider, Typography,
   Checkbox, FormControlLabel, Alert, Paper, Box,
-  Chip, Tooltip,
+  Chip, Tooltip, CircularProgress,
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import PersonAddIcon from '@mui/icons-material/PersonAdd'
 import CloseIcon    from '@mui/icons-material/Close'
+import UploadFileIcon from '@mui/icons-material/UploadFile'
+import OpenInNewIcon  from '@mui/icons-material/OpenInNew'
 import PageContainer from '../../components/layout/PageContainer'
 import LoadingOverlay from '../../components/common/LoadingOverlay'
 import TenantPicker from '../../components/pickers/TenantPicker'
 import { useLease, useUpdateLease, useCoTenants, useAddCoTenant, useRemoveCoTenant } from '../../hooks/useLeases'
 import { useCreateCharge, useCharges } from '../../hooks/useCharges'
+import { useDocuments, useUploadDocument, useDownloadDocument } from '../../hooks/useDocuments'
 
 const STATUSES = ['active', 'pending', 'expired', 'terminated']
 
@@ -60,6 +63,14 @@ export default function EditLeasePage() {
   const { data: coTenants = [] } = useCoTenants(id)
   const { mutate: addCoTenant, isPending: addingCoTenant } = useAddCoTenant(id)
   const { mutate: removeCoTenant } = useRemoveCoTenant(id)
+
+  const { data: documentsRaw } = useDocuments({ relatedId: id })
+  const { mutate: uploadDocument, isPending: uploading } = useUploadDocument()
+  const { mutate: downloadDocument } = useDownloadDocument()
+  const fileInputRef = useRef(null)
+  const documents = Array.isArray(documentsRaw) ? documentsRaw : (documentsRaw?.documents ?? [])
+  const leaseDoc = documents.find((d) => d.category === 'lease_agreement') ?? null
+  const [docMsg, setDocMsg] = useState(null)   // { type, text }
 
   const [pendingCoTenant, setPendingCoTenant] = useState(null)
 
@@ -349,6 +360,79 @@ export default function EditLeasePage() {
               </Button>
             </Stack>
           )}
+
+          <Divider />
+
+          {/* ── Lease Document ── */}
+          <Typography variant="overline" color="text.secondary">Lease Document</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: -1.5 }}>
+            Attach a signed lease PDF so your tenant can download it from their portal.
+          </Typography>
+
+          {docMsg && (
+            <Alert severity={docMsg.type} onClose={() => setDocMsg(null)}>{docMsg.text}</Alert>
+          )}
+
+          {leaseDoc ? (
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems="flex-start">
+              <Chip
+                icon={<UploadFileIcon />}
+                label={leaseDoc.file_name || 'Lease Agreement'}
+                variant="outlined"
+                color="success"
+                size="small"
+                sx={{ maxWidth: 280, '.MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
+              />
+              <Button
+                size="small"
+                startIcon={<OpenInNewIcon fontSize="small" />}
+                onClick={() => downloadDocument(leaseDoc.id)}
+              >
+                View
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={uploading ? <CircularProgress size={14} /> : <UploadFileIcon fontSize="small" />}
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploading ? 'Uploading…' : 'Replace'}
+              </Button>
+            </Stack>
+          ) : (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={uploading ? <CircularProgress size={14} /> : <UploadFileIcon />}
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? 'Uploading…' : 'Attach Signed Lease'}
+            </Button>
+          )}
+
+          {/* Hidden file input — shared between attach + replace */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              const fd = new FormData()
+              fd.append('file', file)
+              fd.append('relatedType', 'lease')
+              fd.append('relatedId', id)
+              fd.append('category', 'lease_agreement')
+              uploadDocument(fd, {
+                onSuccess: () => setDocMsg({ type: 'success', text: 'Lease document uploaded successfully.' }),
+                onError:   () => setDocMsg({ type: 'error',   text: 'Upload failed. Please try again.' }),
+              })
+              e.target.value = ''   // reset so same file can be re-selected
+            }}
+          />
 
           <Divider />
 

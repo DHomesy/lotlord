@@ -68,6 +68,18 @@ async function findCompletedByChargeId(chargeId) {
 }
 
 /**
+ * All payments for a specific charge, ordered oldest first.
+ * Used by the charge payment history dialog.
+ */
+async function findByChargeId(chargeId) {
+  const { rows } = await query(
+    `SELECT * FROM rent_payments WHERE charge_id = $1 ORDER BY payment_date ASC, created_at ASC`,
+    [chargeId],
+  );
+  return rows;
+}
+
+/**
  * Sum of all completed payments for a charge — used to determine whether a
  * charge is fully settled (allowing partial payments when total < charge.amount).
  */
@@ -128,4 +140,4 @@ async function findForReceipt(id) {
   return rows[0] || null;
 }
 
-module.exports = { findByLeaseId, findById, findForReceipt, create, updateStatus, findByStripePaymentIntentId, findPendingByChargeId, findCompletedByChargeId, getTotalPaidForCharge };
+module.exports = { findByLeaseId, findByChargeId, findById, findForReceipt, create, updateStatus, findByStripePaymentIntentId, findPendingByChargeId, findCompletedByChargeId, getTotalPaidForCharge };

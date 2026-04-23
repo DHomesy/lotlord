@@ -9,11 +9,12 @@ const audit = require('./auditService');
  * Get the full ledger history + current balance for a lease.
  */
 async function getLedger(leaseId) {
-  const [lease, entries, balance, amountDueNow] = await Promise.all([
+  const [lease, entries, balance, amountDueNow, totalPaid] = await Promise.all([
     leaseRepo.findById(leaseId),
     ledgerRepo.findByLeaseId(leaseId),
     ledgerRepo.getCurrentBalance(leaseId),
     ledgerRepo.getAmountDueNow(leaseId),
+    ledgerRepo.getTotalPaid(leaseId),
   ]);
 
   if (!lease) {
@@ -22,7 +23,7 @@ async function getLedger(leaseId) {
     throw err;
   }
 
-  return { lease, entries, currentBalance: balance, amountDueNow };
+  return { lease, entries, currentBalance: balance, amountDueNow, totalPaid };
 }
 
 /**

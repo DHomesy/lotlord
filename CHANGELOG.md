@@ -8,6 +8,35 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.7.3] — 2026-04-22 — Lease activation flow, charges UX, ledger improvements
+
+### Added
+- **Lease activation email (N4-C)** — a fire-and-forget HTML email is sent to the tenant after a lease is successfully created. The email includes property name, unit, monthly rent, and start/end dates. Failure never blocks lease creation.
+- **Ledger — Total Collected (N6)** — `GET /api/v1/ledger` now returns `totalPaid` (sum of all `completed` payments for the lease). `LedgerPage` replaces the "Ledger Balance" card with a **Total Collected** card in success-green, giving landlords a clearer at-a-glance view of revenue collected.
+- **Charges — Payment History dialog (N3-C)** — a History icon button appears on partial/paid charge rows in the admin Charges page. Opens a dialog listing every payment recorded against that charge (date, method, amount, status).
+- **Lease document attach/replace on Edit Lease (N5)** — `EditLeasePage` now shows a "Lease Document" section. Landlords can attach a signed PDF/DOC, view the existing document in a new tab, or replace it. Uses the existing Documents API (`category: lease_agreement`).
+- **Tenant dashboard — Financial Summary (N4-B)** — when an active lease exists, the tenant dashboard shows two new cards: **Amount Due Today** (from `amountDueNow`) and **Next Charge Due** (earliest upcoming unpaid charge). Both are hidden until data loads.
+- **Tenant dashboard — Pending Lease state (N4-B)** — tenants with a `pending` lease now see a dedicated `PendingLeaseState` view instead of the generic empty state. Shows lease details and a clear explanation that their landlord will activate the lease shortly.
+
+### Changed
+- **Charges — "Add Manual Payment" rename (N3-A)** — the Record Payment button tooltip and dialog title are now "Add Manual Payment" for clarity.
+- **Charges — Remaining balance in Amount column (N3-B)** — the Amount column in the admin Charges grid now shows the full charge amount plus a "Remaining: $X" sub-line (warning amber) for partial charges, and "Paid in full" (success green) for fully paid charges.
+- **Charges — Actions column width** — widened from 120 to 160 px to accommodate up to four action buttons without clipping.
+- **Profile — Free-tier upgrade prompt (N2)** — landlords on the free plan see a persistent info `Alert` at the top of their profile page with an "Upgrade Plan" scroll-to link. The alert disappears automatically once a paid plan is active.
+- **Ledger service** — `getLedger()` now resolves `totalPaid` in the same `Promise.all` as existing queries — no extra round-trips.
+
+### Fixed
+- **CRITICAL — New leases created as `pending` (N4-A)** — `leaseRepository.create()` never passed a `status` value to the INSERT, so the DB `DEFAULT 'pending'` always applied. New leases are now explicitly created as `active`. Existing pending leases are unaffected.
+- **Cross-lease payment history leak (security)** — `GET /payments?leaseId&chargeId` did not verify the `chargeId` belonged to the authorised `leaseId`. An authenticated user could pass a valid `leaseId` they own alongside a `chargeId` from a different lease and read its payment history. The controller now resolves the charge record and returns `403` if `charge.lease_id !== leaseId`.
+- **Tenant dashboard Past Leases showing pending lease (N4-B)** — the "Past Leases" filter used `status !== 'active'`, which caused a pending lease to appear in the past-leases grid simultaneously with the pending-state banner. Filter now excludes both `active` and `pending`.
+- **Activation email — unescaped date fields** — `data.startDate` and `data.endDate` were embedded raw in the HTML email body. They are now passed through the same `esc()` helper used for all other user-controlled values.
+- **Tenant Bank Accounts section removed from Profile (N1)** — the "Tenant Bank Accounts" section (tenant picker + ConnectBankDialog) was incorrectly placed on the landlord's own Profile page. Tenants self-serve ACH setup on their own profile. Section fully removed.
+
+### Tests
+- **`tests/ledger.test.js`** — added 4 tests for `totalPaid`: field presence, correct sum of completed payments, exclusion of `pending`/failed payments, and `0` for a lease with no completed payments.
+- **`tests/payments.test.js`** — added 5 tests for `GET /payments?leaseId&chargeId`: landlord list, tenant list, cross-lease 403 security guard, tenant-foreign-lease 403, and empty-array result.
+
+---
 ## [1.7.2] — 2026-04-22 — QA fixes: ledger balance, partial payments, manual recording, paygate
 
 ### Added

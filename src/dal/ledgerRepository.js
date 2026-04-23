@@ -345,6 +345,20 @@ async function findCharges({ leaseId, unitId, tenantId, propertyId, forTenantId,
 }
 
 /**
+ * Total rent collected for a lease — sum of all completed payments.
+ * Used by getLedger to show landlords how much rent has been received.
+ */
+async function getTotalPaid(leaseId) {
+  const { rows } = await query(
+    `SELECT COALESCE(SUM(amount_paid), 0) AS total_paid
+     FROM rent_payments
+     WHERE lease_id = $1 AND status = 'completed'`,
+    [leaseId],
+  );
+  return rows[0] ? parseFloat(rows[0].total_paid) : 0;
+}
+
+/**
  * Update editable fields on a charge (description, due_date, charge_type).
  */
 async function updateCharge(id, { description, dueDate, chargeType }) {
@@ -584,6 +598,7 @@ async function findStatementEntries(leaseId, { from, to } = {}) {
 }
 
 module.exports = {
+  getTotalPaid,
   appendEntry,
   getCurrentBalance,
   getAmountDueNow,
