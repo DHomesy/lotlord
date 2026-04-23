@@ -337,6 +337,14 @@ export default function AdminProfilePage() {
         />
       </Stack>
 
+      {/* Loading state — show spinner until subscription status is known */}
+      {loadingSubscription && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
+          <CircularProgress size={16} />
+          <Typography variant="body2" color="text.secondary">Loading plan options…</Typography>
+        </Box>
+      )}
+
       {/* Return from Stripe Checkout */}
       {billingBanner === 'success' && (
         <Alert severity="success" sx={{ maxWidth: 560, mt: 1 }} onClose={() => setBillingBanner(null)}>
@@ -368,8 +376,8 @@ export default function AdminProfilePage() {
         </Box>
       )}
 
-      {/* Plan picker — shown for unsubscribed / canceled landlords */}
-      {!loadingSubscription && (!subscription?.status || subscription.status === 'none' || subscription.status === 'canceled') && (
+      {/* Plan picker — shown for any non-active, non-past_due state (none, canceled, incomplete, unpaid, error, etc.) */}
+      {!loadingSubscription && !hasStarter(subscription) && subscription?.status !== 'past_due' && (
         <>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2, maxWidth: 720 }}>
             {Object.values(PLANS).map(({ key, label, price, unitAddon, description, features }) => (

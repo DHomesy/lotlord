@@ -8,6 +8,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.7.5] — 2026-04-23 — Fix blank subscription section for incomplete/unpaid plans
+
+### Fixed
+- **Blank subscription section for incomplete or unpaid Stripe subscriptions** — the plan picker was only shown when `subscription.status` was exactly `'none'` or `'canceled'`. Stripe also emits `'incomplete'` (checkout started, payment never completed) and `'unpaid'` (recurring payment failed and grace period expired), both of which caused the entire subscription section to render completely blank — no plan cards, no manage button, no warning. Fix: condition changed to show plan cards for any status that is not `active`, `trialing`, or `past_due` (which has its own UI), i.e. `!hasStarter(subscription) && status !== 'past_due'`.
+- **Blank subscription section during initial query load** — while the subscription status query was in flight, the plan section showed only the heading and description with nothing actionable. A "Loading plan options…" spinner now fills the gap.
+
+---
 ## [1.7.4] — 2026-04-23 — Subscription upgrade flow
 
 ### Fixed
