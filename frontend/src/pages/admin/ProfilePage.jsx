@@ -21,7 +21,7 @@ import { useAuthStore } from '../../store/authStore'
 import { useUpdateMe, useChangePassword } from '../../hooks/useUsers'
 import { useConnectStatus, useConnectOnboard, useConnectLogin } from '../../hooks/useStripeSetup'
 import { useMySubscription, useCreateCheckoutSession, useCreateBillingPortalSession } from '../../hooks/useBilling'
-import { PLANS, hasStarter, hasCommercial } from '../../lib/plans'
+import { PLANS, hasStarter, hasCommercial, planTier } from '../../lib/plans'
 
 const profileSchema = z.object({
   name:  z.string().min(1, 'Name is required'),
@@ -45,8 +45,8 @@ export default function AdminProfilePage() {
   const { data: connectStatus }       = useConnectStatus()
   const { mutate: startOnboard, isPending: onboarding, error: onboardError } = useConnectOnboard()
   const { mutate: openDashboard, isPending: openingDashboard } = useConnectLogin()
-  const { data: subscription }                                                = useMySubscription()
-  const { mutate: startCheckout,  isPending: startingCheckout  }             = useCreateCheckoutSession()
+  const { data: subscription, isLoading: loadingSubscription }               = useMySubscription()
+  const { mutate: startCheckout,  isPending: startingCheckout, isError: checkoutFailed  } = useCreateCheckoutSession()
   const { mutate: openPortal,     isPending: openingPortal     }             = useCreateBillingPortalSession()
   const [connectBanner,  setConnectBanner]  = useState(null) // 'success' | 'refresh' | null
   const [billingBanner,  setBillingBanner]  = useState(null) // 'success' | 'canceled' | null
@@ -349,56 +349,75 @@ export default function AdminProfilePage() {
         </Alert>
       )}
 
-      {/* past_due warning */}
+      {/* past_due: warning + portal CTA to update payment method */}
       {subscription?.status === 'past_due' && (
-        <Alert severity="warning" sx={{ maxWidth: 560, mt: 1 }}>
-          Your last payment failed. Please update your payment method to restore full access.
-        </Alert>
+        <Box sx={{ mt: 1 }}>
+          <Alert severity="warning" sx={{ maxWidth: 560 }}>
+            Your last payment failed. Please update your payment method to restore full access.
+          </Alert>
+          <Button
+            variant="contained"
+            color="warning"
+            endIcon={<OpenInNewIcon fontSize="small" />}
+            sx={{ mt: 1.5 }}
+            onClick={() => openPortal()}
+            disabled={openingPortal}
+          >
+            {openingPortal ? 'Loading…' : 'Update Payment Method'}
+          </Button>
+        </Box>
       )}
 
-      {/* Plan picker — shown when not subscribed (or canceled) */}
-      {(!subscription?.status || subscription.status === 'none' || subscription.status === 'canceled') && (
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2, maxWidth: 720 }}>
-          {Object.values(PLANS).map(({ key, label, price, unitAddon, description, features }) => (
-            <Card
-              key={key}
-              variant="outlined"
-              sx={{
-                flex: 1,
-                transition: 'border-color 0.15s',
-                '&:hover': { borderColor: 'primary.main' },
-              }}
-            >
-              <CardContent>
-                <Typography variant="subtitle1" fontWeight={700}>{label}</Typography>
-                <Typography variant="h5" fontWeight={800} color="primary.main" sx={{ my: 0.5 }}>
-                  ${price}<Typography component="span" variant="caption" color="text.secondary">/mo{unitAddon ? ` + $${unitAddon}/unit` : ''}</Typography>
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                  {description}
-                </Typography>
-                {features.map((f) => (
-                  <Typography key={f} variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
-                    ✓ {f}
+      {/* Plan picker — shown for unsubscribed / canceled landlords */}
+      {!loadingSubscription && (!subscription?.status || subscription.status === 'none' || subscription.status === 'canceled') && (
+        <>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2, maxWidth: 720 }}>
+            {Object.values(PLANS).map(({ key, label, price, unitAddon, description, features }) => (
+              <Card
+                key={key}
+                variant="outlined"
+                sx={{
+                  flex: 1,
+                  transition: 'border-color 0.15s',
+                  '&:hover': { borderColor: 'primary.main' },
+                }}
+              >
+                <CardContent>
+                  <Typography variant="subtitle1" fontWeight={700}>{label}</Typography>
+                  <Typography variant="h5" fontWeight={800} color="primary.main" sx={{ my: 0.5 }}>
+                    ${price}<Typography component="span" variant="caption" color="text.secondary">/mo{unitAddon ? ` + $${unitAddon}/unit` : ''}</Typography>
                   </Typography>
-                ))}
-                <Button
-                  variant="contained"
-                  size="small"
-                  fullWidth
-                  sx={{ mt: 2 }}
-                  disabled={startingCheckout}
-                  onClick={() => startCheckout(key)}
-                >
-                  {startingCheckout ? 'Redirecting…' : `Subscribe to ${label}`}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </Stack>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                    {description}
+                  </Typography>
+                  {features.map((f) => (
+                    <Typography key={f} variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
+                      ✓ {f}
+                    </Typography>
+                  ))}
+                  <Button
+                    variant="contained"
+                    size="small"
+                    fullWidth
+                    sx={{ mt: 2 }}
+                    disabled={startingCheckout}
+                    onClick={() => startCheckout(key)}
+                  >
+                    {startingCheckout ? 'Redirecting…' : `Subscribe to ${label}`}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </Stack>
+          {checkoutFailed && (
+            <Alert severity="error" sx={{ mt: 2, maxWidth: 720 }}>
+              Could not start checkout — please try again or contact support.
+            </Alert>
+          )}
+        </>
       )}
 
-      {/* Active/trialing: show current plan + manage button */}
+      {/* Active / trialing: current plan info + manage button + upgrade path */}
       {hasStarter(subscription) && (
         <Box sx={{ mt: 2 }}>
           <Typography variant="body2" sx={{ mb: 1 }}>
@@ -417,6 +436,57 @@ export default function AdminProfilePage() {
           >
             {openingPortal ? 'Loading…' : 'Manage Subscription'}
           </Button>
+
+          {/* Upgrade options — only show plans at a higher tier than current */}
+          {Object.values(PLANS).some(({ key }) => planTier(key) > planTier(subscription?.plan)) && (
+            <>
+              <Typography variant="subtitle2" sx={{ mt: 3, mb: 0.5 }}>Upgrade your plan</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Plan upgrades are handled through the billing portal — click any card below to get started.
+              </Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ maxWidth: 720 }}>
+                {Object.values(PLANS)
+                  .filter(({ key }) => planTier(key) > planTier(subscription?.plan))
+                  .map(({ key, label, price, unitAddon, description, features }) => (
+                    <Card
+                      key={key}
+                      variant="outlined"
+                      sx={{
+                        flex: 1,
+                        transition: 'border-color 0.15s',
+                        '&:hover': { borderColor: 'primary.main' },
+                      }}
+                    >
+                      <CardContent>
+                        <Typography variant="subtitle1" fontWeight={700}>{label}</Typography>
+                        <Typography variant="h5" fontWeight={800} color="primary.main" sx={{ my: 0.5 }}>
+                          ${price}<Typography component="span" variant="caption" color="text.secondary">/mo{unitAddon ? ` + $${unitAddon}/unit` : ''}</Typography>
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                          {description}
+                        </Typography>
+                        {features.map((f) => (
+                          <Typography key={f} variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
+                            ✓ {f}
+                          </Typography>
+                        ))}
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          fullWidth
+                          sx={{ mt: 2 }}
+                          endIcon={<OpenInNewIcon fontSize="small" />}
+                          disabled={openingPortal}
+                          onClick={() => openPortal()}
+                        >
+                          {openingPortal ? 'Loading…' : `Upgrade to ${label}`}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+              </Stack>
+            </>
+          )}
         </Box>
       )}
       </>)}

@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.7.4] — 2026-04-23 — Subscription upgrade flow
+
+### Fixed
+- **`past_due` users had no action path** — the warning alert was shown but no button was rendered, leaving landlords with a failed payment unable to update their card from the UI. A prominent "Update Payment Method" button (→ Stripe Customer Portal) now appears directly below the warning.
+- **Active subscribers could not upgrade their plan** — the subscription section only showed "Manage Subscription" with no indication that plan changes were possible. Plan cards for every higher-tier plan are now shown in an "Upgrade your plan" section; each card opens the Customer Portal where Stripe handles the proration and mid-cycle switch. Plan cards for equal or lower tiers are hidden to prevent confusion.
+- **Plan picker flashed on load** — `subscription` is `undefined` while the query is in flight, causing the plan-picker cards to briefly render before disappearing for subscribed users. Plan picker is now guarded by `!loadingSubscription`.
+- **Checkout failures were silent** — if the Stripe price env var was missing or the API call failed, the "Subscribe" button just reset with no feedback. An error `Alert` now surfaces when the checkout mutation fails.
+
+---
 ## [1.7.3] — 2026-04-22 — Lease activation flow, charges UX, ledger improvements
 
 ### Added
