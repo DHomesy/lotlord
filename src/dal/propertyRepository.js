@@ -1,4 +1,4 @@
-const { query } = require('../config/db');
+const { query, getClient } = require('../config/db');
 const { parsePagination } = require('../lib/pagination');
 
 async function findAll({ ownerId, page = 1, limit = 20 } = {}) {
@@ -60,28 +60,41 @@ async function remove(id) {
  *  1. Terminate active/pending leases for all units
  *  2. Soft-delete all units
  *  3. Soft-delete the property
+ *
+ * All three writes are wrapped in a BEGIN/COMMIT so a mid-flight failure
+ * cannot leave the data in a partially-archived state (S2 fix).
  */
 async function cascadeArchive(id) {
-  // Terminate leases before archiving units so jobs/reminders stop firing
-  await query(
-    `UPDATE leases
-     SET    status = 'terminated', updated_at = NOW()
-     WHERE  unit_id IN (SELECT id FROM units WHERE property_id = $1)
-       AND  status IN ('active', 'pending')`,
-    [id],
-  );
-  await query(
-    `UPDATE units
-     SET    deleted_at = NOW(), updated_at = NOW()
-     WHERE  property_id = $1 AND deleted_at IS NULL`,
-    [id],
-  );
-  await query(
-    `UPDATE properties
-     SET    deleted_at = NOW(), updated_at = NOW()
-     WHERE  id = $1`,
-    [id],
-  );
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    // Terminate leases before archiving units so jobs/reminders stop firing
+    await client.query(
+      `UPDATE leases
+       SET    status = 'terminated', updated_at = NOW()
+       WHERE  unit_id IN (SELECT id FROM units WHERE property_id = $1)
+         AND  status IN ('active', 'pending')`,
+      [id],
+    );
+    await client.query(
+      `UPDATE units
+       SET    deleted_at = NOW(), updated_at = NOW()
+       WHERE  property_id = $1 AND deleted_at IS NULL`,
+      [id],
+    );
+    await client.query(
+      `UPDATE properties
+       SET    deleted_at = NOW(), updated_at = NOW()
+       WHERE  id = $1`,
+      [id],
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 module.exports = { findAll, findById, create, update, remove, cascadeArchive };

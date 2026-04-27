@@ -4,18 +4,21 @@ import {
   Button, Stack, TextField, MenuItem, Divider, Typography,
   Checkbox, FormControlLabel, Alert, Paper, Box,
   Chip, Tooltip, CircularProgress,
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import PersonAddIcon from '@mui/icons-material/PersonAdd'
 import CloseIcon    from '@mui/icons-material/Close'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import OpenInNewIcon  from '@mui/icons-material/OpenInNew'
+import DeleteIcon     from '@mui/icons-material/Delete'
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
 import PageContainer from '../../components/layout/PageContainer'
 import LoadingOverlay from '../../components/common/LoadingOverlay'
 import TenantPicker from '../../components/pickers/TenantPicker'
 import { useLease, useUpdateLease, useCoTenants, useAddCoTenant, useRemoveCoTenant } from '../../hooks/useLeases'
-import { useCreateCharge, useCharges } from '../../hooks/useCharges'
-import { useDocuments, useUploadDocument, useDownloadDocument } from '../../hooks/useDocuments'
+import { useCreateCharge, useCharges, useVoidCharge } from '../../hooks/useCharges'
+import { useDocuments, useUploadDocument, useDownloadDocument, useDeleteDocument } from '../../hooks/useDocuments'
 
 const STATUSES = ['active', 'pending', 'expired', 'terminated']
 
@@ -59,6 +62,7 @@ export default function EditLeasePage() {
   const { data: lease, isLoading } = useLease(id)
   const { mutate: update, isPending: updating } = useUpdateLease(id)
   const { mutateAsync: createCharge } = useCreateCharge()
+  const { mutateAsync: voidCharge }   = useVoidCharge()
   const { data: rawExistingCharges } = useCharges({ leaseId: id })
   const { data: coTenants = [] } = useCoTenants(id)
   const { mutate: addCoTenant, isPending: addingCoTenant } = useAddCoTenant(id)
@@ -67,9 +71,10 @@ export default function EditLeasePage() {
   const { data: documentsRaw } = useDocuments({ relatedId: id })
   const { mutate: uploadDocument, isPending: uploading } = useUploadDocument()
   const { mutate: downloadDocument } = useDownloadDocument()
+  const { mutate: deleteDocument } = useDeleteDocument()
   const fileInputRef = useRef(null)
   const documents = Array.isArray(documentsRaw) ? documentsRaw : (documentsRaw?.documents ?? [])
-  const leaseDoc = documents.find((d) => d.category === 'lease_agreement') ?? null
+  const leaseDoc = documents.find((d) => d.category === 'lease' || d.category === 'lease_agreement') ?? null
   const [docMsg, setDocMsg] = useState(null)   // { type, text }
 
   const [pendingCoTenant, setPendingCoTenant] = useState(null)
@@ -82,10 +87,11 @@ export default function EditLeasePage() {
   const [status,  setStatus]  = useState('active')
 
   // UX controls
-  const [confirmed,   setConfirmed]   = useState(false)
-  const [addCharges,  setAddCharges]  = useState(false)
-  const [chargeMsg,   setChargeMsg]   = useState(null)   // { type: 'success'|'warning', text }
-  const [submitting,  setSubmitting]  = useState(false)
+  const [confirmed,         setConfirmed]         = useState(false)
+  const [addCharges,        setAddCharges]         = useState(false)
+  const [chargeMsg,         setChargeMsg]          = useState(null)   // { type: 'success'|'warning', text }
+  const [submitting,        setSubmitting]         = useState(false)
+  const [terminateDialog,   setTerminateDialog]    = useState(false)  // show unpaid charge void prompt
 
   // Initialise inputs from loaded lease (runs once)
   if (lease && !init) {
@@ -122,17 +128,13 @@ export default function EditLeasePage() {
         .filter((d) => !existingRentMonths.has(d.slice(0, 7))).length
     : 0
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!confirmed) return
-    setSubmitting(true)
-    setChargeMsg(null)
+  // Unpaid charges for this lease (used by termination dialog)
+  const unpaidCharges = (Array.isArray(rawExistingCharges) ? rawExistingCharges : [])
+    .filter((c) => !c.paid && !c.voided)
 
-    const payload = { status }
-    if (endDate)                            payload.endDate       = endDate
-    if (rent !== '')                        payload.monthlyRent   = parseFloat(rent)
-    if (deposit !== '')                     payload.depositAmount = parseFloat(deposit)
+  const unpaidTotal = unpaidCharges.reduce((sum, c) => sum + parseFloat(c.amount ?? 0), 0)
 
+  const doSave = (payload) => {
     update(payload, {
       onSuccess: async () => {
         if (addCharges) {
@@ -168,6 +170,47 @@ export default function EditLeasePage() {
       },
       onError: () => setSubmitting(false),
     })
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!confirmed) return
+
+    const payload = { status }
+    if (endDate)                            payload.endDate       = endDate
+    if (rent !== '')                        payload.monthlyRent   = parseFloat(rent)
+    if (deposit !== '')                     payload.depositAmount = parseFloat(deposit)
+
+    // Intercept termination to check for unpaid charges
+    if (status === 'terminated' && unpaidCharges.length > 0) {
+      setSubmitting(false)
+      setTerminateDialog({ payload })
+      return
+    }
+
+    setSubmitting(true)
+    setChargeMsg(null)
+    doSave(payload)
+  }
+
+  const handleTerminateVoid = async () => {
+    setTerminateDialog(false)
+    setSubmitting(true)
+    setChargeMsg(null)
+    try {
+      await Promise.all(unpaidCharges.map((c) => voidCharge(c.id)))
+    } catch {
+      setChargeMsg({ type: 'warning', text: 'Could not void all charges. Proceeding with termination.' })
+    }
+    doSave(terminateDialog.payload)
+  }
+
+  const handleTerminateSkip = () => {
+    const { payload } = terminateDialog
+    setTerminateDialog(false)
+    setSubmitting(true)
+    setChargeMsg(null)
+    doSave(payload)
   }
 
   return (
@@ -364,59 +407,86 @@ export default function EditLeasePage() {
           <Divider />
 
           {/* ── Lease Document ── */}
-          <Typography variant="overline" color="text.secondary">Lease Document</Typography>
+          <Typography variant="overline" color="text.secondary">Lease Documents</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: -1.5 }}>
-            Attach a signed lease PDF so your tenant can download it from their portal.
+            Attach a signed lease PDF and any addendums. Tenants can download all documents from their portal.
           </Typography>
 
           {docMsg && (
             <Alert severity={docMsg.type} onClose={() => setDocMsg(null)}>{docMsg.text}</Alert>
           )}
 
-          {leaseDoc ? (
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems="flex-start">
-              <Chip
-                icon={<UploadFileIcon />}
-                label={leaseDoc.file_name || 'Lease Agreement'}
-                variant="outlined"
-                color="success"
-                size="small"
-                sx={{ maxWidth: 280, '.MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
-              />
-              <Button
-                size="small"
-                startIcon={<OpenInNewIcon fontSize="small" />}
-                onClick={() => downloadDocument(leaseDoc.id)}
-              >
-                View
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={uploading ? <CircularProgress size={14} /> : <UploadFileIcon fontSize="small" />}
-                disabled={uploading}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {uploading ? 'Uploading…' : 'Replace'}
-              </Button>
+          {/* List of existing documents */}
+          {documents.length > 0 && (
+            <Stack spacing={1}>
+              {documents.map((doc) => (
+                <Stack
+                  key={doc.id}
+                  direction="row"
+                  alignItems="center"
+                  spacing={1}
+                  sx={{
+                    p: 1,
+                    border: 1,
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    bgcolor: 'background.paper',
+                  }}
+                >
+                  <InsertDriveFileIcon fontSize="small" color="action" />
+                  <Typography
+                    variant="body2"
+                    noWrap
+                    sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                  >
+                    {doc.file_name || 'Document'}
+                  </Typography>
+                  <Tooltip title="Download">
+                    <Button
+                      size="small"
+                      startIcon={<OpenInNewIcon fontSize="small" />}
+                      onClick={() => downloadDocument(doc.id)}
+                    >
+                      Download
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title="Delete document">
+                    <Button
+                      size="small"
+                      color="error"
+                      startIcon={<DeleteIcon fontSize="small" />}
+                      onClick={() => {
+                        if (window.confirm('Remove this document? This cannot be undone.')) {
+                          deleteDocument(doc.id, {
+                            onSuccess: () => setDocMsg({ type: 'success', text: 'Document removed.' }),
+                            onError:   () => setDocMsg({ type: 'error',   text: 'Failed to remove document.' }),
+                          })
+                        }
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  </Tooltip>
+                </Stack>
+              ))}
             </Stack>
-          ) : (
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={uploading ? <CircularProgress size={14} /> : <UploadFileIcon />}
-              disabled={uploading}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {uploading ? 'Uploading…' : 'Attach Signed Lease'}
-            </Button>
           )}
 
-          {/* Hidden file input — shared between attach + replace */}
+          {/* Upload new document */}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={uploading ? <CircularProgress size={14} /> : <UploadFileIcon />}
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploading ? 'Uploading…' : documents.length > 0 ? 'Attach Addendum' : 'Attach Signed Lease'}
+          </Button>
+
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.doc,.docx"
+            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
             style={{ display: 'none' }}
             onChange={(e) => {
               const file = e.target.files?.[0]
@@ -425,9 +495,9 @@ export default function EditLeasePage() {
               fd.append('file', file)
               fd.append('relatedType', 'lease')
               fd.append('relatedId', id)
-              fd.append('category', 'lease_agreement')
+              fd.append('category', 'lease')
               uploadDocument(fd, {
-                onSuccess: () => setDocMsg({ type: 'success', text: 'Lease document uploaded successfully.' }),
+                onSuccess: () => setDocMsg({ type: 'success', text: 'Document uploaded successfully.' }),
                 onError:   () => setDocMsg({ type: 'error',   text: 'Upload failed. Please try again.' }),
               })
               e.target.value = ''   // reset so same file can be re-selected
@@ -467,6 +537,24 @@ export default function EditLeasePage() {
 
         </Stack>
       </Paper>
+
+      {/* ── Termination: unpaid charge dialog ── */}
+      <Dialog open={!!terminateDialog} onClose={() => setTerminateDialog(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Unpaid Charges</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This lease has <strong>{unpaidCharges.length} unpaid charge{unpaidCharges.length !== 1 ? 's' : ''}</strong> totalling{' '}
+            <strong>${unpaidTotal.toFixed(2)}</strong>.
+            Would you like to void them before terminating the lease?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTerminateDialog(false)}>Cancel</Button>
+          <Button onClick={handleTerminateSkip} color="inherit">Keep Charges</Button>
+          <Button onClick={handleTerminateVoid} color="error" variant="contained">Void & Terminate</Button>
+        </DialogActions>
+      </Dialog>
+
     </PageContainer>
   )
 }

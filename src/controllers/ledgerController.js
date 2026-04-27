@@ -13,9 +13,9 @@ async function getLedger(req, res, next) {
     const data = await ledgerService.getLedger(leaseId);
     if (req.user.role === 'tenant') {
       const tenantRecord = await tenantRepo.findByUserId(req.user.sub);
-      if (!tenantRecord || tenantRecord.id !== data.lease.tenant_record_id) {
-        return res.status(403).json({ error: 'Forbidden' });
-      }
+      if (!tenantRecord) return res.status(403).json({ error: 'Forbidden' });
+      const canAccess = await leaseRepo.tenantCanAccessLease(leaseId, tenantRecord.id);
+      if (!canAccess) return res.status(403).json({ error: 'Forbidden' });
     } else if (req.user.role === 'landlord' || req.user.role === 'employee') {
       if (data.lease.owner_id !== resolveOwnerId(req.user)) {
         return res.status(403).json({ error: 'Forbidden' });
@@ -79,9 +79,9 @@ async function getStatement(req, res, next) {
 
     if (req.user.role === 'tenant') {
       const tenantRecord = await tenantRepo.findByUserId(req.user.sub);
-      if (!tenantRecord || tenantRecord.id !== lease.tenant_record_id) {
-        return res.status(403).json({ error: 'Forbidden' });
-      }
+      if (!tenantRecord) return res.status(403).json({ error: 'Forbidden' });
+      const canAccess = await leaseRepo.tenantCanAccessLease(leaseId, tenantRecord.id);
+      if (!canAccess) return res.status(403).json({ error: 'Forbidden' });
     } else if (req.user.role === 'landlord' || req.user.role === 'employee') {
       if (lease.owner_id !== resolveOwnerId(req.user)) {
         return res.status(403).json({ error: 'Forbidden' });
@@ -116,9 +116,9 @@ async function getStatementPdf(req, res, next) {
     // Access control — identical to getStatement
     if (req.user.role === 'tenant') {
       const tenantRecord = await tenantRepo.findByUserId(req.user.sub);
-      if (!tenantRecord || tenantRecord.id !== lease.tenant_record_id) {
-        return res.status(403).json({ error: 'Forbidden' });
-      }
+      if (!tenantRecord) return res.status(403).json({ error: 'Forbidden' });
+      const canAccess = await leaseRepo.tenantCanAccessLease(leaseId, tenantRecord.id);
+      if (!canAccess) return res.status(403).json({ error: 'Forbidden' });
     } else if (req.user.role === 'landlord' || req.user.role === 'employee') {
       if (lease.owner_id !== resolveOwnerId(req.user)) {
         return res.status(403).json({ error: 'Forbidden' });

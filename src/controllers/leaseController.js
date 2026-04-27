@@ -69,8 +69,8 @@ async function getCoTenants(req, res, next) {
   try {
     const lease = await leaseService.getLease(req.params.id);
     if (!lease) return res.status(404).json({ error: 'Lease not found' });
-    if (req.user.role === 'landlord' && lease.owner_id !== req.user.sub) {
-      return res.status(403).json({ error: 'Forbidden' });
+    if (req.user.role === 'landlord' || req.user.role === 'employee') {
+      if (lease.owner_id !== resolveOwnerId(req.user)) return res.status(403).json({ error: 'Forbidden' });
     }
     if (req.user.role === 'tenant') {
       const tenantRecord = await tenantRepo.findByUserId(req.user.sub);
@@ -97,7 +97,7 @@ async function addCoTenant(req, res, next) {
     if (!tenantId) return res.status(400).json({ error: 'tenantId is required' });
     const lease = await leaseService.getLease(req.params.id);
     if (!lease) return res.status(404).json({ error: 'Lease not found' });
-    if (req.user.role === 'landlord' && lease.owner_id !== req.user.sub) {
+    if ((req.user.role === 'landlord' || req.user.role === 'employee') && lease.owner_id !== resolveOwnerId(req.user)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     if (lease.tenant_record_id === tenantId) {
@@ -118,7 +118,7 @@ async function removeCoTenant(req, res, next) {
   try {
     const lease = await leaseService.getLease(req.params.id);
     if (!lease) return res.status(404).json({ error: 'Lease not found' });
-    if (req.user.role === 'landlord' && lease.owner_id !== req.user.sub) {
+    if ((req.user.role === 'landlord' || req.user.role === 'employee') && lease.owner_id !== resolveOwnerId(req.user)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     await leaseRepo.removeCoTenant(req.params.id, req.params.tenantId);

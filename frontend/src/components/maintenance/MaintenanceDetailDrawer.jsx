@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import {
   Box, Button, Chip, CircularProgress, Divider, Drawer, IconButton,
-  ImageList, ImageListItem, MenuItem, Stack, TextField, Tooltip, Typography,
+  MenuItem, Stack, TextField, Tooltip, Typography,
 } from '@mui/material'
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate'
 import AttachFileIcon from '@mui/icons-material/AttachFile'
@@ -10,6 +10,9 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import DownloadIcon from '@mui/icons-material/Download'
 import EditIcon from '@mui/icons-material/Edit'
 import SaveIcon from '@mui/icons-material/Save'
+import ImageIcon from '@mui/icons-material/Image'
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
 import StatusChip from '../common/StatusChip'
 import {
   useMaintenanceAttachments,
@@ -32,6 +35,12 @@ const PRIORITY_COLORS = {
 
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 
+function AttachmentIcon({ fileType }) {
+  if (IMAGE_TYPES.has(fileType)) return <ImageIcon fontSize="small" color="info" />
+  if (fileType === 'application/pdf') return <PictureAsPdfIcon fontSize="small" color="error" />
+  return <InsertDriveFileIcon fontSize="small" color="action" />
+}
+
 /**
  * MaintenanceDetailDrawer
  *
@@ -50,7 +59,6 @@ export default function MaintenanceDetailDrawer({ request, onClose, readonly = f
   const [statusValue, setStatusValue]     = useState('')
   const [editingDetails, setEditingDetails] = useState(false)
   const [detailFields, setDetailFields]   = useState({})
-  const [lightbox, setLightbox]           = useState(null) // presigned URL for full-size view
 
   const { data: attachments = [], isLoading: loadingAttachments } = useMaintenanceAttachments(request?.id)
   const { mutate: addAttachment, isPending: uploading }           = useAddAttachment(request?.id)
@@ -60,12 +68,9 @@ export default function MaintenanceDetailDrawer({ request, onClose, readonly = f
 
   if (!request) return null
 
-  const images = attachments.filter((a) => IMAGE_TYPES.has(a.file_type))
-  const files  = attachments.filter((a) => !IMAGE_TYPES.has(a.file_type))
-
   const handleFileInput = (e) => {
-    const files = Array.from(e.target.files)
-    files.forEach((file) => addAttachment(file))
+    const selected = Array.from(e.target.files)
+    selected.forEach((file) => addAttachment(file))
     e.target.value = ''
   }
 
@@ -264,10 +269,10 @@ export default function MaintenanceDetailDrawer({ request, onClose, readonly = f
 
         <Divider sx={{ mb: 3 }} />
 
-        {/* ── Photos ── */}
+        {/* ── Photos & Files ── */}
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
           <Typography variant="subtitle2" color="text.secondary">
-            Photos {images.length > 0 && `(${images.length})`}
+            Photos & Files {attachments.length > 0 && `(${attachments.length})`}
           </Typography>
           <Stack direction="row" spacing={1}>
             {/* Camera capture — triggers native camera on mobile */}
@@ -312,124 +317,45 @@ export default function MaintenanceDetailDrawer({ request, onClose, readonly = f
 
         {loadingAttachments ? (
           <Box sx={{ py: 2, textAlign: 'center' }}><CircularProgress size={24} /></Box>
-        ) : images.length > 0 ? (
-          <ImageList cols={3} gap={6} sx={{ mb: 2, mt: 0 }}>
-            {images.map((img) => (
-              <ImageListItem
-                key={img.id}
-                sx={{ cursor: 'pointer', borderRadius: 1, overflow: 'hidden', position: 'relative',
-                      '&:hover .img-actions': { opacity: 1 } }}
+        ) : attachments.length > 0 ? (
+          <Stack spacing={0.75} sx={{ mb: 2 }}>
+            {attachments.map((att) => (
+              <Stack
+                key={att.id}
+                direction="row"
+                alignItems="center"
+                spacing={1}
+                sx={{ px: 1.5, py: 1, borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}
               >
-                {/* We use the presigned URL from download endpoint for display. For thumbnails
-                    we use the S3 key directly — in dev a placeholder is shown. */}
-                <Box
-                  component="img"
-                  src={img.file_url?.startsWith('http') ? img.file_url : undefined}
-                  alt={img.file_name}
-                  onClick={() => setLightbox(img)}
-                  sx={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }}
-                />
-                {/* Hover action bar */}
-                <Box
-                  className="img-actions"
-                  sx={{
-                    position: 'absolute', bottom: 0, left: 0, right: 0,
-                    bgcolor: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'flex-end',
-                    p: 0.5, opacity: 0, transition: 'opacity 0.15s',
-                  }}
-                >
-                  <Tooltip title="Download">
-                    <IconButton
-                      size="small"
-                      sx={{ color: 'white' }}
-                      onClick={(e) => { e.stopPropagation(); downloadAttachment({ requestId: request.id, attachmentId: img.id, fileName: img.file_name }) }}
-                      disabled={downloading}
-                    >
-                      <DownloadIcon fontSize="inherit" />
+                <AttachmentIcon fileType={att.file_type} />
+                <Typography variant="body2" sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }} noWrap>
+                  {att.file_name}
+                </Typography>
+                <Tooltip title="Download">
+                  <IconButton
+                    size="small"
+                    onClick={() => downloadAttachment({ requestId: request.id, attachmentId: att.id, fileName: att.file_name })}
+                    disabled={downloading}
+                  >
+                    <DownloadIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                {!readonly && (
+                  <Tooltip title="Remove">
+                    <IconButton size="small" color="error" onClick={() => removeAttachment(att.id)}>
+                      <DeleteIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
-                  {!readonly && (
-                    <Tooltip title="Remove">
-                      <IconButton
-                        size="small"
-                        sx={{ color: 'white' }}
-                        onClick={(e) => { e.stopPropagation(); removeAttachment(img.id) }}
-                      >
-                        <DeleteIcon fontSize="inherit" />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                </Box>
-              </ImageListItem>
+                )}
+              </Stack>
             ))}
-          </ImageList>
+          </Stack>
         ) : (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            No photos yet.
+            No photos or files yet.
           </Typography>
         )}
-
-        {/* ── Non-image attachments ── */}
-        {files.length > 0 && (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-              Files ({files.length})
-            </Typography>
-            <Stack spacing={0.5}>
-              {files.map((f) => (
-                <Stack key={f.id} direction="row" alignItems="center" spacing={1}
-                  sx={{ px: 1.5, py: 1, borderRadius: 1, bgcolor: 'action.hover' }}>
-                  <AttachFileIcon fontSize="small" color="action" />
-                  <Typography variant="body2" sx={{ flex: 1 }} noWrap>{f.file_name}</Typography>
-                  <Tooltip title="Download">
-                    <IconButton
-                      size="small"
-                      onClick={() => downloadAttachment({ requestId: request.id, attachmentId: f.id, fileName: f.file_name })}
-                      disabled={downloading}
-                    >
-                      <DownloadIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  {!readonly && (
-                    <Tooltip title="Remove">
-                      <IconButton size="small" color="error" onClick={() => removeAttachment(f.id)}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                </Stack>
-              ))}
-            </Stack>
-          </Box>
-        )}
       </Box>
-
-      {/* ── Lightbox (simple full-screen image overlay) ── */}
-      {lightbox && (
-        <Box
-          onClick={() => setLightbox(null)}
-          sx={{
-            position: 'fixed', inset: 0, zIndex: 1400,
-            bgcolor: 'rgba(0,0,0,0.88)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'zoom-out',
-          }}
-        >
-          <Box
-            component="img"
-            src={lightbox.file_url?.startsWith('http') ? lightbox.file_url : undefined}
-            alt={lightbox.file_name}
-            sx={{ maxWidth: '95vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 1 }}
-          />
-          <IconButton
-            size="small"
-            onClick={() => setLightbox(null)}
-            sx={{ position: 'absolute', top: 16, right: 16, color: 'white', bgcolor: 'rgba(0,0,0,0.4)' }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </Box>
-      )}
     </Drawer>
   )
 }

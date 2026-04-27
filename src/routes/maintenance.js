@@ -19,7 +19,7 @@ router.get('/',      authenticate,                                              
 router.post('/',     authenticate, createMaintenanceValidators, validate,               controller.createRequest);
 router.get('/:id',   authenticate,                                                      controller.getRequest);
 router.patch('/:id', authenticate, updateMaintenanceValidators, validate,               controller.updateRequest);
-router.delete('/:id', authenticate, authorize('admin'),                                 controller.deleteRequest);
+router.delete('/:id', authenticate, authorize('admin', 'landlord', 'employee'),        controller.deleteRequest);
 
 // ── Attachments ───────────────────────────────────────────────────────────────
 // GET    /maintenance/:id/attachments                          — list files for a request

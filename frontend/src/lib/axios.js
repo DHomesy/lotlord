@@ -82,4 +82,28 @@ http.interceptors.response.use(
   },
 )
 
+// ─── Response: broadcast plan limit errors for global CTA handling ────────────
+// When the backend returns 402 with code 'PLAN_LIMIT' or 'COMMERCIAL_REQUIRED',
+// fire a custom DOM event so a global listener can show an upgrade dialog.
+// Individual mutations still receive the rejection normally (error.response is intact).
+http.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    const status = error.response?.status
+    const code   = error.response?.data?.code
+    if (status === 402 && (code === 'PLAN_LIMIT' || code === 'COMMERCIAL_REQUIRED')) {
+      window.dispatchEvent(new CustomEvent('plan-limit-exceeded', {
+        detail: {
+          message: error.response.data.error,
+          code,
+          plan:    error.response.data.plan    ?? null,
+          limit:   error.response.data.limit   ?? null,
+          current: error.response.data.current ?? null,
+        },
+      }))
+    }
+    return Promise.reject(error)
+  },
+)
+
 export default http

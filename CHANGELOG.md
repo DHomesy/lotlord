@@ -8,6 +8,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.8.0] — 2026-04-27 — Bug fixes, UX polish, enterprise employee gating, security hardening, and email notification fixes
+
+### Fixed
+- **`GET /charges/:id` — employee IDOR** — access check only guarded `landlord`; employees could read any charge. Now enforces `assertLandlordOwnsUnit` for both `landlord` and `employee` roles.
+- **`GET /charges/:id` — co-tenant blocked** — check used `charge.tenant_id` directly (fails for NULL and excludes co-tenants). Now uses `tenantCanAccessLease`, falling back to `tenant_id` only for orphaned charges with no `lease_id`.
+- **`GET /ledger`, `GET /ledger/statement`, `GET /ledger/statement/pdf` — co-tenants blocked** — all three compared `tenant_record_id` directly. Now use `tenantCanAccessLease`.
+- **Rent reminder + late fee emails never fired (critical)** — `findChargesDueTomorrow` and `findOverdueUnpaidCharges` both did `JOIN tenants t ON t.id = rc.tenant_id`. Because `rent_charges.tenant_id` is nullable, any charge without an explicit tenant silently dropped out of the INNER JOIN — zero rows returned, zero emails sent. Fixed to join on `l.tenant_id` (the lease's primary tenant) instead.
+- **`rent_due` / `late_fee_applied` email templates missing in production** — migration 024 seeded maintenance and billing templates but never seeded the two templates used by the daily cron jobs. `sendByTriggerEvent` silently returns `null` when no template exists, so jobs ran successfully but sent nothing. Migration 028 seeds both templates with `NOT EXISTS` guards.
+- **B1: Document category constraint** — `lease_agreement` was removed from the DB check constraint in migration 023 but frontend still sent `'lease_agreement'` in three places (`LeasesPage`, `PropertyDetailPage`, `EditLeasePage`). All changed to `'lease'`. EditLeasePage find query accepts both values for backward compatibility with existing documents.
+- **B2: Landlord 403 on maintenance delete** — maintenance delete route was guarded by `authorize('admin')` only; changed to `authorize('admin', 'landlord', 'employee')` with a service-layer `assertCanAccess()` check so landlords can only delete requests on their own properties.
+- **B3: Unit prefix spacing bug** — bulk unit generation produced `"Apt 101"` instead of `"Apt101"` due to a hardcoded space. Removed the space; helper text now instructs users to add a trailing space to the prefix if a gap is desired.
+
+### Added
+- **P1: Plan limit upgrade dialog** — when the backend returns HTTP 402 with code `PLAN_LIMIT` or `COMMERCIAL_REQUIRED`, an Axios response interceptor dispatches a `plan-limit-exceeded` CustomEvent. AdminShell listens and shows a dialog with the error message and an "Upgrade Plan" CTA linking to `/profile#subscription`.
+- **P2: Free tier dashboard feature showcase** — instead of a single Alert, free-tier users now see a panel of locked feature cards (Portfolio Analytics, 25 Properties, Team Members) with an "Upgrade to Starter" button.
+- **P3: Lease document list + addendum support** — EditLeasePage now lists all lease-category documents (not just the first) in a scrollable row list with individual Download and Delete actions. The upload button label changes to "Attach Addendum" once at least one document exists. Accepted file types broadened to `.pdf,.doc,.docx,.jpg,.jpeg,.png`.
+- **P4: Maintenance attachment view cleanup** — replaced the inline image grid and separate file list in `MaintenanceDetailDrawer` with a unified icon-based attachment list. File-type icons: image (blue), PDF (red), generic doc (grey). No inline image preview; download triggers via existing pre-signed URL endpoint.
+- **F2: Lease termination unpaid charge dialog** — when the landlord explicitly sets a lease status to `terminated`, the app checks for unpaid, non-voided charges. If any exist, a dialog appears showing the count and total with three options: Cancel, Keep Charges (terminate without voiding), or Void & Terminate (batch-voids all charges then saves).
+
+### Changed
+- **F1: Employee accounts moved to Enterprise/Commercial tier** — `employees` plan limit changed from `starter: 5` to `starter: 0`. Only Enterprise and Commercial plans can add team members. Landing page and plan descriptions updated to reflect this. Upgrade hint updated accordingly.
+
+---
 ## [1.7.5] — 2026-04-23 — Fix blank subscription section for incomplete/unpaid plans
 
 ### Fixed

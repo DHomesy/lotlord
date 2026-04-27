@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Outlet, useNavigate } from 'react-router-dom'
 import {
   Box,
   Drawer,
@@ -10,6 +10,12 @@ import {
   Tooltip,
   useMediaQuery,
   useTheme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Button,
 } from '@mui/material'
 import MenuIcon from '@mui/icons-material/Menu'
 import LogoutIcon from '@mui/icons-material/Logout'
@@ -25,6 +31,15 @@ export default function AdminShell() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const { mutate: logout } = useLogout()
   const user = useAuthStore((s) => s.user)
+  const navigate = useNavigate()
+
+  const [planLimitDialog, setPlanLimitDialog] = useState(null) // { message, code }
+
+  useEffect(() => {
+    const handler = (e) => setPlanLimitDialog(e.detail)
+    window.addEventListener('plan-limit-exceeded', handler)
+    return () => window.removeEventListener('plan-limit-exceeded', handler)
+  }, [])
 
   const drawerContent = <Sidebar role={user?.role} user={user} onNavClick={() => setMobileOpen(false)} />
 
@@ -102,6 +117,30 @@ export default function AdminShell() {
         <Toolbar />
         <Outlet />
       </Box>
+
+      {/* Plan limit upgrade dialog — triggered by 402 PLAN_LIMIT from any API call */}
+      <Dialog
+        open={!!planLimitDialog}
+        onClose={() => setPlanLimitDialog(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Plan Limit Reached</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {planLimitDialog?.message ?? 'You have reached the limit for your current plan.'}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPlanLimitDialog(null)}>Dismiss</Button>
+          <Button
+            variant="contained"
+            onClick={() => { setPlanLimitDialog(null); navigate('/profile#subscription') }}
+          >
+            Upgrade Plan
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

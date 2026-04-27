@@ -299,3 +299,69 @@ describe('GET /api/v1/charges — partial status (v1.7.2)', () => {
     expect(ids).not.toContain(fullChargeId);
   });
 });
+
+// ── GET /api/v1/charges/:id — access-control fixes (Final Audit) ─────────────
+// Regression guard: getCharge previously only checked `role === 'landlord'` (not
+// employee) and compared charge.tenant_id directly (broken for NULL tenant_id
+// and co-tenants).
+
+describe('GET /api/v1/charges/:id — employee IDOR + co-tenant access (Final Audit)', () => {
+  let coTenantChargeId;
+
+  beforeAll(async () => {
+    // Add tenantB as co-tenant on leaseA for this suite
+    await fx.pool.query(
+      `INSERT INTO lease_co_tenants (lease_id, tenant_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [fx.leaseA.id, fx.tenantB.tenantProfileId],
+    );
+    // Charge with NO tenant_id (tests that NULL doesn't cause a false 403 for the primary tenant)
+    coTenantChargeId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, charge_type, amount, due_date)
+       VALUES ($1, $2, $3, 'utility', 75, CURRENT_DATE + INTERVAL '15 days')`,
+      [coTenantChargeId, fx.unitA.id, fx.leaseA.id],
+    );
+  });
+
+  afterAll(async () => {
+    await fx.pool.query(
+      `DELETE FROM lease_co_tenants WHERE lease_id = $1 AND tenant_id = $2`,
+      [fx.leaseA.id, fx.tenantB.tenantProfileId],
+    );
+  });
+
+  it('employeeA (employer=landlordA) can read a charge on landlordA unit', async () => {
+    const res = await request(app)
+      .get(`/api/v1/charges/${chargeAId}`)
+      .set('Authorization', `Bearer ${fx.employeeA.token}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('employeeA cannot read a charge on landlordB unit (IDOR guard)', async () => {
+    // Create a charge on landlordB's unit for this check
+    const chargeBId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, charge_type, amount, due_date)
+       VALUES ($1, $2, $3, 'rent', 1200, CURRENT_DATE + INTERVAL '1 month')`,
+      [chargeBId, fx.unitB.id, fx.leaseB.id],
+    );
+    const res = await request(app)
+      .get(`/api/v1/charges/${chargeBId}`)
+      .set('Authorization', `Bearer ${fx.employeeA.token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('co-tenant (tenantB) can read a charge on their shared lease', async () => {
+    const res = await request(app)
+      .get(`/api/v1/charges/${coTenantChargeId}`)
+      .set('Authorization', `Bearer ${fx.tenantB.token}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('primary tenant can read a charge with NULL tenant_id on their lease', async () => {
+    const res = await request(app)
+      .get(`/api/v1/charges/${coTenantChargeId}`)
+      .set('Authorization', `Bearer ${fx.tenantA.token}`);
+    expect(res.status).toBe(200);
+  });
+});

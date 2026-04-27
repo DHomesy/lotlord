@@ -204,10 +204,9 @@ async function forgotPassword(email) {
       text: `Hi ${firstName}, reset your password here (expires in 1 hour): ${resetUrl}`,
     });
   } catch (sesErr) {
+    // Log but do NOT propagate — throwing here would let attackers enumerate accounts
+    // by watching for 503 (email exists, SES failed) vs 200 (email not found).
     console.error('[auth] forgotPassword: email delivery failed:', sesErr.message);
-    const err = new Error('We were unable to send the reset email. Please try again in a few minutes.');
-    err.status = 503;
-    throw err;
   }
 }
 
@@ -225,6 +224,10 @@ async function resetPassword(token, newPassword) {
 
   const passwordHash = await bcrypt.hash(newPassword, 12);
   await userRepo.updatePassword(row.user_id, passwordHash);
+
+  // Invalidate ALL active sessions — prevents a stolen refresh cookie from
+  // surviving a password reset (token_version mismatch blocks refreshFromCookie).
+  await userRepo.incrementTokenVersion(row.user_id);
 
   // Invalidate all reset tokens for this user (mark used + delete)
   await passwordResetRepo.markUsed(token);

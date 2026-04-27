@@ -167,3 +167,89 @@ describe('Commercial property PATCH type-promotion gate', () => {
     expect(res.status).toBe(401);
   });
 });
+
+// ── Audit 2 — S2: cascadeArchive atomicity ────────────────────────────────────
+// Verifies that DELETE /api/v1/properties/:id atomically terminates leases,
+// soft-deletes units, and soft-deletes the property via the transaction-wrapped
+// cascadeArchive function (previously the three writes were not in a transaction).
+
+describe('DELETE /api/v1/properties/:id — cascadeArchive atomicity (Audit 2 S2)', () => {
+  let archivePropId;
+  let archiveUnitId;
+  let archiveLeaseId;
+
+  beforeAll(async () => {
+    // Create a fresh property + unit + active lease owned by landlordA
+    const { v4: uuid } = require('uuid');
+    archivePropId  = uuid();
+    archiveUnitId  = uuid();
+    archiveLeaseId = uuid();
+
+    await fx.pool.query(
+      `INSERT INTO properties (id, owner_id, name, address_line1, city, state, zip)
+       VALUES ($1, $2, 'Archive Test Prop', '1 Archive Ave', 'Testville', 'TX', '00001')`,
+      [archivePropId, fx.landlordA.id],
+    );
+    await fx.pool.query(
+      `INSERT INTO units (id, property_id, unit_number, status, rent_amount)
+       VALUES ($1, $2, '1A', 'occupied', 1000)`,
+      [archiveUnitId, archivePropId],
+    );
+    await fx.pool.query(
+      `INSERT INTO leases (id, unit_id, tenant_id, start_date, end_date, monthly_rent, status)
+       VALUES ($1, $2, $3, CURRENT_DATE - INTERVAL '30 days', CURRENT_DATE + INTERVAL '335 days', 1000, 'active')`,
+      [archiveLeaseId, archiveUnitId, fx.tenantA.tenantProfileId],
+    );
+  });
+
+  it('deletes the property (204)', async () => {
+    const res = await request(app)
+      .delete(`/api/v1/properties/${archivePropId}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(204);
+  });
+
+  it('property is soft-deleted (deleted_at is set)', async () => {
+    const { rows } = await fx.pool.query(
+      `SELECT deleted_at FROM properties WHERE id = $1`,
+      [archivePropId],
+    );
+    expect(rows[0]).toBeDefined();
+    expect(rows[0].deleted_at).not.toBeNull();
+  });
+
+  it('unit is soft-deleted (deleted_at is set)', async () => {
+    const { rows } = await fx.pool.query(
+      `SELECT deleted_at FROM units WHERE id = $1`,
+      [archiveUnitId],
+    );
+    expect(rows[0]).toBeDefined();
+    expect(rows[0].deleted_at).not.toBeNull();
+  });
+
+  it('active lease is terminated', async () => {
+    const { rows } = await fx.pool.query(
+      `SELECT status FROM leases WHERE id = $1`,
+      [archiveLeaseId],
+    );
+    expect(rows[0]).toBeDefined();
+    expect(rows[0].status).toBe('terminated');
+  });
+
+  it('landlordB cannot archive landlordA property (403)', async () => {
+    // Create another property so there is something to attempt to delete
+    const { v4: uuid } = require('uuid');
+    const propId = uuid();
+    await fx.pool.query(
+      `INSERT INTO properties (id, owner_id, name, address_line1, city, state, zip)
+       VALUES ($1, $2, 'B Steals A Prop', '2 Archive Ave', 'Testville', 'TX', '00001')`,
+      [propId, fx.landlordA.id],
+    );
+    const res = await request(app)
+      .delete(`/api/v1/properties/${propId}`)
+      .set('Authorization', `Bearer ${fx.landlordB.token}`);
+    expect(res.status).toBe(403);
+    // Clean up
+    await fx.pool.query(`DELETE FROM properties WHERE id = $1`, [propId]);
+  });
+});

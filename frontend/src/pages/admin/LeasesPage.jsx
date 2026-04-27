@@ -153,7 +153,7 @@ export default function LeasesPage() {
           fd.append('file', values.attachedFile)
           fd.append('relatedType', 'lease')
           fd.append('relatedId', newLease.id)
-          fd.append('category', 'lease_agreement')
+          fd.append('category', 'lease')
           uploadDocument(fd).catch(() => {})
         }
 

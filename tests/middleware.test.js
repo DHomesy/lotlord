@@ -5,6 +5,12 @@
  * run in milliseconds and catch regressions without any test-DB dependency.
  */
 
+const jwt = require('jsonwebtoken');
+
+// Mock the DB module with a factory so the destructured `query` reference
+// inside auth.js (which loads at require-time) also gets the mocked version.
+jest.mock('../src/config/db', () => ({ query: jest.fn(), getClient: jest.fn() }));
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function mockRes() {
@@ -277,5 +283,194 @@ describe('resolveOwnerId()', () => {
 
   it('throws 401 when employee has no employerId claim', () => {
     expect(() => resolveOwnerId({ sub: 'emp-id', role: 'employee' })).toThrow('Employee token missing employerId claim');
+  });
+});
+
+// ── authenticate() ────────────────────────────────────────────────────────────
+//
+// Tests the token parsing and verification logic. Uses a real JWT signed with
+// the test JWT_SECRET (set by the test environment) so no mocking is needed.
+
+const { authenticate } = require('../src/middleware/auth');
+
+// Use the same secret the app loads in test mode
+const TEST_SECRET = process.env.JWT_SECRET || 'test_secret';
+
+function makeToken(payload, secret = TEST_SECRET, options = { expiresIn: '15m' }) {
+  return jwt.sign(payload, secret, options);
+}
+
+describe('authenticate()', () => {
+  it('calls next() and attaches decoded payload to req.user for a valid token', () => {
+    const payload = { sub: 'user-1', role: 'landlord', email: 'a@b.com' };
+    const token   = makeToken(payload);
+
+    const req  = { headers: { authorization: `Bearer ${token}` } };
+    const res  = mockRes();
+    const next = mockNext();
+
+    authenticate(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.user.sub).toBe('user-1');
+    expect(req.user.role).toBe('landlord');
+    expect(res._status).toBeNull();
+  });
+
+  it('returns 401 when Authorization header is missing', () => {
+    const req  = { headers: {} };
+    const res  = mockRes();
+    const next = mockNext();
+
+    authenticate(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res._status).toBe(401);
+  });
+
+  it('returns 401 when Authorization header does not start with "Bearer "', () => {
+    const req  = { headers: { authorization: 'Basic sometoken' } };
+    const res  = mockRes();
+    const next = mockNext();
+
+    authenticate(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res._status).toBe(401);
+  });
+
+  it('returns 401 for a token signed with the wrong secret', () => {
+    const token = makeToken({ sub: 'user-1', role: 'admin' }, 'wrong-secret');
+
+    const req  = { headers: { authorization: `Bearer ${token}` } };
+    const res  = mockRes();
+    const next = mockNext();
+
+    authenticate(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res._status).toBe(401);
+  });
+
+  it('returns 401 for a token that is expired', () => {
+    const token = makeToken({ sub: 'user-1', role: 'admin' }, TEST_SECRET, { expiresIn: -1 });
+
+    const req  = { headers: { authorization: `Bearer ${token}` } };
+    const res  = mockRes();
+    const next = mockNext();
+
+    authenticate(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res._status).toBe(401);
+  });
+
+  it('returns 401 for a completely malformed token string', () => {
+    const req  = { headers: { authorization: 'Bearer not.a.jwt' } };
+    const res  = mockRes();
+    const next = mockNext();
+
+    authenticate(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res._status).toBe(401);
+  });
+});
+
+// ── checkPlanLimit() — plan tier scenarios ────────────────────────────────────
+//
+// Extends the existing checkPlanLimit describe block with tests for free-tier
+// limit enforcement and starter-tier pass-through.
+
+describe('checkPlanLimit() — free tier at capacity returns 402', () => {
+  const db = require('../src/config/db');
+  beforeEach(() => jest.clearAllMocks());
+
+  it('free landlord at property limit (1) is blocked with PLAN_LIMIT code', async () => {
+    userRepo.findBillingStatus.mockResolvedValue(null); // free = no active sub
+    db.query.mockResolvedValue({ rows: [{ cnt: 1 }] });
+
+    const req  = { user: { role: 'landlord', sub: 'landlord-id' } };
+    const res  = mockRes();
+    const next = mockNext();
+
+    await checkPlanLimit('properties')(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res._status).toBe(402);
+    expect(res._body.code).toBe('PLAN_LIMIT');
+  });
+
+  it('free landlord below property limit passes through', async () => {
+    userRepo.findBillingStatus.mockResolvedValue(null);
+    db.query.mockResolvedValue({ rows: [{ cnt: 0 }] });
+
+    const req  = { user: { role: 'landlord', sub: 'landlord-id' } };
+    const res  = mockRes();
+    const next = mockNext();
+
+    await checkPlanLimit('properties')(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res._status).toBeNull();
+  });
+
+  it('starter landlord with 24 properties can add one more (limit is 25)', async () => {
+    userRepo.findBillingStatus.mockResolvedValue({ subscription_status: 'active', subscription_plan: 'starter' });
+    db.query.mockResolvedValue({ rows: [{ cnt: 24 }] });
+
+    const req  = { user: { role: 'landlord', sub: 'landlord-id' } };
+    const res  = mockRes();
+    const next = mockNext();
+
+    await checkPlanLimit('properties')(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('starter landlord at property limit (25) is blocked', async () => {
+    userRepo.findBillingStatus.mockResolvedValue({ subscription_status: 'active', subscription_plan: 'starter' });
+    db.query.mockResolvedValue({ rows: [{ cnt: 25 }] });
+
+    const req  = { user: { role: 'landlord', sub: 'landlord-id' } };
+    const res  = mockRes();
+    const next = mockNext();
+
+    await checkPlanLimit('properties')(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res._status).toBe(402);
+    expect(res._body.code).toBe('PLAN_LIMIT');
+  });
+
+  it('free landlord blocked from adding employees (limit is 0)', async () => {
+    userRepo.findBillingStatus.mockResolvedValue(null);
+    // Limit is 0, so DB count query is never reached — middleware short-circuits.
+    // But if it were reached, it would return 0.
+    db.query.mockResolvedValue({ rows: [{ cnt: 0 }] });
+
+    const req  = { user: { role: 'landlord', sub: 'landlord-id' } };
+    const res  = mockRes();
+    const next = mockNext();
+
+    await checkPlanLimit('employees')(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res._status).toBe(402);
+    expect(res._body.code).toBe('PLAN_LIMIT');
+  });
+
+  it('enterprise landlord bypasses plan limit entirely', async () => {
+    userRepo.findBillingStatus.mockResolvedValue({ subscription_status: 'active', subscription_plan: 'enterprise' });
+
+    const req  = { user: { role: 'landlord', sub: 'landlord-id' } };
+    const res  = mockRes();
+    const next = mockNext();
+
+    await checkPlanLimit('employees')(req, res, next);
+
+    // No DB query for count needed — enterprise passes immediately
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res._status).toBeNull();
   });
 });

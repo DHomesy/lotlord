@@ -115,10 +115,14 @@ async function getCharge(req, res, next) {
     if (!charge) return res.status(404).json({ error: 'Charge not found' });
     if (req.user.role === 'tenant') {
       const tenantRecord = await tenantRepo.findByUserId(req.user.sub);
-      if (!tenantRecord || tenantRecord.id !== charge.tenant_id) {
-        return res.status(403).json({ error: 'Forbidden' });
-      }
-    } else if (req.user.role === 'landlord') {
+      if (!tenantRecord) return res.status(403).json({ error: 'Forbidden' });
+      // Use lease-based access check so co-tenants are included. Fall back to
+      // tenant_id when the charge has no lease_id (edge-case: orphaned charge).
+      const canAccess = charge.lease_id
+        ? await leaseRepo.tenantCanAccessLease(charge.lease_id, tenantRecord.id)
+        : tenantRecord.id === charge.tenant_id;
+      if (!canAccess) return res.status(403).json({ error: 'Forbidden' });
+    } else if (req.user.role === 'landlord' || req.user.role === 'employee') {
       await assertLandlordOwnsUnit(charge.unit_id, req.user);
     }
     res.json(charge);

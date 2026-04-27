@@ -122,7 +122,7 @@ const PLAN_LIMITS = {
   properties: { free: 1,  starter: 25, enterprise: Infinity, commercial: Infinity },
   units:      { free: 4,  starter: Infinity, enterprise: Infinity, commercial: Infinity },
   tenants:    { free: 4,  starter: Infinity, enterprise: Infinity, commercial: Infinity },
-  employees:  { free: 0,  starter: 5, enterprise: Infinity, commercial: Infinity },
+  employees:  { free: 0,  starter: 0, enterprise: Infinity, commercial: Infinity },
 };
 
 /**
@@ -229,7 +229,7 @@ function checkPlanLimit(resource) {
         const upgradeHint = plan === 'starter'
           ? 'Upgrade to Enterprise or Commercial for unlimited access.'
           : resource === 'employees'
-            ? 'Upgrade to Starter ($15/mo) to add up to 5 employees, or Enterprise/Commercial for unlimited.'
+            ? 'Upgrade to Enterprise or Commercial for unlimited team members.'
             : `Upgrade to Starter (up to 25 ${resource}) or Enterprise/Commercial (unlimited) to add more.`;
         return res.status(402).json({
           error:   `${planLabel} plan is limited to ${max} ${resource}. ${upgradeHint}`,

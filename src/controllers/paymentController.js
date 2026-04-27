@@ -16,9 +16,9 @@ async function listPayments(req, res, next) {
     if (!lease) return res.status(404).json({ error: 'Lease not found' });
     if (req.user.role === 'tenant') {
       const tenantRecord = await tenantRepo.findByUserId(req.user.sub);
-      if (!tenantRecord || tenantRecord.id !== lease.tenant_record_id) {
-        return res.status(403).json({ error: 'Forbidden' });
-      }
+      if (!tenantRecord) return res.status(403).json({ error: 'Forbidden' });
+      const canAccess = await leaseRepo.tenantCanAccessLease(leaseId, tenantRecord.id);
+      if (!canAccess) return res.status(403).json({ error: 'Forbidden' });
     } else if (req.user.role === 'landlord' || req.user.role === 'employee') {
       if (lease.owner_id !== resolveOwnerId(req.user)) return res.status(403).json({ error: 'Forbidden' });
     }
@@ -48,9 +48,9 @@ async function getPayment(req, res, next) {
     const lease = await leaseRepo.findById(payment.lease_id);
     if (req.user.role === 'tenant') {
       const tenantRecord = await tenantRepo.findByUserId(req.user.sub);
-      if (!tenantRecord || tenantRecord.id !== lease?.tenant_record_id) {
-        return res.status(403).json({ error: 'Forbidden' });
-      }
+      if (!tenantRecord) return res.status(403).json({ error: 'Forbidden' });
+      const canAccess = await leaseRepo.tenantCanAccessLease(payment.lease_id, tenantRecord.id);
+      if (!canAccess) return res.status(403).json({ error: 'Forbidden' });
     } else if (req.user.role === 'landlord' || req.user.role === 'employee') {
       if (!lease || lease.owner_id !== resolveOwnerId(req.user)) return res.status(403).json({ error: 'Forbidden' });
     }

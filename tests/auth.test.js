@@ -218,3 +218,131 @@ describe('POST /api/v1/auth/reset-password — token single use', () => {
     );
   });
 });
+
+// ── [SEC-VC1] Session invalidation after password reset ───────────────────────
+//
+// After a successful password reset the old refresh cookie must be rejected.
+// Previously, resetPassword() did not increment token_version, allowing an
+// attacker with a stolen refresh cookie to maintain access post-reset.
+
+describe('POST /api/v1/auth/reset-password — session invalidation (SEC-VC1)', () => {
+  it('old refresh cookie is invalidated after password reset', async () => {
+    // 1. Log in as landlordA to get a valid refresh cookie
+    const loginRes = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'test_landlord_a@test.invalid', password: 'TestPassword1!' });
+    expect(loginRes.status).toBe(200);
+    const oldCookies = loginRes.headers['set-cookie'];
+    expect(oldCookies).toBeDefined();
+
+    // 2. Confirm the refresh cookie works before the reset
+    const preReset = await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', oldCookies);
+    expect(preReset.status).toBe(200);
+
+    // 3. Seed a valid reset token for landlordA
+    const resetToken = uuidv4();
+    const expiresAt  = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    await fx.pool.query(
+      `INSERT INTO password_reset_tokens (id, user_id, token, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [uuidv4(), fx.landlordA.id, resetToken, expiresAt],
+    );
+
+    // 4. Reset the password
+    const resetRes = await request(app)
+      .post('/api/v1/auth/reset-password')
+      .send({ token: resetToken, password: 'NewSecurePass1!' });
+    expect(resetRes.status).toBe(200);
+
+    // 5. Old refresh cookie must now be rejected (token_version incremented)
+    const postReset = await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', oldCookies);
+    expect(postReset.status).toBe(401);
+
+    // Restore landlordA's password so subsequent tests are not affected
+    const bcrypt = require('bcryptjs');
+    const hash = await bcrypt.hash('TestPassword1!', 10);
+    await fx.pool.query(
+      'UPDATE users SET password_hash = $1 WHERE id = $2',
+      [hash, fx.landlordA.id],
+    );
+  });
+});
+
+// ── [SEC-VH1] forgotPassword must not leak account existence ─────────────────
+//
+// Previously, forgotPassword() threw a 503 when SES delivery failed for an
+// existing user, but returned 200 for unknown emails — allowing enumeration.
+// Fix: SES errors are caught and silenced; the endpoint always returns 200.
+
+describe('POST /api/v1/auth/forgot-password — no account enumeration (SEC-VH1)', () => {
+  it('returns 200 for an email that does not exist', async () => {
+    const res = await request(app)
+      .post('/api/v1/auth/forgot-password')
+      .send({ email: 'definitely_not_registered@test.invalid' });
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 200 for a registered email regardless of SES availability', async () => {
+    // landlordA is a real registered user; SES is stubbed in test mode
+    const res = await request(app)
+      .post('/api/v1/auth/forgot-password')
+      .send({ email: 'test_landlord_a@test.invalid' });
+    // Must always be 200 — never 503 — to prevent user enumeration
+    expect(res.status).toBe(200);
+  });
+
+  it('returns the same generic message body for both cases', async () => {
+    const [unknownRes, knownRes] = await Promise.all([
+      request(app)
+        .post('/api/v1/auth/forgot-password')
+        .send({ email: 'unknown@test.invalid' }),
+      request(app)
+        .post('/api/v1/auth/forgot-password')
+        .send({ email: 'test_landlord_a@test.invalid' }),
+    ]);
+    expect(unknownRes.body.message).toBe(knownRes.body.message);
+  });
+});
+
+// ── [SEC-VM1] avatarUrl must only accept http/https URLs ─────────────────────
+//
+// The updateUser validator previously used isURL() without protocol restriction,
+// accepting ftp:// and other non-web schemes. Tightened to http/https only.
+
+describe('PATCH /api/v1/users/:id — avatarUrl protocol validation (SEC-VM1)', () => {
+  it('accepts a valid https avatar URL', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/users/${fx.landlordA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`)
+      .send({ avatarUrl: 'https://cdn.example.com/avatar.png' });
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects an ftp:// avatar URL', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/users/${fx.landlordA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`)
+      .send({ avatarUrl: 'ftp://files.example.com/avatar.png' });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a javascript: avatar URL', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/users/${fx.landlordA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`)
+      .send({ avatarUrl: 'javascript:alert(1)' });
+    expect(res.status).toBe(400);
+  });
+
+  it('accepts omitting avatarUrl entirely (optional field)', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/users/${fx.landlordA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`)
+      .send({ firstName: 'Test' });
+    expect(res.status).toBe(200);
+  });
+});

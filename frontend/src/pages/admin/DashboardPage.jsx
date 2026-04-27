@@ -15,6 +15,7 @@ import {
   Stack,
   Alert,
   Button,
+  Divider,
   useTheme,
   useMediaQuery,
 } from '@mui/material'
@@ -22,6 +23,10 @@ import TrendingUpIcon    from '@mui/icons-material/TrendingUp'
 import WarningAmberIcon  from '@mui/icons-material/WarningAmber'
 import ApartmentIcon     from '@mui/icons-material/Apartment'
 import BuildIcon         from '@mui/icons-material/Build'
+import BarChartIcon      from '@mui/icons-material/BarChart'
+import GroupIcon         from '@mui/icons-material/Group'
+import HomeWorkIcon      from '@mui/icons-material/HomeWork'
+import LockIcon          from '@mui/icons-material/Lock'
 import PageContainer     from '../../components/layout/PageContainer'
 import LoadingOverlay    from '../../components/common/LoadingOverlay'
 import LandlordSetupCard from '../../components/common/LandlordSetupCard'
@@ -178,20 +183,68 @@ export default function DashboardPage() {
       <PageContainer title="Dashboard">
         <LandlordSetupCard />
         {is402 ? (
-          <Alert
-            severity="info"
-            action={
-              !isEmployee && (
-                <Button size="small" variant="contained" onClick={() => navigate('/profile?upgrade=1')}>
-                  Upgrade Plan
+          <Box>
+            <Alert severity="info" sx={{ mb: 3 }}>
+              {isEmployee
+                ? 'Portfolio analytics require an active subscription. Contact your employer to upgrade.'
+                : "You're on the Free plan. Upgrade to Starter to unlock full dashboard analytics and more."}
+              {!isEmployee && (
+                <Button size="small" variant="contained" sx={{ ml: 2 }} onClick={() => navigate('/profile#subscription')}>
+                  Upgrade Now
                 </Button>
-              )
-            }
-          >
-            {isEmployee
-              ? 'Portfolio analytics require an active subscription. Contact your employer to upgrade.'
-              : 'Portfolio analytics are available on the Starter plan ($15/mo). Upgrade to unlock your dashboard metrics.'}
-          </Alert>
+              )}
+            </Alert>
+
+            {/* ── Free tier feature showcase ─────────────────────────────── */}
+            {!isEmployee && (
+              <Box>
+                <Typography variant="h6" fontWeight={600} mb={1}>
+                  What you unlock with Starter ($15/mo)
+                </Typography>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Everything below is available the moment you upgrade — no setup required.
+                </Typography>
+                <Grid container spacing={2}>
+                  {[
+                    {
+                      Icon: BarChartIcon,
+                      title: 'Portfolio Analytics',
+                      desc: 'Live dashboard: monthly income, occupancy rate, unpaid dues, and recent payment history across all your properties.',
+                    },
+                    {
+                      Icon: HomeWorkIcon,
+                      title: 'Up to 25 Properties',
+                      desc: 'Free plan is limited to 1 property and 4 units. Starter gives you 25 properties with unlimited units.',
+                    },
+                    {
+                      Icon: GroupIcon,
+                      title: 'Team Members (Enterprise)',
+                      desc: 'Add property managers and staff who can manage leases and maintenance on your behalf. Available on Enterprise.',
+                    },
+                  ].map(({ Icon, title, desc }) => (
+                    <Grid item xs={12} sm={4} key={title}>
+                      <Card variant="outlined" sx={{ height: '100%', opacity: 0.85 }}>
+                        <CardContent>
+                          <Stack direction="row" spacing={1} alignItems="center" mb={1}>
+                            <Icon fontSize="small" color="primary" />
+                            <Typography variant="subtitle2" fontWeight={600}>{title}</Typography>
+                            <LockIcon fontSize="inherit" sx={{ color: 'text.disabled', ml: 'auto' }} />
+                          </Stack>
+                          <Typography variant="body2" color="text.secondary">{desc}</Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+                <Divider sx={{ my: 3 }} />
+                <Stack direction="row" justifyContent="center">
+                  <Button variant="contained" size="large" onClick={() => navigate('/profile#subscription')}>
+                    Upgrade to Starter — $15/mo
+                  </Button>
+                </Stack>
+              </Box>
+            )}
+          </Box>
         ) : (
           <Alert severity="error">
             Failed to load dashboard metrics. Please refresh the page.

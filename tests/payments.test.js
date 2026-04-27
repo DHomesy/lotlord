@@ -654,3 +654,54 @@ describe('GET /api/v1/payments?leaseId&chargeId (v1.7.3)', () => {
     expect(res.body).toEqual([]);
   });
 });
+
+// ── Co-tenant payment access (Audit 2 — paymentController fix) ───────────────
+// Regression guard: listPayments and getPayment previously checked only the
+// primary tenant, blocking co-tenants with 403. Fixed to use
+// tenantCanAccessLease, consistent with chargesController.
+
+describe('GET /api/v1/payments — co-tenant access (Audit 2 fix)', () => {
+  let coTenantChargeId;
+  let coTenantPaymentId;
+
+  beforeAll(async () => {
+    await fx.pool.query(
+      `INSERT INTO lease_co_tenants (lease_id, tenant_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [fx.leaseA.id, fx.tenantB.tenantProfileId],
+    );
+    coTenantChargeId  = uuidv4();
+    coTenantPaymentId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, charge_type, amount, due_date)
+       VALUES ($1, $2, $3, 'rent', 400, CURRENT_DATE)`,
+      [coTenantChargeId, fx.unitA.id, fx.leaseA.id],
+    );
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, $3, 400, CURRENT_DATE, 'cash', 'completed')`,
+      [coTenantPaymentId, fx.leaseA.id, coTenantChargeId],
+    );
+  });
+
+  afterAll(async () => {
+    await fx.pool.query(
+      `DELETE FROM lease_co_tenants WHERE lease_id = $1 AND tenant_id = $2`,
+      [fx.leaseA.id, fx.tenantB.tenantProfileId],
+    );
+  });
+
+  it('co-tenant can list payments for the shared lease', async () => {
+    const res = await request(app)
+      .get(`/api/v1/payments?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.tenantB.token}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('co-tenant can fetch a specific payment on the shared lease', async () => {
+    const res = await request(app)
+      .get(`/api/v1/payments/${coTenantPaymentId}`)
+      .set('Authorization', `Bearer ${fx.tenantB.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(coTenantPaymentId);
+  });
+});

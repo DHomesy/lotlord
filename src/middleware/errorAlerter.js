@@ -14,6 +14,12 @@ const { sendEmail } = require('../integrations/email');
 const { ALERT_EMAIL, NODE_ENV } = require('../config/env');
 
 // ── Cooldown map: errorKey → timestamp of last alert sent ─────────────────────
+// NOTE (S3): This is an in-process Map, so each replica in a horizontally-scaled
+// deployment maintains its own independent cooldown state. In practice this means
+// up to N alert emails per 10-min window (one per replica) rather than one.
+// For the current single-instance Railway deployment this is acceptable.
+// If multi-replica scaling is introduced, replace this with a shared TTL store
+// (e.g. Redis SETNX with a 10-min expiry) to deduplicate across processes.
 const cooldownMap = new Map();
 const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 

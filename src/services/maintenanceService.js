@@ -301,6 +301,9 @@ async function deleteRequest(id, user) {
   const request = await maintenanceRepo.findById(id);
   if (!request) throw Object.assign(new Error('Maintenance request not found'), { status: 404 });
 
+  // Landlords and employees can only delete requests on their own properties
+  assertCanAccess(request, user);
+
   // Delete S3 objects for all attachments before removing DB rows
   const attachments = await maintenanceRepo.findAttachments(id);
   for (const att of attachments) {

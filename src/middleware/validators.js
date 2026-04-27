@@ -316,7 +316,7 @@ const updateUserValidators = [
   body('firstName').optional().trim().notEmpty().withMessage('firstName must not be blank'),
   body('lastName').optional().trim().notEmpty().withMessage('lastName must not be blank'),
   body('phone').optional({ values: 'falsy' }).isMobilePhone().withMessage('phone must be a valid phone number'),
-  body('avatarUrl').optional({ values: 'falsy' }).isURL().withMessage('avatarUrl must be a valid URL'),
+  body('avatarUrl').optional({ values: 'falsy' }).isURL({ protocols: ['http', 'https'], require_protocol: true }).withMessage('avatarUrl must be a valid http or https URL'),
 ];
 
 module.exports = {

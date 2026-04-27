@@ -389,3 +389,116 @@ describe('GET /api/v1/ledger/statement — date validation', () => {
     expect(res.status).toBe(400);
   });
 });
+
+// ── Audit 2 — I2/D1: NOT IN → NOT EXISTS correctness (regression guard) ──────
+// The previous NOT IN implementation in findChargesDueTomorrow and
+// findOverdueUnpaidCharges had a NULL edge case: a single NULL charge_id in
+// rent_payments causes NOT IN to evaluate as UNKNOWN for every row, returning
+// zero results. Both functions now use NOT EXISTS which correctly ignores NULLs.
+// We test via the charges API (which exercises the same payment-exclusion logic)
+// to confirm that unpaid charges are not suppressed by unlinked (NULL charge_id)
+// payment rows.
+
+describe('GET /api/v1/charges — unpaid charges, NULL charge_id regression (Audit 2 I2/D1)', () => {
+  let chargeUnpaidId;
+  let chargePaidId;
+
+  beforeAll(async () => {
+    // Create two charges: one genuinely unpaid, one fully paid
+    chargeUnpaidId = uuidv4();
+    chargePaidId   = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, tenant_id, charge_type, amount, due_date)
+       VALUES
+         ($1, $2, $3, $4, 'rent', 750, CURRENT_DATE - INTERVAL '5 days'),
+         ($5, $2, $3, $4, 'rent', 500, CURRENT_DATE - INTERVAL '3 days')`,
+      [chargeUnpaidId, fx.unitA.id, fx.leaseA.id, fx.tenantA.tenantProfileId,
+       chargePaidId],
+    );
+    // Fully pay the second charge
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, $3, 500, CURRENT_DATE, 'cash', 'completed')`,
+      [uuidv4(), fx.leaseA.id, chargePaidId],
+    );
+    // Insert a rent_payment row with NULL charge_id (unlinked payment — the pattern that
+    // caused NOT IN to return no rows at all when combined with a nullable subquery)
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, NULL, 100, CURRENT_DATE, 'cash', 'completed')`,
+      [uuidv4(), fx.leaseA.id],
+    );
+  });
+
+  it('unpaid charges are returned when the lease also has an unlinked (NULL charge_id) payment', async () => {
+    // If NOT IN were still used, the NULL value in the subquery would make the condition
+    // UNKNOWN for every charge, returning an empty list. NOT EXISTS correctly ignores it.
+    const res = await request(app)
+      .get(`/api/v1/charges?leaseId=${fx.leaseA.id}&unpaidOnly=true`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    const ids = res.body.map((c) => c.id);
+    expect(ids).toContain(chargeUnpaidId);
+  });
+
+  it('fully-paid charge does not appear in unpaid list', async () => {
+    const res = await request(app)
+      .get(`/api/v1/charges?leaseId=${fx.leaseA.id}&unpaidOnly=true`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    const ids = res.body.map((c) => c.id);
+    expect(ids).not.toContain(chargePaidId);
+  });
+});
+
+// ── Co-tenant access — ledger + statement (Final Audit) ──────────────────────
+// Regression guard: getLedger, getStatement, getStatementPdf previously compared
+// tenant_record_id directly, blocking co-tenants. Fixed to use tenantCanAccessLease.
+
+describe('GET /api/v1/ledger + statement — co-tenant access (Final Audit)', () => {
+  beforeAll(async () => {
+    await fx.pool.query(
+      `INSERT INTO lease_co_tenants (lease_id, tenant_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [fx.leaseA.id, fx.tenantB.tenantProfileId],
+    );
+  });
+
+  afterAll(async () => {
+    await fx.pool.query(
+      `DELETE FROM lease_co_tenants WHERE lease_id = $1 AND tenant_id = $2`,
+      [fx.leaseA.id, fx.tenantB.tenantProfileId],
+    );
+  });
+
+  it('co-tenant can view ledger for their shared lease', async () => {
+    const res = await request(app)
+      .get(`/api/v1/ledger?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.tenantB.token}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('co-tenant can view statement for their shared lease', async () => {
+    const res = await request(app)
+      .get(`/api/v1/ledger/statement?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.tenantB.token}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.entries)).toBe(true);
+  });
+
+  it('unrelated tenant (tenantB without co-tenant link) cannot view leaseA ledger', async () => {
+    // Remove co-tenant link temporarily
+    await fx.pool.query(
+      `DELETE FROM lease_co_tenants WHERE lease_id = $1 AND tenant_id = $2`,
+      [fx.leaseA.id, fx.tenantB.tenantProfileId],
+    );
+    const res = await request(app)
+      .get(`/api/v1/ledger?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.tenantB.token}`);
+    expect(res.status).toBe(403);
+    // Re-add for the afterAll cleanup path
+    await fx.pool.query(
+      `INSERT INTO lease_co_tenants (lease_id, tenant_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [fx.leaseA.id, fx.tenantB.tenantProfileId],
+    );
+  });
+});

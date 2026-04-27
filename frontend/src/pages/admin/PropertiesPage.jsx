@@ -99,7 +99,7 @@ export default function PropertiesPage() {
     const prefix = unitPrefix.trim()
     const start = Number(unitStartNumber) || 1
     const jobs = Array.from({ length: clampedCount }, (_, i) => {
-      const num = prefix ? `${prefix} ${start + i}` : String(start + i)
+      const num = prefix ? `${prefix}${start + i}` : String(start + i)
       return createUnit({
         propertyId: unitWizardPropertyId,
         unitNumber: num,
@@ -188,6 +188,7 @@ export default function PropertiesPage() {
             <TextField
               label="Unit label prefix (optional)"
               placeholder="e.g. Apt, Unit, Suite"
+              helperText='Add a trailing space if you want a gap (e.g. "Apt " → Apt101)'
               value={unitPrefix}
               onChange={(e) => setUnitPrefix(e.target.value)}
               size="small"
@@ -207,9 +208,9 @@ export default function PropertiesPage() {
               const prefix = unitPrefix.trim()
               const start = Number(unitStartNumber) || 1
               const preview = Array.from({ length: Math.min(unitCount, 3) }, (_, i) =>
-                prefix ? `${prefix} ${start + i}` : String(start + i)
+                prefix ? `${prefix}${start + i}` : String(start + i)
               )
-              const suffix = unitCount > 3 ? ` … ${prefix ? `${prefix} ${start + unitCount - 1}` : String(start + unitCount - 1)}` : ''
+              const suffix = unitCount > 3 ? ` … ${prefix ? `${prefix}${start + unitCount - 1}` : String(start + unitCount - 1)}` : ''
               return (
                 <Typography variant="caption" color="text.secondary">
                   Creates: {preview.join(', ')}{suffix}

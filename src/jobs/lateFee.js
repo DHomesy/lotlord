@@ -44,6 +44,11 @@ async function run() {
   let applied = 0;
   let failed = 0;
 
+  // NOTE (S1): Charges are processed serially (one DB round-trip per charge) rather
+  // than in parallel. This is intentional — serial processing keeps database connection
+  // usage predictable and avoids flooding the pool when hundreds of charges are due.
+  // If throughput becomes a bottleneck, consider batching the charge inserts into a
+  // single INSERT … SELECT statement and sending notifications via Promise.allSettled.
   for (const charge of overdueCharges) {
     try {
       // Apply the late fee to the ledger (atomic — writes charge + ledger entry)

@@ -79,15 +79,17 @@ async function findByLeaseId(leaseId) {
   return rows;
 }
 
-/** Find rent charges due on or before a date that have no completed payment. */
+/** Find rent charges due on or before a date that have no completed payment.
+ * Uses NOT EXISTS instead of NOT IN to avoid the NULL-in-subquery edge case
+ * where any NULL charge_id in rent_payments would silently suppress all results. */
 async function findUnpaidCharges(leaseId) {
   const { rows } = await query(
     `SELECT rc.* FROM rent_charges rc
      WHERE rc.lease_id = $1
        AND rc.voided_at IS NULL
-       AND rc.id NOT IN (
-         SELECT charge_id FROM rent_payments
-         WHERE lease_id = $1 AND status = 'completed' AND charge_id IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM rent_payments rp
+         WHERE rp.charge_id = rc.id AND rp.status = 'completed'
        )
      ORDER BY rc.due_date ASC`,
     [leaseId],
@@ -148,15 +150,15 @@ async function findChargesDueTomorrow() {
        JOIN leases l   ON l.id = rc.lease_id
        JOIN units u    ON u.id = rc.unit_id
        JOIN properties p ON p.id = u.property_id
-       JOIN tenants t  ON t.id = rc.tenant_id
+       JOIN tenants t  ON t.id = l.tenant_id
        JOIN users us   ON us.id = t.user_id
       WHERE l.status = 'active'
         AND rc.due_date = CURRENT_DATE + INTERVAL '1 day'
         AND rc.charge_type = 'rent'
         AND rc.voided_at IS NULL
-        AND rc.id NOT IN (
-              SELECT charge_id FROM rent_payments
-               WHERE status = 'completed' AND charge_id IS NOT NULL
+        AND NOT EXISTS (
+              SELECT 1 FROM rent_payments rp
+              WHERE rp.charge_id = rc.id AND rp.status = 'completed'
             )
       ORDER BY rc.due_date ASC`,
   );
@@ -192,16 +194,16 @@ async function findOverdueUnpaidCharges() {
        JOIN leases l   ON l.id = rc.lease_id
        JOIN units u    ON u.id = rc.unit_id
        JOIN properties p ON p.id = u.property_id
-       JOIN tenants t  ON t.id = rc.tenant_id
+       JOIN tenants t  ON t.id = l.tenant_id
        JOIN users us   ON us.id = t.user_id
       WHERE l.status = 'active'
         AND rc.charge_type   = 'rent'
         AND rc.voided_at IS NULL
         AND l.late_fee_amount > 0
         AND rc.due_date + (l.late_fee_grace_days || ' days')::INTERVAL < CURRENT_DATE
-        AND rc.id NOT IN (
-              SELECT charge_id FROM rent_payments
-               WHERE status = 'completed' AND charge_id IS NOT NULL
+        AND NOT EXISTS (
+              SELECT 1 FROM rent_payments rp
+              WHERE rp.charge_id = rc.id AND rp.status = 'completed'
             )
         AND NOT EXISTS (
               SELECT 1 FROM rent_charges lf

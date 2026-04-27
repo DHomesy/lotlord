@@ -57,3 +57,40 @@ describe('GET /api/v1/leases/:id', () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ── Co-tenant scope (Audit 2 — employee authorization fix) ───────────────────
+// Regression guard: addCoTenant/removeCoTenant previously only checked
+// `role === 'landlord'`, allowing any employee to modify co-tenants on any lease.
+// Fixed to use resolveOwnerId so employees are scoped to their employer's leases.
+
+describe("GET /api/v1/leases/:id/co-tenants — employee scope fix", () => {
+  it("employeeA can list co-tenants on employer's lease", async () => {
+    const res = await request(app)
+      .get(`/api/v1/leases/${fx.leaseA.id}/co-tenants`)
+      .set('Authorization', `Bearer ${fx.employeeA.token}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it("employeeA cannot list co-tenants on landlordB's lease (403)", async () => {
+    const res = await request(app)
+      .get(`/api/v1/leases/${fx.leaseB.id}/co-tenants`)
+      .set('Authorization', `Bearer ${fx.employeeA.token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it("employeeA cannot add a co-tenant to landlordB's lease (403)", async () => {
+    const res = await request(app)
+      .post(`/api/v1/leases/${fx.leaseB.id}/co-tenants`)
+      .set('Authorization', `Bearer ${fx.employeeA.token}`)
+      .send({ tenantId: fx.tenantA.tenantProfileId });
+    expect(res.status).toBe(403);
+  });
+
+  it("employeeA cannot remove a co-tenant from landlordB's lease (403)", async () => {
+    const res = await request(app)
+      .delete(`/api/v1/leases/${fx.leaseB.id}/co-tenants/${fx.tenantB.tenantProfileId}`)
+      .set('Authorization', `Bearer ${fx.employeeA.token}`);
+    expect(res.status).toBe(403);
+  });
+});
