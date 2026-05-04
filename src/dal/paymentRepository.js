@@ -15,13 +15,14 @@ async function findById(id) {
   return rows[0] || null;
 }
 
-async function create(client, { id, leaseId, chargeId, amountPaid, paymentDate, paymentMethod, stripePaymentIntentId, status, notes }) {
+async function create(client, { id, leaseId, chargeId, amountPaid, paymentDate, paymentMethod, stripePaymentIntentId, status, notes, stripeFeeCents }) {
   const { rows } = await client.query(
     `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date,
-                                payment_method, stripe_payment_intent_id, status, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+                                payment_method, stripe_payment_intent_id, status, notes, stripe_fee_cents)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
     [id, leaseId, chargeId || null, amountPaid, paymentDate,
-     paymentMethod, stripePaymentIntentId || null, status || 'completed', notes || null],
+     paymentMethod, stripePaymentIntentId || null, status || 'completed', notes || null,
+     stripeFeeCents ?? null],
   );
   return rows[0];
 }

@@ -200,6 +200,13 @@ function RecordPaymentDialog({ charge, open, onClose }) {
                 <> &mdash; <strong style={{ color: 'inherit' }}>Remaining: ${remaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></>
               )}
             </Typography>
+            {charge.status === 'pending' && (
+              <Alert severity="warning" sx={{ mt: 1 }}>
+                A bank transfer (ACH) from the tenant is currently in progress for this charge.
+                Recording a manual payment here is allowed — if the ACH also settles, you may
+                need to issue a credit or refund.
+              </Alert>
+            )}
             <TextField
               label="Amount Paid ($)"
               type="number"
@@ -290,12 +297,17 @@ function ChargePaymentHistoryDialog({ charge, open, onClose }) {
           <Typography variant="body2" color="text.secondary">No payments recorded for this charge.</Typography>
         ) : (
           <Stack spacing={1} sx={{ pt: 0.5 }}>
-            {payments.map((p) => (
+            {payments.map((p) => {
+              const feeDollars = p.stripe_fee_cents > 0 ? p.stripe_fee_cents / 100 : null
+              const totalCharged = feeDollars != null
+                ? parseFloat(p.amount_paid) + feeDollars
+                : parseFloat(p.amount_paid)
+              return (
               <Stack
                 key={p.id}
                 direction="row"
                 justifyContent="space-between"
-                alignItems="center"
+                alignItems="flex-start"
                 sx={{ py: 1, borderBottom: '1px solid', borderColor: 'divider' }}
               >
                 <Box>
@@ -309,14 +321,27 @@ function ChargePaymentHistoryDialog({ charge, open, onClose }) {
                 <Stack alignItems="flex-end">
                   <Typography variant="body2" fontWeight={600}>
                     ${parseFloat(p.amount_paid).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {' '}
+                    <Typography component="span" variant="caption" color="text.secondary">to you</Typography>
                   </Typography>
+                  {feeDollars != null && (
+                    <Tooltip title="ACH processing fee charged to the tenant. The tenant paid this on top of rent — it goes to the payment processor. You receive the full rent amount." arrow>
+                      <Typography variant="caption" color="text.disabled" sx={{ cursor: 'help' }}>
+                        +${feeDollars.toFixed(2)} processing fee (tenant paid)
+                      </Typography>
+                    </Tooltip>
+                  )}
+                  {feeDollars != null && (
+                    <Typography variant="caption" color="text.secondary">
+                      Tenant total: ${totalCharged.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </Typography>
+                  )}
                   <Typography variant="caption" color={p.status === 'completed' ? 'success.main' : 'warning.main'} sx={{ textTransform: 'capitalize' }}>
                     {p.status}
                   </Typography>
                 </Stack>
               </Stack>
-            ))}
-          </Stack>
+            )})}          </Stack>
         )}
       </DialogContent>
       <DialogActions>
@@ -402,11 +427,12 @@ export default function ChargesPage() {
     { field: 'unit_number',   headerName: 'Unit',     width: 90 },
     { field: 'charge_type',   headerName: 'Type',     width: 110 },
     { field: 'description',   headerName: 'Description', flex: 1 },
-    { field: 'amount', headerName: 'Amount', width: 140,
+    { field: 'amount', headerName: 'Amount', width: 160,
       renderCell: ({ row }) => {
         const full = Number(row.amount)
         const paid = Number(row.total_paid ?? 0)
         const remaining = Math.max(0, full - paid)
+        const feeDollars = row.stripe_fee_cents > 0 ? (row.stripe_fee_cents / 100) : null
         return (
           <Box>
             <Typography variant="body2">${full.toLocaleString()}</Typography>
@@ -418,6 +444,13 @@ export default function ChargesPage() {
             {row.status === 'paid' && (
               <Typography variant="caption" color="success.main">Paid in full</Typography>
             )}
+            {feeDollars != null && (row.status === 'pending' || row.status === 'paid' || row.status === 'partial') && (
+              <Tooltip title="ACH processing fee charged to the tenant on their most recent bank transfer. The tenant pays rent + this fee; you receive the full rent amount." arrow>
+                <Typography variant="caption" color="text.disabled" sx={{ display: 'block', cursor: 'help' }}>
+                  +${feeDollars.toFixed(2)} ACH fee
+                </Typography>
+              </Tooltip>
+            )}
           </Box>
         )
       },
@@ -426,8 +459,15 @@ export default function ChargesPage() {
     {
       field: 'status',
       headerName: 'Status',
-      width: 110,
-      renderCell: ({ value }) => <StatusChip status={value} />,
+      width: 150,
+      renderCell: ({ value }) =>
+        value === 'pending' ? (
+          <Tooltip title="A bank transfer (ACH) from the tenant is in progress. It will settle in 1–3 business days. You may still record an offline payment below." arrow>
+            <Box><StatusChip status={value} /></Box>
+          </Tooltip>
+        ) : (
+          <StatusChip status={value} />
+        ),
     },
     {
       field: '_actions',
@@ -447,7 +487,7 @@ export default function ChargesPage() {
                 </IconButton>
               </span>
             </Tooltip>
-            {(row.status === 'unpaid' || row.status === 'partial') && row.lease_id && (
+            {(row.status === 'unpaid' || row.status === 'partial' || row.status === 'pending') && row.lease_id && (
               <Tooltip title="Add Manual Payment">
                 <span>
                   <IconButton size="small" color="success" onClick={() => setRecordCharge(row)}>
@@ -456,7 +496,7 @@ export default function ChargesPage() {
                 </span>
               </Tooltip>
             )}
-            {(row.status === 'partial' || row.status === 'paid') && (
+            {(row.status === 'partial' || row.status === 'paid' || row.status === 'pending') && (
               <Tooltip title="Payment History">
                 <span>
                   <IconButton size="small" color="info" onClick={() => setHistoryCharge(row)}>

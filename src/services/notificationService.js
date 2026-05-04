@@ -4,42 +4,8 @@ const userRepo   = require('../dal/userRepository');
 const tenantRepo = require('../dal/tenantRepository');
 const email = require('../integrations/email');
 const { sendSms } = require('../integrations/twilio');
-
-// ── Template rendering ────────────────────────────────────────────────────────
-
-/**
- * Replaces all {{key}} placeholders in a template string with the supplied variables.
- * Unknown keys are left as-is so you can spot missing variables in the log.
- *
- * Supported variables:
- *   {{tenant_name}}    Full name of the tenant
- *   {{first_name}}     First name only
- *   {{due_date}}       Rent / charge due date
- *   {{amount}}         Currency amount
- *   {{unit}}           Unit number
- *   {{property}}       Property name
- *   {{landlord_name}}  Landlord / admin name
- *   {{lease_start}}    Lease start date
- *   {{lease_end}}      Lease end date
- *   {{status}}         A status string (e.g. maintenance status)
- *   {{description}}    Free-form description
- */
-/** Escape HTML entities for safe embedding of user-controlled values in email bodies. */
-function escapeHtml(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function renderTemplate(template, variables = {}, channel = 'email') {
-  return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-    if (variables[key] === undefined) return match;
-    // HTML-escape values only for email templates to prevent HTML injection.
-    return channel === 'email' ? escapeHtml(String(variables[key])) : String(variables[key]);
-  });
-}
+const env = require('../config/env');
+const { escapeHtml, renderTemplate } = require('../lib/templateUtils');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -227,7 +193,13 @@ async function sendByTriggerEvent({ triggerEvent, recipientId, variables = {}, c
     console.warn(`[notification] No ${channel} template for trigger_event='${triggerEvent}' — skipping recipient ${recipientId}`);
     return null;
   }
-  return sendFromTemplate({ templateId: template.id, recipientId, variables });
+  // Merge in global defaults so every template can use {{portal_url}} without
+  // each job/caller needing to pass it explicitly. Caller-supplied values win.
+  if (!env.FRONTEND_URL) {
+    console.warn('[notification] FRONTEND_URL env var is not set — portal links in email templates will be broken');
+  }
+  const mergedVariables = { portal_url: env.FRONTEND_URL || '', ...variables };
+  return sendFromTemplate({ templateId: template.id, recipientId, variables: mergedVariables });
 }
 
 /**

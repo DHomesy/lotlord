@@ -5,6 +5,7 @@ import PageContainer from '../../components/layout/PageContainer'
 import DataTable from '../../components/common/DataTable'
 import StatusChip from '../../components/common/StatusChip'
 import MaintenanceForm from '../../components/forms/MaintenanceForm'
+import MaintenanceDetailDrawer from '../../components/maintenance/MaintenanceDetailDrawer'
 import LoadingOverlay from '../../components/common/LoadingOverlay'
 import EmptyState from '../../components/common/EmptyState'
 import { useMaintenance, useCreateMaintenanceRequest } from '../../hooks/useMaintenance'
@@ -22,6 +23,7 @@ const columns = [
 export default function TenantMaintenancePage() {
   const [open, setOpen] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [selectedRequest, setSelectedRequest] = useState(null)
   const { activeLease, isLoading: loadingLease } = useMyLease()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
@@ -63,7 +65,14 @@ export default function TenantMaintenancePage() {
     >
       {!isLoading && rows.length === 0
         ? <EmptyState message="You haven't submitted any maintenance requests yet." />
-        : <DataTable rows={rows} columns={columns} loading={isLoading} />
+        : (
+          <DataTable
+            rows={rows}
+            columns={columns}
+            loading={isLoading}
+            onRowClick={({ row }) => setSelectedRequest(row)}
+          />
+        )
       }
       {uploadError && <Alert severity="warning" sx={{ mt: 2 }}>{uploadError}</Alert>}
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
@@ -82,6 +91,11 @@ export default function TenantMaintenancePage() {
           />
         </DialogContent>
       </Dialog>
+      <MaintenanceDetailDrawer
+        request={selectedRequest}
+        onClose={() => setSelectedRequest(null)}
+        tenantMode
+      />
     </PageContainer>
   )
 }

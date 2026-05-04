@@ -23,6 +23,7 @@ const { getClient, query } = require('../config/db');
 const env             = require('../config/env');
 const notificationService = require('./notificationService');
 const audit           = require('./auditService');
+const { achFeeBreakdown } = require('../lib/stripeFees');
 
 // ── Customer ──────────────────────────────────────────────────────────────────
 
@@ -132,13 +133,33 @@ async function createPaymentIntent({ leaseId, chargeId, paymentMethodId, amount,
   if (amount != null) {
     amountDollars = parseFloat(amount);
   }
-  const amountCents = Math.round(amountDollars * 100);
 
-  // ── Resolve the landlord's Stripe Connect account ─────────────────────────────────
-  // The lease query now includes p.owner_id — the landlord's users.id
-  const landlordConnect = lease.owner_id
-    ? await userRepo.findConnectStatus(lease.owner_id)
-    : null;
+  // ── ACH processing fee — exact Stripe pass-through, no platform markup ────────
+  //
+  // Stripe charges the PLATFORM 0.8% of the total debit, capped at $5.00.
+  // We calculate the fee on amountCents (slightly conservative — the platform
+  // absorbs the tiny difference on the fee itself, which is ≤4 cents per
+  // transaction for rents under $625). This means the tenant never overpays.
+  //
+  // Money flow (Stripe Connect destination charge):
+  //   Tenant bank debit   = totalCents        (amountCents + feeCents)
+  //   → Landlord receives = amountCents       (exact rent, via transfer_data)
+  //   → Platform receives = feeCents          (application_fee_amount)
+  //   → Stripe deducts    ≈ feeCents          (0.8% of totalCents, $5 cap)
+  //   → Platform net      ≈ $0               (breaks even; absorbs ≤4¢ rounding)
+  //
+  // For all rents ≥ $625 the $5 cap applies, so the platform nets exactly $0.
+  // Use the shared fee utility (src/lib/stripeFees.js) so the formula stays
+  // in sync with the frontend display and is independently unit-testable.
+  const { amountCents, feeCents, totalCents } = achFeeBreakdown(amountDollars);
+
+  // ── Resolve the landlord's Connect account + tenant Stripe customer in parallel ──
+  // Both lookups depend only on the lease row (already fetched) and are independent,
+  // so we run them concurrently to save one DB round trip on every payment initiation.
+  const [landlordConnect, customer] = await Promise.all([
+    lease.owner_id ? userRepo.findConnectStatus(lease.owner_id) : Promise.resolve(null),
+    getOrCreateStripeCustomer(lease.tenant_record_id),
+  ]);
 
   if (!landlordConnect?.stripe_account_id || !landlordConnect?.stripe_account_onboarded) {
     throw Object.assign(
@@ -147,10 +168,9 @@ async function createPaymentIntent({ leaseId, chargeId, paymentMethodId, amount,
     );
   }
 
-  const customer = await getOrCreateStripeCustomer(lease.tenant_record_id);
-
   const intentParams = {
-    amount:               amountCents,
+    amount:                  totalCents,   // charge portion + platform processing fee
+    application_fee_amount:  feeCents,     // platform retains fee; landlord receives amountCents
     currency:             'usd',
     customer:             customer.id,
     payment_method_types: ['us_bank_account'],
@@ -212,12 +232,13 @@ async function createPaymentIntent({ leaseId, chargeId, paymentMethodId, amount,
       id:                    paymentId,
       leaseId,
       chargeId:              chargeId || null,
-      amountPaid:            amountDollars,
+      amountPaid:            amountDollars,   // charge portion only — fee is separate
       paymentDate:           new Date().toISOString().split('T')[0],
       paymentMethod:         'stripe_ach',
       stripePaymentIntentId: intent.id,
       status:                'pending',
       notes:                 null,
+      stripeFeeCents:        feeCents,
     });
     await client.query('COMMIT');
   } catch (err) {
@@ -239,11 +260,13 @@ async function createPaymentIntent({ leaseId, chargeId, paymentMethodId, amount,
   });
 
   return {
-    clientSecret:    intent.client_secret,
-    paymentIntentId: intent.id,
+    clientSecret:      intent.client_secret,
+    paymentIntentId:   intent.id,
     paymentId,
     amountDollars,
-    status:          intent.status,
+    feeCents,
+    totalAmountDollars: parseFloat(((amountCents + feeCents) / 100).toFixed(2)),
+    status:            intent.status,
   };
 }
 

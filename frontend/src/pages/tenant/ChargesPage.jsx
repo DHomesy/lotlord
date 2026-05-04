@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Tab, Tabs, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   RadioGroup, FormControlLabel, Radio, Alert, Stack, CircularProgress, Divider, Box,
-  useTheme, useMediaQuery,
+  Tooltip, useTheme, useMediaQuery,
 } from '@mui/material'
 import PaymentIcon from '@mui/icons-material/Payment'
 import PageContainer from '../../components/layout/PageContainer'
@@ -23,6 +23,7 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
   const [selectedId, setSelectedId] = useState('')
   const [amount, setAmount] = useState('')
   const [succeeded, setSucceeded] = useState(false)
+  const [feeResult, setFeeResult] = useState(null)
   const { mutate: pay, isPending, error, reset } = useCreateMyPaymentIntent()
 
   // Compute default amount: for partial charges use remaining balance; otherwise full charge
@@ -38,6 +39,7 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
   useEffect(() => {
     if (open) {
       setSucceeded(false)
+      setFeeResult(null)
       reset()
       setSelectedId(methods[0]?.id ?? '')
       setAmount(defaultAmount(charge))
@@ -65,7 +67,7 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
   function handlePay() {
     pay(
       { chargeId: charge.id, paymentMethodId: selectedId, amount: parsedAmount },
-      { onSuccess: () => setSucceeded(true) },
+      { onSuccess: (data) => { setFeeResult(data); setSucceeded(true) } },
     )
   }
 
@@ -77,8 +79,13 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
           <DialogTitle>Payment Initiated</DialogTitle>
           <DialogContent>
             <Alert severity="success">
-              Your ACH payment of <strong>${Number(parsedAmount || charge.amount).toLocaleString()}</strong> is
-              processing. It typically takes 1-5 business days to settle.
+              Your ACH bank transfer of{' '}
+              <strong>${(feeResult?.totalAmountDollars ?? Number(parsedAmount || charge.amount)).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>{' '}
+              is processing.
+              {feeResult?.feeCents > 0 && (
+                <> This includes a <strong>${(feeResult.feeCents / 100).toFixed(2)}</strong> processing fee.
+                </>)}
+              {' '}It typically takes 1–3 business days to settle.
             </Alert>
           </DialogContent>
           <DialogActions>
@@ -126,6 +133,31 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
                       Enter an amount between $0.01 and ${maxAmount.toLocaleString()}.
                     </Typography>
                   )}
+                  {amountValid && (() => {
+                    const feeDollars = Math.min(Math.round(parsedAmount * 100 * 0.008), 500) / 100
+                    const totalDollars = parsedAmount + feeDollars
+                    return (
+                      <Box sx={{ mt: 1, p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="caption" color="text.secondary">Rent / charge amount</Typography>
+                          <Typography variant="caption">${parsedAmount.toFixed(2)}</Typography>
+                        </Stack>
+                        <Stack direction="row" justifyContent="space-between">
+                          <Tooltip title="ACH bank transfer processing fee (0.8%, max $5.00) charged by our payment processor." arrow>
+                            <Typography variant="caption" color="text.secondary" sx={{ cursor: 'help', textDecoration: 'underline dotted' }}>
+                              Processing fee (ACH)
+                            </Typography>
+                          </Tooltip>
+                          <Typography variant="caption">${feeDollars.toFixed(2)}</Typography>
+                        </Stack>
+                        <Divider sx={{ my: 0.5 }} />
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="caption" fontWeight={600}>Total charged to your bank</Typography>
+                          <Typography variant="caption" fontWeight={600}>${totalDollars.toFixed(2)}</Typography>
+                        </Stack>
+                      </Box>
+                    )
+                  })()}
                 </Stack>
                 <Stack spacing={0.5}>
                   <Typography variant="body2" color="text.secondary">
@@ -170,7 +202,9 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
                 disabled={!selectedId || isPending || !amountValid || methods.find((m) => m.id === selectedId)?.verified === false}
                 startIcon={isPending ? <CircularProgress size={14} color="inherit" /> : <PaymentIcon />}
               >
-                {isPending ? 'Processing…' : 'Confirm Payment'}
+                {isPending ? 'Processing…' : amountValid
+                  ? `Pay $${(parsedAmount + Math.min(Math.round(parsedAmount * 100 * 0.008), 500) / 100).toFixed(2)}`
+                  : 'Confirm Payment'}
               </Button>
             )}
           </DialogActions>
@@ -206,7 +240,19 @@ export default function TenantChargesPage() {
     { field: 'description', headerName: 'Description', flex: 1 },
     { field: 'amount', headerName: 'Amount', width: 120, valueFormatter: (v) => `$${Number(v).toLocaleString()}` },
     { field: 'due_date', headerName: 'Due', width: 120, valueFormatter: (v) => v?.slice(0, 10) },
-    { field: 'status', headerName: 'Status', width: 110, renderCell: ({ value }) => <StatusChip status={value} /> },
+    {
+      field: 'status',
+      headerName: 'Status',
+      width: 150,
+      renderCell: ({ value }) =>
+        value === 'pending' ? (
+          <Tooltip title="A bank transfer is in progress and will settle in 1–3 business days. No further action needed." arrow>
+            <Box><StatusChip status={value} /></Box>
+          </Tooltip>
+        ) : (
+          <StatusChip status={value} />
+        ),
+    },
     {
       field: 'actions',
       headerName: '',
@@ -226,7 +272,19 @@ export default function TenantChargesPage() {
     { field: 'payment_date', headerName: 'Date', width: 130, valueFormatter: (v) => v?.slice(0, 10) },
     { field: 'amount_paid', headerName: 'Amount', width: 130, valueFormatter: (v) => `$${Number(v).toLocaleString()}` },
     { field: 'payment_method', headerName: 'Method', width: 140 },
-    { field: 'status', headerName: 'Status', width: 120, renderCell: ({ value }) => <StatusChip status={value} /> },
+    {
+      field: 'status',
+      headerName: 'Status',
+      width: 140,
+      renderCell: ({ value }) =>
+        value === 'pending' ? (
+          <Tooltip title="Bank transfer in progress — typically settles in 1–3 business days." arrow>
+            <Box><StatusChip status={value} /></Box>
+          </Tooltip>
+        ) : (
+          <StatusChip status={value} />
+        ),
+    },
     { field: 'notes', headerName: 'Notes', flex: 1 },
   ]
 

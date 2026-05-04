@@ -1,8 +1,12 @@
 const { v4: uuidv4 } = require('uuid');
 const documentRepo = require('../dal/documentRepository');
+const leaseRepo = require('../dal/leaseRepository');
 const storage = require('../integrations/storage');
+const notificationService = require('../services/notificationService');
 const { assertMimeMatchesBytes } = require('../lib/mimeUtils');
 const { resolveOwnerId } = require('../lib/authHelpers');
+const { escapeHtml } = require('../lib/templateUtils');
+const env = require('../config/env');
 
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/webp', 'image/gif',
@@ -13,6 +17,45 @@ const ALLOWED_MIME_TYPES = new Set([
 ]);
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Fire-and-forget: send the tenant an email with a 24-hour pre-signed download
+ * link when a landlord attaches a category='lease' document to a lease.
+ */
+async function notifyTenantLeaseDocument(doc, leaseId) {
+  const lease = await leaseRepo.findById(leaseId);
+  if (!lease?.user_id) return;
+
+  const downloadUrl = await storage.getDownloadUrl(doc.file_url, 24 * 3600);
+  const firstName   = escapeHtml(lease.first_name || 'there');
+  const safeFileName = escapeHtml(doc.file_name || 'Lease Document');
+  const portalUrl   = env.FRONTEND_URL || '';
+
+  const html = `
+    <p>Hi ${firstName},</p>
+    <p>Your landlord has uploaded a lease document for your review:</p>
+    <p><strong>${safeFileName}</strong></p>
+    <p style="margin:16px 0">
+      <a href="${downloadUrl}"
+         style="background:#1976d2;color:#fff;padding:10px 20px;border-radius:4px;text-decoration:none;font-size:14px">
+        Download Document &rarr;
+      </a>
+    </p>
+    <p style="color:#666;font-size:13px">
+      This download link expires in 24&nbsp;hours. You can always access your documents in the tenant portal.
+    </p>
+    ${portalUrl ? `<p><a href="${portalUrl}/documents" style="color:#1976d2">View all documents &rarr;</a></p>` : ''}
+  `;
+
+  await notificationService.sendAdhoc({
+    recipientId: lease.user_id,
+    subject: 'Your lease document is ready',
+    html,
+  });
+}
+
 
 // Maps detected raw MIME (from magic bytes) to the allowed declared MIME types.
 // DOCX/XLSX/PPTX are ZIP archives, so 'application/zip' covers them.
@@ -82,7 +125,15 @@ async function uploadDocument(req, res, next) {
       uploadedBy:  req.user.sub,
     });
 
-    res.status(201).json(doc);
+    // Notify tenant when a lease document is linked to a lease (fire-and-forget)
+    const leaseCopySent = category === 'lease' && relatedType === 'lease' && !!relatedId;
+    if (leaseCopySent) {
+      notifyTenantLeaseDocument(doc, relatedId).catch((err) =>
+        console.warn('[document] lease copy notification failed:', err.message),
+      );
+    }
+
+    res.status(201).json({ ...doc, leaseCopySent });
   } catch (err) { next(err); }
 }
 

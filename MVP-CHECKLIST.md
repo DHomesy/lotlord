@@ -4,7 +4,7 @@ This document exists so that no matter how much time passes, you always know exa
 what needs to be verified before handing the product to a real user. Work through it
 top to bottom. Do not skip sections.
 
-Last reviewed: April 2026 (v1.7.5)
+Last reviewed: May 2026 (v1.9.0)
 
 ---
 

@@ -19,10 +19,24 @@ async function findAll({ ownerId, tenantUserId, relatedId, relatedType, category
   }
 
   if (tenantUserId) {
-    // Tenants only see documents they themselves uploaded.
-    // Landlord-managed docs (lease agreements etc.) require explicit sharing — not auto-exposed.
-    conditions.push(`d.uploaded_by = $${i++}`);
+    // Tenants see:
+    //   1. Documents they uploaded themselves.
+    //   2. Lease-category documents linked to a lease they are a party to
+    //      (auto-shared when a landlord attaches a lease document).
+    conditions.push(`(
+      d.uploaded_by = $${i}
+      OR (
+        d.category = 'lease'
+        AND d.related_type = 'lease'
+        AND EXISTS (
+          SELECT 1 FROM leases l
+          JOIN tenants t ON t.id = l.tenant_id
+          WHERE l.id = d.related_id AND t.user_id = $${i}
+        )
+      )
+    )`);
     params.push(tenantUserId);
+    i++;
   }
 
   if (relatedId) {
@@ -91,11 +105,24 @@ async function remove(id) {
  * Efficiently checks whether a document is accessible to a tenant in a single query.
  * Returns the document row if accessible, or null if not.
  */
-// Consistent with findAll: tenants may only access documents they uploaded.
+// Tenants may access documents they uploaded OR lease-category docs linked to their leases.
 async function findByIdForTenant(id, tenantUserId) {
   const { rows } = await query(
     `SELECT d.id FROM documents d
-     WHERE d.id = $1 AND d.uploaded_by = $2 LIMIT 1`,
+     WHERE d.id = $1
+       AND (
+         d.uploaded_by = $2
+         OR (
+           d.category = 'lease'
+           AND d.related_type = 'lease'
+           AND EXISTS (
+             SELECT 1 FROM leases l
+             JOIN tenants t ON t.id = l.tenant_id
+             WHERE l.id = d.related_id AND t.user_id = $2
+           )
+         )
+       )
+     LIMIT 1`,
     [id, tenantUserId],
   );
   return rows[0] || null;

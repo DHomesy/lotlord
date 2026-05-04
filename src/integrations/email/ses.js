@@ -20,7 +20,7 @@
  *   SES_CONFIGURATION_SET — e.g. lotlord-config-set (enables bounce tracking)
  */
 
-const { SESClient, SendEmailCommand, SendRawEmailCommand } = require('@aws-sdk/client-ses');
+const { SESClient, SendRawEmailCommand } = require('@aws-sdk/client-ses');
 const env = require('../../config/env');
 
 // ── SES client (singleton) ────────────────────────────────────────────────────
@@ -32,6 +32,33 @@ function getClient() {
     sesClient = new SESClient({ region: env.AWS_REGION || 'us-east-1' });
   }
   return sesClient;
+}
+
+// ── Outbound ──────────────────────────────────────────────────────────────────
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Strip CR and LF from an email header value to prevent MIME header injection.
+ * A crafted tenant name or property name containing \r\n could otherwise inject
+ * extra headers (e.g. Bcc:, To:) into outgoing messages. (OWASP A03: Injection)
+ *
+ * @param {*} value - Any value; coerced to string
+ * @returns {string} Value with all \r and \n characters replaced by a space
+ */
+function sanitizeHeader(value) {
+  return String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
+}
+
+/**
+ * Wrap a base64 string at 76-character line boundaries as required by RFC 2045.
+ * Some strict SMTP relays reject base64 parts that exceed this line length.
+ *
+ * @param {string} b64
+ * @returns {string}
+ */
+function wrapBase64(b64) {
+  return b64.match(/.{1,76}/g)?.join('\r\n') ?? b64;
 }
 
 // ── Outbound ──────────────────────────────────────────────────────────────────
@@ -50,18 +77,45 @@ function getClient() {
  */
 async function sendEmail({ to, subject, html, text }) {
   const plainText = text || html.replace(/<[^>]+>/g, '');
+  const boundary  = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const unsubAddr = env.SES_REPLY_TO_ADDRESS || env.SES_FROM_ADDRESS;
 
-  const command = new SendEmailCommand({
-    Source: `LotLord <${env.SES_FROM_ADDRESS}>`,
-    Destination: { ToAddresses: [to] },
-    ReplyToAddresses: env.SES_REPLY_TO_ADDRESS ? [env.SES_REPLY_TO_ADDRESS] : undefined,
-    Message: {
-      Subject: { Data: subject, Charset: 'UTF-8' },
-      Body: {
-        Html: { Data: html,      Charset: 'UTF-8' },
-        Text: { Data: plainText, Charset: 'UTF-8' },
-      },
-    },
+  // Build raw MIME so we can include RFC 2369 List-Unsubscribe headers.
+  // Gmail, Outlook, and Apple Mail use these to render the one-click unsubscribe
+  // option and to classify the message as transactional rather than bulk/spam.
+  //
+  // Header values are sanitized to strip \r\n (CRLF injection prevention).
+  const headerLines = [
+    `From: LotLord <${sanitizeHeader(env.SES_FROM_ADDRESS)}>`,
+    `To: ${sanitizeHeader(to)}`,
+    `Subject: ${sanitizeHeader(subject)}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    `List-Unsubscribe: <mailto:${sanitizeHeader(unsubAddr)}?subject=unsubscribe>`,
+    `List-Unsubscribe-Post: List-Unsubscribe=One-Click`,
+  ];
+  if (env.SES_REPLY_TO_ADDRESS) headerLines.push(`Reply-To: ${sanitizeHeader(env.SES_REPLY_TO_ADDRESS)}`);
+
+  const rawMessage = [
+    headerLines.join('\r\n'),
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    wrapBase64(Buffer.from(plainText, 'utf8').toString('base64')),
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    wrapBase64(Buffer.from(html, 'utf8').toString('base64')),
+    '',
+    `--${boundary}--`,
+  ].join('\r\n');
+
+  const command = new SendRawEmailCommand({
+    RawMessage: { Data: Buffer.from(rawMessage) },
     // Routes bounce/complaint events to SNS (requires config set + SNS destination)
     ConfigurationSetName: env.SES_CONFIGURATION_SET || undefined,
   });

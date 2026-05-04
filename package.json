@@ -1,6 +1,6 @@
 {
   "name": "property-manager",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Full-stack property management platform — API server",
   "main": "src/index.js",
   "scripts": {
@@ -13,6 +13,7 @@
     "create-admin": "node scripts/create-admin.js",
     "update-admin": "node scripts/update-admin.js",
     "test": "cross-env NODE_ENV=test jest --runInBand --forceExit",
+    "test:unit": "jest --config jest.unit.config.js --no-coverage",
     "lint": "eslint src/**/*.js",
     "format": "prettier --write src/**/*.js"
   },

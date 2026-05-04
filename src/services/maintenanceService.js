@@ -163,17 +163,17 @@ async function updateRequest(id, data, user) {
   if (!request) throw notFound();
   assertCanAccess(request, user);
 
-  // Tenants may only cancel their own request
+  // Tenants may edit title/description or cancel their own open requests
   if (user.role === 'tenant') {
-    const tenantAllowedFields = new Set(['status']);
-    const requestedKeys = Object.keys(data);
-    const hasDisallowedKeys = requestedKeys.some(k => !tenantAllowedFields.has(k));
-    if (hasDisallowedKeys) throw forbidden('Tenants may only update request status');
-    if (data.status && data.status !== 'cancelled') {
-      throw Object.assign(new Error('Tenants may only cancel their requests'), { status: 400 });
+    const tenantAllowedFields = new Set(['status', 'title', 'description']);
+    if (Object.keys(data).some(k => !tenantAllowedFields.has(k))) {
+      throw forbidden('Tenants may only update title, description, or cancel their request');
     }
     if (request.status !== 'open') {
-      throw Object.assign(new Error('Can only cancel an open request'), { status: 409 });
+      throw Object.assign(new Error('Can only edit or cancel an open request'), { status: 409 });
+    }
+    if (data.status && data.status !== 'cancelled') {
+      throw Object.assign(new Error('Tenants may only cancel their requests'), { status: 400 });
     }
   }
 

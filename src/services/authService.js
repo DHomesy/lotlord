@@ -10,20 +10,12 @@ const emailVerifyRepo = require('../dal/emailVerificationRepository');
 const notificationRepo = require('../dal/notificationRepository');
 const { sendEmail } = require('../integrations/email');
 const { JWT_SECRET, JWT_REFRESH_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN, FRONTEND_URL } = require('../config/env');
+const { escapeHtml } = require('../lib/templateUtils');
 
 // Refresh tokens use a dedicated secret so a compromised access-token secret cannot be used
 // to forge refresh tokens (and vice-versa). Falls back to a derived value for deployments
 // that don't yet have JWT_REFRESH_SECRET set.
 const REFRESH_SECRET = JWT_REFRESH_SECRET || (JWT_SECRET + '_refresh');
-
-/** Escape HTML entities to prevent injection in email bodies. */
-function escapeHtml(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
 
 /** Short-lived access token — stored in memory on the client. */
 function signToken(user) {

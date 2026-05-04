@@ -25,20 +25,12 @@ const { sendEmail } = require('../integrations/email');
 const { sendSms } = require('../integrations/twilio');
 const { FRONTEND_URL } = require('../config/env');
 const { resolveOwnerId } = require('../lib/authHelpers');
+const { escapeHtml } = require('../lib/templateUtils');
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────
 
 function appErr(msg, status) {
   return Object.assign(new Error(msg), { status });
-}
-
-/** Escape HTML entities to prevent HTML injection in email bodies. */
-function escapeHtml(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 // ── Service methods ───────────────────────────────────────────────────────────

@@ -53,7 +53,19 @@ const columns = [
   { field: 'payment_date', headerName: 'Date', width: 130, valueFormatter: (v) => v?.slice(0, 10) },
   { field: 'amount_paid', headerName: 'Amount', width: 130, valueFormatter: (v) => `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2 })}` },
   { field: 'payment_method', headerName: 'Method', width: 140 },
-  { field: 'status', headerName: 'Status', width: 120, renderCell: ({ value }) => <StatusChip status={value} /> },
+  {
+    field: 'status',
+    headerName: 'Status',
+    width: 140,
+    renderCell: ({ value }) =>
+      value === 'pending' ? (
+        <Tooltip title="Bank transfer in progress — typically settles in 1–3 business days." arrow>
+          <span><StatusChip status={value} /></span>
+        </Tooltip>
+      ) : (
+        <StatusChip status={value} />
+      ),
+  },
   { field: 'notes', headerName: 'Notes', flex: 1 },
   {
     field: 'actions',

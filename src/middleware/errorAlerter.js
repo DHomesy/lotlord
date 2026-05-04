@@ -12,6 +12,7 @@
 
 const { sendEmail } = require('../integrations/email');
 const { ALERT_EMAIL, NODE_ENV } = require('../config/env');
+const { escapeHtml } = require('../lib/templateUtils');
 
 // ── Cooldown map: errorKey → timestamp of last alert sent ─────────────────────
 // NOTE (S3): This is an in-process Map, so each replica in a horizontally-scaled
@@ -22,6 +23,10 @@ const { ALERT_EMAIL, NODE_ENV } = require('../config/env');
 // (e.g. Redis SETNX with a 10-min expiry) to deduplicate across processes.
 const cooldownMap = new Map();
 const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+// Maximum number of unique error keys retained in the cooldown map.
+// Oldest entries are pruned when this ceiling is reached, preventing unbounded
+// memory growth if a bug produces many distinct error messages or routes.
+const MAX_COOLDOWN_ENTRIES = 500;
 
 function cooldownKey(err, { method = '', route = '' } = {}) {
   return `${method}:${route}:${(err.message || '').slice(0, 120)}`;
@@ -35,15 +40,19 @@ function isOnCooldown(key) {
   return false;
 }
 
-// ── HTML helpers ──────────────────────────────────────────────────────────────
-
-function escapeHtml(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+/** Remove the oldest half of entries when the map exceeds MAX_COOLDOWN_ENTRIES. */
+function pruneIfNeeded() {
+  if (cooldownMap.size < MAX_COOLDOWN_ENTRIES) return;
+  const cutoff = MAX_COOLDOWN_ENTRIES / 2;
+  let pruned = 0;
+  for (const key of cooldownMap.keys()) {
+    if (pruned >= cutoff) break;
+    cooldownMap.delete(key);
+    pruned++;
+  }
 }
+
+// ── HTML helpers ──────────────────────────────────────────────────────────────
 
 function buildEmailHtml({ method, route, userId, role, err, timestamp }) {
   const userInfo = userId ? `${userId}${role ? ` (${role})` : ''}` : 'unauthenticated';
@@ -107,6 +116,7 @@ async function sendAlert(err, context = {}) {
 
   const key = cooldownKey(err, context);
   if (isOnCooldown(key)) return;
+  pruneIfNeeded();
   cooldownMap.set(key, Date.now());
 
   const { method = 'UNKNOWN', route = 'UNKNOWN', userId = null, role = null } = context;

@@ -3,6 +3,7 @@ import {
   Box, Button, Chip, FormControl, IconButton, InputLabel, MenuItem,
   Select, Stack, Tab, Tabs, TextField, Tooltip, Typography,
   Dialog, DialogTitle, DialogContent, DialogActions,
+  Snackbar, Alert,
   useTheme, useMediaQuery,
 } from '@mui/material'
 import UploadIcon from '@mui/icons-material/Upload'
@@ -128,6 +129,8 @@ export default function DocumentsPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
+  const [snackOpen, setSnackOpen] = useState(false)
+
   const activeTab = TABS[tabIndex]
   const queryParams = activeTab.value && activeTab.value !== '__unlinked__'
     ? { relatedType: activeTab.value }
@@ -169,7 +172,11 @@ export default function DocumentsPage() {
     if (relatedType) fd.append('relatedType', relatedType)
     if (relatedId)   fd.append('relatedId', relatedId)
     upload(fd, {
-      onSuccess: () => { setUploadOpen(false); setPendingFile(null) },
+      onSuccess: (data) => {
+        setUploadOpen(false)
+        setPendingFile(null)
+        if (data?.leaseCopySent) setSnackOpen(true)
+      },
     })
   }
 
@@ -268,6 +275,18 @@ export default function DocumentsPage() {
         onConfirm={handleUploadConfirm}
         uploading={uploading}
         fullScreen={isMobile}
+      />
+
+      <Snackbar
+        open={snackOpen}
+        autoHideDuration={6000}
+        onClose={() => setSnackOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" onClose={() => setSnackOpen(false)} sx={{ width: '100%' }}>
+          Document saved. A copy was sent to the tenant.
+        </Alert>
+      </Snackbar>
       />
     </PageContainer>
   )

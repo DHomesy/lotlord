@@ -8,6 +8,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.9.0] — 2026-05-04 — Stripe fee pass-through, email hardening, tenant lease copy, tenant maintenance detail, two audit rounds
+
+### Added
+- **F1: Stripe ACH fee pass-through** — Tenants now pay rent plus the ACH processing fee (0.8%, capped at $5.00). Landlords receive the exact rent amount. Fee calculation centralised in `src/lib/stripeFees.js` (`ACH_RATE = 0.008`, `ACH_CAP_CENTS = 500`) with full unit-test coverage. Fee displayed in a breakdown box before the tenant confirms payment and in the admin payment history column. `rent_payments.stripe_fee_cents` column added (migration 029).
+- **F2: Email template polish + spam hardening** — `rent_due` and `late_fee_applied` email templates redesigned with branded HTML, charge detail cards, and CTA buttons (migration 030). `sendEmail()` now emits `List-Unsubscribe` and `List-Unsubscribe-Post` headers to satisfy Gmail/Yahoo bulk-sender rules. All MIME header values sanitised against CRLF injection. Base64 body wrapped at 76 chars per RFC 2045.
+- **F3: Tenant receives lease copy** — When a landlord uploads a document with `category='lease'` linked to a lease, the tenant automatically receives an email with a 24-hour pre-signed download link. The admin Documents page shows a confirmation snackbar *"Document saved. A copy was sent to the tenant."* Tenants can also see landlord-attached lease documents in their Documents page (previously only their own uploads were visible).
+- **F4: Tenant maintenance detail view** — Clicking any row in the tenant Maintenance page opens the existing `MaintenanceDetailDrawer` in `tenantMode`. Tenants can view full details (status, priority, category, description, attachments), edit title and description on open requests, add photos, and cancel open requests. Status/priority editing and attachment deletion remain landlord/admin-only.
+- **`src/lib/stripeFees.js`** — New module: single source of truth for ACH fee arithmetic. Exports `calculateAchFeeCents`, `achFeeBreakdown`, `ACH_RATE`, `ACH_CAP_CENTS`.
+- **`src/lib/templateUtils.js`** — New module: canonical `escapeHtml` (full OWASP five-entity set including `'→&#39;`) and `renderTemplate` (HTML-escapes for email, verbatim for SMS). Used across all email-building code.
+- **`tests/unit/stripeFees.test.js`** — 20 unit tests covering edge cases, cap boundary, and the landlord-doesn't-profit invariant.
+- **`tests/unit/templateUtils.test.js`** — 17 unit tests covering all five OWASP entities, XSS payloads, type coercion, and channel-aware rendering.
+- **`jest.unit.config.js`** + `test:unit` npm script — isolated unit test runner with no DB dependency.
+### Changed
+- `paymentRepository.create` accepts `stripeFeeCents` (nullable for manual payments).
+- `ledgerRepository.findCharges` SELECT includes `rp.stripe_fee_cents` in the LATERAL join.
+- `documentRepository.findAll` (tenant scope) — expanded from "only own uploads" to also include `category='lease'` documents linked to the tenant's leases.
+- `documentRepository.findByIdForTenant` — same expansion, so the download endpoint grants access to landlord-attached lease documents.
+- `MaintenanceDetailDrawer` — new `tenantMode` prop; `startEditingDetails` respects it by populating only `title` + `description` (not `category`/`priority`).
+- `maintenanceService.updateRequest` tenant guard — allowed fields expanded from `{ status }` to `{ status, title, description }`. Tenants can edit title/description of their own open requests in addition to cancelling.
+
+### Migrations
+| File | Description |
+|---|---|
+| `migrations/029_rent_payments_stripe_fee.sql` | Adds `stripe_fee_cents INTEGER` (nullable) to `rent_payments` |
+| `migrations/030_polish_email_templates.sql` | Updates `rent_due` and `late_fee_applied` email template bodies in DB |
+
+---
 ## [1.8.0] — 2026-04-27 — Bug fixes, UX polish, enterprise employee gating, security hardening, and email notification fixes
 
 ### Fixed

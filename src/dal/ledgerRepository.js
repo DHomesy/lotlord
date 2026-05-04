@@ -313,6 +313,7 @@ async function findCharges({ leaseId, unitId, tenantId, propertyId, forTenantId,
             rp.payment_method,
             rp.status                    AS payment_status,
             rp.stripe_payment_intent_id,
+            rp.stripe_fee_cents,
             rp_agg.total_paid,
             CASE
               WHEN rc.voided_at IS NOT NULL                      THEN 'voided'

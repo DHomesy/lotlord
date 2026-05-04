@@ -46,14 +46,15 @@ function AttachmentIcon({ fileType }) {
  *
  * Right-side drawer that shows full detail for a maintenance request.
  * Landlords/admins can update status/priority/description and manage attachments.
- * Tenants can view and add photos.
+ * Tenants can view, edit title/description (open only), cancel (open only), and add photos.
  *
  * Props:
- *   request   – the maintenance_request row (null = closed)
- *   onClose   – () => void
- *   readonly  – bool (tenant view hides destructive actions)
+ *   request    – the maintenance_request row (null = closed)
+ *   onClose    – () => void
+ *   readonly   – bool (legacy: fully read-only)
+ *   tenantMode – bool (tenant view: restricted edit + cancel button)
  */
-export default function MaintenanceDetailDrawer({ request, onClose, readonly = false }) {
+export default function MaintenanceDetailDrawer({ request, onClose, readonly = false, tenantMode = false }) {
   const fileInputRef = useRef()
   const [editingStatus, setEditingStatus] = useState(false)
   const [statusValue, setStatusValue]     = useState('')
@@ -82,13 +83,16 @@ export default function MaintenanceDetailDrawer({ request, onClose, readonly = f
     updateRequest(detailFields, { onSuccess: () => setEditingDetails(false) })
   }
 
+  const handleCancel = () => {
+    updateRequest({ status: 'cancelled' }, { onSuccess: onClose })
+  }
+
   const startEditingDetails = () => {
-    setDetailFields({
-      title:       request.title,
-      description: request.description ?? '',
-      category:    request.category,
-      priority:    request.priority,
-    })
+    setDetailFields(
+      tenantMode
+        ? { title: request.title, description: request.description ?? '' }
+        : { title: request.title, description: request.description ?? '', category: request.category, priority: request.priority },
+    )
     setEditingDetails(true)
   }
 
@@ -133,7 +137,7 @@ export default function MaintenanceDetailDrawer({ request, onClose, readonly = f
         </Stack>
 
         {/* ── Status update (landlord/admin only) ── */}
-        {!readonly && (
+        {!readonly && !tenantMode && (
           <Box sx={{ mb: 3 }}>
             {editingStatus ? (
               <Stack direction="row" spacing={1} alignItems="center">
@@ -180,7 +184,7 @@ export default function MaintenanceDetailDrawer({ request, onClose, readonly = f
         <Box sx={{ mb: 3 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
             <Typography variant="subtitle2" color="text.secondary">Details</Typography>
-            {!readonly && !editingDetails && (
+            {!readonly && !editingDetails && (!tenantMode || request.status === 'open') && (
               <Tooltip title="Edit details">
                 <IconButton size="small" onClick={startEditingDetails}>
                   <EditIcon fontSize="small" />
@@ -207,32 +211,35 @@ export default function MaintenanceDetailDrawer({ request, onClose, readonly = f
                 value={detailFields.description ?? ''}
                 onChange={(e) => setDetailFields((p) => ({ ...p, description: e.target.value }))}
               />
-              <Stack direction="row" spacing={1}>
-                <TextField
-                  select
-                  label="Category"
-                  size="small"
-                  sx={{ flex: 1 }}
-                  value={detailFields.category ?? ''}
-                  onChange={(e) => setDetailFields((p) => ({ ...p, category: e.target.value }))}
-                >
-                  {CATEGORIES.map((c) => (
-                    <MenuItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  select
-                  label="Priority"
-                  size="small"
-                  sx={{ flex: 1 }}
-                  value={detailFields.priority ?? ''}
-                  onChange={(e) => setDetailFields((p) => ({ ...p, priority: e.target.value }))}
-                >
-                  {PRIORITIES.map((p) => (
-                    <MenuItem key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</MenuItem>
-                  ))}
-                </TextField>
-              </Stack>
+              {/* Category + priority: landlord/admin only — tenants edit title/description only */}
+              {!tenantMode && (
+                <Stack direction="row" spacing={1}>
+                  <TextField
+                    select
+                    label="Category"
+                    size="small"
+                    sx={{ flex: 1 }}
+                    value={detailFields.category ?? ''}
+                    onChange={(e) => setDetailFields((p) => ({ ...p, category: e.target.value }))}
+                  >
+                    {CATEGORIES.map((c) => (
+                      <MenuItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField
+                    select
+                    label="Priority"
+                    size="small"
+                    sx={{ flex: 1 }}
+                    value={detailFields.priority ?? ''}
+                    onChange={(e) => setDetailFields((p) => ({ ...p, priority: e.target.value }))}
+                  >
+                    {PRIORITIES.map((p) => (
+                      <MenuItem key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</MenuItem>
+                    ))}
+                  </TextField>
+                </Stack>
+              )}
               <Stack direction="row" spacing={1}>
                 <Button
                   size="small"
@@ -268,6 +275,21 @@ export default function MaintenanceDetailDrawer({ request, onClose, readonly = f
         </Stack>
 
         <Divider sx={{ mb: 3 }} />
+
+        {/* ── Cancel request (tenant mode, open requests only) ── */}
+        {tenantMode && request.status === 'open' && (
+          <Box sx={{ mb: 3 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              onClick={handleCancel}
+              disabled={saving}
+            >
+              Cancel Request
+            </Button>
+          </Box>
+        )}
 
         {/* ── Photos & Files ── */}
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
@@ -340,7 +362,7 @@ export default function MaintenanceDetailDrawer({ request, onClose, readonly = f
                     <DownloadIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                {!readonly && (
+                {!readonly && !tenantMode && (
                   <Tooltip title="Remove">
                     <IconButton size="small" color="error" onClick={() => removeAttachment(att.id)}>
                       <DeleteIcon fontSize="small" />

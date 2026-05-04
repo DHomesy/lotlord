@@ -32,7 +32,10 @@ const s3Client = new S3Client({ region: env.AWS_REGION || 'us-east-1' });
  *   fileUrl — the S3 key (storage reference, NOT a public URL)
  */
 async function uploadFile({ buffer, fileName, mimeType, folder = 'uploads' }) {
-  const ext = fileName ? fileName.split('.').pop().toLowerCase() : 'bin';
+  const rawExt = fileName ? fileName.split('.').pop().toLowerCase() : '';
+  // Restrict to alphanumeric extensions (max 10 chars) to prevent double-extension
+  // spoofing (e.g. "file.pdf.php" → "php") and unexpected characters in S3 keys.
+  const ext = /^[a-z0-9]{1,10}$/.test(rawExt) ? rawExt : 'bin';
   const key = `${folder}/${uuidv4()}.${ext}`;
 
   await s3Client.send(new PutObjectCommand({
