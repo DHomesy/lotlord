@@ -8,6 +8,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.9.3] — 2026-05-05 — Partial payment in-transit UX fix
+
+### Fixed
+- **`ChargeAmountCell`** — Charges with a pending (in-flight ACH) payment that only covers part of the total now show both the remaining balance *and* the in-transit amount. Previously, a $4 ACH on an $8 charge would display `$4.00 in transit` with no indication that $4 was still owed after settlement. The cell now renders `Balance: $4.00` above `$4.00 in transit`, with the balance coloured red when past due.
+
+---
 ## [1.9.2] — 2026-05-05 — Build fix: duplicate exports and JSX syntax error
 
 ### Fixed

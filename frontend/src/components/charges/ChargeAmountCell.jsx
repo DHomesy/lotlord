@@ -51,15 +51,26 @@ export default function ChargeAmountCell({ amount, totalPaid, pendingAmount, sta
         <Typography variant="caption" color="text.disabled">Voided</Typography>
       )}
 
-      {/* Pure pending: full amount in transit, no completed payments yet */}
-      {status === 'pending' && (
-        <Typography variant="caption" color="info.main">
-          ${inTransit > 0
-            ? inTransit.toLocaleString('en-US', { minimumFractionDigits: 2 })
-            : full.toLocaleString('en-US', { minimumFractionDigits: 2 })
-          } in transit
-        </Typography>
-      )}
+      {/* Pending: no completed payments, ACH in-flight.
+          If the in-transit amount is less than the full charge, also show what
+          will still be owed after the ACH settles so it is clear at a glance
+          that this is only a partial payment. */}
+      {status === 'pending' && (() => {
+        const transit         = inTransit > 0 ? inTransit : full
+        const balanceAfter    = Math.max(0, full - transit)
+        return (
+          <>
+            {balanceAfter > 0 && (
+              <Typography variant="caption" color={balanceColor} display="block">
+                Balance: ${balanceAfter.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </Typography>
+            )}
+            <Typography variant="caption" color="info.main" display="block">
+              ${transit.toLocaleString('en-US', { minimumFractionDigits: 2 })} in transit
+            </Typography>
+          </>
+        )
+      })()}
 
       {/* Open charges: show remaining balance + any in-transit note */}
       {(status === 'unpaid' || status === 'partial') && (
