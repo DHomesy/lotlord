@@ -272,7 +272,17 @@ export default function ChargeDetailDrawer({ charge, onClose }) {
       anchor="right"
       open={!!charge}
       onClose={onClose}
-      PaperProps={{ sx: { width: { xs: '100%', sm: 520 }, display: 'flex', flexDirection: 'column' } }}
+      PaperProps={{
+        sx: (theme) => ({
+          width: { xs: '100%', sm: 520 },
+          display: 'flex',
+          flexDirection: 'column',
+          // On mobile the AppBar is position:fixed and sits above the drawer.
+          // Offset the paper so it starts below the AppBar, not behind it.
+          top:    { xs: theme.mixins.toolbar.minHeight, sm: 0 },
+          height: { xs: `calc(100% - ${theme.mixins.toolbar.minHeight}px)`, sm: '100%' },
+        }),
+      }}
     >
       {/* â”€â”€ Sticky header â”€â”€ */}
       <Box
