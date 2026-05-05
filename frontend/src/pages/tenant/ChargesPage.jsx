@@ -9,6 +9,7 @@ import PaymentIcon from '@mui/icons-material/Payment'
 import PageContainer from '../../components/layout/PageContainer'
 import DataTable from '../../components/common/DataTable'
 import StatusChip from '../../components/common/StatusChip'
+import ChargeAmountCell from '../../components/charges/ChargeAmountCell'
 import LoadingOverlay from '../../components/common/LoadingOverlay'
 import { useCharges } from '../../hooks/useCharges'
 import { usePayments } from '../../hooks/usePayments'
@@ -236,14 +237,26 @@ export default function TenantChargesPage() {
   const paymentRows = Array.isArray(paymentsData) ? paymentsData : (paymentsData?.payments ?? [])
 
   const chargeColumns = [
-    { field: 'charge_type', headerName: 'Type', width: 120 },
-    { field: 'description', headerName: 'Description', flex: 1 },
-    { field: 'amount', headerName: 'Amount', width: 120, valueFormatter: (v) => `$${Number(v).toLocaleString()}` },
-    { field: 'due_date', headerName: 'Due', width: 120, valueFormatter: (v) => v?.slice(0, 10) },
+    { field: 'charge_type', headerName: 'Type', width: 110 },
+    { field: 'description', headerName: 'Description', flex: 1, minWidth: 120 },
+    {
+      field: 'amount',
+      headerName: 'Amount',
+      width: 200,
+      renderCell: ({ row }) => (
+        <ChargeAmountCell
+          amount={row.amount}
+          totalPaid={row.total_paid}
+          status={row.status}
+          dueDate={row.due_date}
+        />
+      ),
+    },
+    { field: 'due_date', headerName: 'Due', width: 110, valueFormatter: (v) => v?.slice(0, 10) },
     {
       field: 'status',
       headerName: 'Status',
-      width: 150,
+      width: 140,
       renderCell: ({ value }) =>
         value === 'pending' ? (
           <Tooltip title="A bank transfer is in progress and will settle in 1–3 business days. No further action needed." arrow>
@@ -256,15 +269,26 @@ export default function TenantChargesPage() {
     {
       field: 'actions',
       headerName: '',
-      width: 90,
+      width: 140,
       sortable: false,
       disableColumnMenu: true,
-      renderCell: ({ row }) =>
-        (row.status === 'unpaid' || row.status === 'partial') && !row.voided_at ? (
-          <Button size="small" startIcon={<PaymentIcon />} onClick={() => setSelectedCharge(row)}>
-            Pay
-          </Button>
-        ) : null,
+      renderCell: ({ row }) => {
+        if ((row.status === 'unpaid' || row.status === 'partial') && !row.voided_at) {
+          const bal = row.status === 'partial' && row.total_paid != null
+            ? Math.max(0, parseFloat(row.amount) - parseFloat(row.total_paid))
+            : parseFloat(row.amount)
+          return (
+            <Button
+              size="small"
+              startIcon={<PaymentIcon />}
+              onClick={() => setSelectedCharge(row)}
+            >
+              Pay ${bal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </Button>
+          )
+        }
+        return null
+      },
     },
   ]
 
@@ -306,7 +330,12 @@ export default function TenantChargesPage() {
         <Tab label="Outstanding" />
         <Tab label="All" />
       </Tabs>
-      <DataTable rows={chargeRows} columns={chargeColumns} loading={loadingCharges} />
+      <DataTable
+        rows={chargeRows}
+        columns={chargeColumns}
+        loading={loadingCharges}
+        rowHeight={64}
+      />
 
       <Divider sx={{ my: 4 }} />
 

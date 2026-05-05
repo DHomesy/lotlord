@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.9.1] — 2026-05-05 — Charges UX redesign
+
+### Changed
+- **Charges table (admin/landlord/employee)** — Status column removed. Amount column now shows the full charge amount on line 1 and the outstanding balance on line 2. Balance is painted red when the due date has passed and the charge is still open, amber otherwise. ACH-pending charges show balance in blue. Click any row to open the charge detail drawer; no inline icon buttons remain.
+- **Charges table (tenant)** — Same balance-due display. "Pay" button label now shows the exact dollar amount (e.g. *Pay $1,200.00*) instead of a generic label.
+- **`ChargeAmountCell`** — New `dueDate` prop drives past-due red colouring. "Transfer settling…" secondary label removed; pending charges now render their balance like all other open charges.
+- **`ChargeDetailDrawer`** — Void action is now available to `admin` and `landlord` roles (previously landlord-only). Employees retain record-payment and edit access. Role matrix: landlord = full; admin = full; employee = record + edit only.
+- **Admin `ChargesPage`** — Rewritten from scratch. Single `export default`, no orphaned dialog components. All CRUD delegated to `ChargeDetailDrawer`. Imports trimmed to only what is used.
+
+---
 ## [1.9.0] — 2026-05-04 — Stripe fee pass-through, email hardening, tenant lease copy, tenant maintenance detail, two audit rounds
 
 ### Added

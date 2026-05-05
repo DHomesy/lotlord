@@ -1,44 +1,34 @@
-import { useState, useMemo, useEffect } from 'react'
+﻿import { useState, useMemo } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
-  Alert, Box, Button, CircularProgress, Dialog, DialogTitle, DialogContent,
-  DialogActions, IconButton, MenuItem, Stack, TextField,
-  ToggleButton, ToggleButtonGroup, Tooltip, Typography,
+  Alert, Box, Button, Dialog, DialogTitle, DialogContent,
+  MenuItem, Stack, TextField,
+  ToggleButton, ToggleButtonGroup, Typography,
   useTheme, useMediaQuery,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
-import EditIcon from '@mui/icons-material/Edit'
-import BlockIcon from '@mui/icons-material/Block'
-import PaymentsIcon from '@mui/icons-material/Payments'
-import HistoryIcon from '@mui/icons-material/History'
 import { useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/layout/PageContainer'
 import DataTable from '../../components/common/DataTable'
 import EmptyState from '../../components/common/EmptyState'
-import StatusChip from '../../components/common/StatusChip'
+import ChargeAmountCell from '../../components/charges/ChargeAmountCell'
+import ChargeDetailDrawer from '../../components/charges/ChargeDetailDrawer'
 import LeasePicker from '../../components/pickers/LeasePicker'
 import UnitPicker from '../../components/pickers/UnitPicker'
 import { useProperties } from '../../hooks/useProperties'
-import { useCharges, useCreateCharge, useUpdateCharge, useVoidCharge } from '../../hooks/useCharges'
-import { useRecordManualPayment, usePayments } from '../../hooks/usePayments'
+import { useCharges, useCreateCharge } from '../../hooks/useCharges'
 import { useAuthStore } from '../../store/authStore'
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
 const createSchema = z.object({
-  unitId: z.string().uuid('Unit is required'),
-  leaseId: z.string().uuid().optional().or(z.literal('')),
-  chargeType: z.enum(['rent', 'late_fee', 'utility', 'maintenance', 'other']),
-  amount: z.coerce.number().positive(),
-  dueDate: z.string().min(1, 'Due date is required'),
-  description: z.string().optional(),
-})
-
-const editSchema = z.object({
-  chargeType: z.enum(['rent', 'late_fee', 'utility', 'maintenance', 'other']),
-  dueDate: z.string().min(1, 'Due date is required'),
+  unitId:      z.string().uuid('Unit is required'),
+  leaseId:     z.string().uuid().optional().or(z.literal('')),
+  chargeType:  z.enum(['rent', 'late_fee', 'utility', 'maintenance', 'other']),
+  amount:      z.coerce.number().positive(),
+  dueDate:     z.string().min(1, 'Due date is required'),
   description: z.string().optional(),
 })
 
@@ -91,315 +81,49 @@ function CreateChargeForm({ onSubmit, loading }) {
       <TextField label="Amount ($)" type="number" {...register('amount')} error={!!errors.amount} helperText={errors.amount?.message} />
       <TextField label="Due Date" type="date" InputLabelProps={{ shrink: true }} {...register('dueDate')} error={!!errors.dueDate} helperText={errors.dueDate?.message} />
       <TextField label="Description" {...register('description')} />
-      <Button type="submit" variant="contained" disabled={loading}>{loading ? 'Saving…' : 'Save'}</Button>
+      <Button type="submit" variant="contained" disabled={loading}>{loading ? 'Saving...' : 'Save'}</Button>
     </Stack>
   )
 }
 
-// ─── Edit Form ────────────────────────────────────────────────────────────────
-
-function EditChargeForm({ charge, onSubmit, loading, onCancel }) {
-  const { register, handleSubmit, control, formState: { errors } } = useForm({
-    resolver: zodResolver(editSchema),
-    defaultValues: {
-      chargeType:  charge?.charge_type ?? 'rent',
-      dueDate:     charge?.due_date?.slice(0, 10) ?? '',
-      description: charge?.description ?? '',
-    },
-  })
-  return (
-    <Stack component="form" onSubmit={handleSubmit(onSubmit)} spacing={2} sx={{ pt: 1 }}>
-      <Controller
-        name="chargeType"
-        control={control}
-        render={({ field }) => (
-          <TextField label="Type" select {...field} error={!!errors.chargeType}>
-            {['rent', 'late_fee', 'utility', 'maintenance', 'other'].map((t) => (
-              <MenuItem key={t} value={t}>{t}</MenuItem>
-            ))}
-          </TextField>
-        )}
-      />
-      <TextField label="Due Date" type="date" InputLabelProps={{ shrink: true }} {...register('dueDate')} error={!!errors.dueDate} helperText={errors.dueDate?.message} />
-      <TextField label="Description" {...register('description')} />
-      <Stack direction="row" spacing={1} justifyContent="flex-end">
-        <Button onClick={onCancel}>Cancel</Button>
-        <Button type="submit" variant="contained" disabled={loading}>{loading ? 'Saving…' : 'Save'}</Button>
-      </Stack>
-    </Stack>
-  )
-}
-
-// ─── Record Payment Dialog ─────────────────────────────────────────────────
-
-const recordSchema = z.object({
-  amountPaid:    z.coerce.number().positive('Amount must be positive'),
-  paymentDate:   z.string().min(1, 'Date is required'),
-  paymentMethod: z.enum(['cash', 'check', 'zelle', 'other']),
-  notes:         z.string().optional(),
-})
-
-function RecordPaymentDialog({ charge, open, onClose }) {
-  const { mutate: record, isPending, error, reset: resetMutation } = useRecordManualPayment()
-  const { register, handleSubmit, control, formState: { errors }, reset: resetForm } = useForm({
-    resolver: zodResolver(recordSchema),
-    defaultValues: {
-      amountPaid: '',
-      paymentDate: new Date().toISOString().slice(0, 10),
-      paymentMethod: 'cash',
-      notes: '',
-    },
-  })
-
-  // Reset form values each time the dialog opens for a (potentially different) charge
-  useEffect(() => {
-    if (open && charge) {
-      // For partially-paid charges default to the remaining balance, not the full amount
-      const remaining = charge.total_paid != null
-        ? Math.max(0, parseFloat(charge.amount) - parseFloat(charge.total_paid))
-        : parseFloat(charge.amount)
-      resetForm({
-        amountPaid: String(remaining),
-        paymentDate: new Date().toISOString().slice(0, 10),
-        paymentMethod: 'cash',
-        notes: '',
-      })
-      resetMutation()
-    }
-  }, [open, charge?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  function onSubmit(values) {
-    record(
-      {
-        leaseId:       charge.lease_id,
-        chargeId:      charge.id,
-        amountPaid:    values.amountPaid,
-        paymentDate:   values.paymentDate,
-        paymentMethod: values.paymentMethod,
-        notes:         values.notes || undefined,
-      },
-      { onSuccess: () => { resetMutation(); onClose() } },
-    )
-  }
-
-  if (!charge) return null
-
-  const remaining = charge.total_paid != null
-    ? Math.max(0, parseFloat(charge.amount) - parseFloat(charge.total_paid))
-    : parseFloat(charge.amount)
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Add Manual Payment</DialogTitle>
-      <Stack component="form" onSubmit={handleSubmit(onSubmit)}>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 0.5 }}>
-            <Typography variant="body2" color="text.secondary">
-              Charge: <strong>{charge.charge_type}</strong> — ${Number(charge.amount).toLocaleString()} due {charge.due_date?.slice(0, 10)}
-              {charge.status === 'partial' && (
-                <> &mdash; <strong style={{ color: 'inherit' }}>Remaining: ${remaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></>
-              )}
-            </Typography>
-            {charge.status === 'pending' && (
-              <Alert severity="warning" sx={{ mt: 1 }}>
-                A bank transfer (ACH) from the tenant is currently in progress for this charge.
-                Recording a manual payment here is allowed — if the ACH also settles, you may
-                need to issue a credit or refund.
-              </Alert>
-            )}
-            <TextField
-              label="Amount Paid ($)"
-              type="number"
-              inputProps={{ step: '0.01', min: '0.01', max: String(Math.max(0, parseFloat(charge.amount) - parseFloat(charge.total_paid || 0))) }}
-              {...register('amountPaid')}
-              error={!!errors.amountPaid}
-              helperText={errors.amountPaid?.message}
-            />
-            <TextField
-              label="Payment Date"
-              type="date"
-              InputLabelProps={{ shrink: true }}
-              {...register('paymentDate')}
-              error={!!errors.paymentDate}
-              helperText={errors.paymentDate?.message}
-            />
-            <Controller
-              name="paymentMethod"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  label="Method"
-                  select
-                  {...field}
-                  error={!!errors.paymentMethod}
-                >
-                  {['cash', 'check', 'zelle', 'other'].map((m) => (
-                    <MenuItem key={m} value={m}>{m}</MenuItem>
-                  ))}
-                </TextField>
-              )}
-            />
-            <TextField
-              label="Notes (optional)"
-              multiline
-              rows={2}
-              {...register('notes')}
-            />
-            {error && (
-              <Alert severity="error">
-                {error.response?.data?.error ?? 'Failed to record payment. Please try again.'}
-              </Alert>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} disabled={isPending}>Cancel</Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={isPending}
-            startIcon={isPending ? <CircularProgress size={14} color="inherit" /> : <PaymentsIcon />}
-          >
-            {isPending ? 'Saving…' : 'Record'}
-          </Button>
-        </DialogActions>
-      </Stack>
-    </Dialog>
-  )
-}
-// ─── Charge Payment History Dialog ─────────────────────────────────────────
-
-function ChargePaymentHistoryDialog({ charge, open, onClose }) {
-  const { data: payments = [], isLoading } = usePayments(
-    open && charge ? { leaseId: charge.lease_id, chargeId: charge.id } : undefined,
-  )
-
-  if (!charge) return null
-
-  const totalPaid = parseFloat(charge.total_paid ?? 0)
-  const chargeAmt = parseFloat(charge.amount)
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        Payment History
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-          {charge.charge_type} — ${chargeAmt.toLocaleString()} due {charge.due_date?.slice(0, 10)}
-          {' '}&mdash;{' '}
-          <strong>${totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> of{' '}
-          <strong>${chargeAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> collected
-        </Typography>
-      </DialogTitle>
-      <DialogContent>
-        {isLoading ? (
-          <CircularProgress size={24} />
-        ) : payments.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">No payments recorded for this charge.</Typography>
-        ) : (
-          <Stack spacing={1} sx={{ pt: 0.5 }}>
-            {payments.map((p) => {
-              const feeDollars = p.stripe_fee_cents > 0 ? p.stripe_fee_cents / 100 : null
-              const totalCharged = feeDollars != null
-                ? parseFloat(p.amount_paid) + feeDollars
-                : parseFloat(p.amount_paid)
-              return (
-              <Stack
-                key={p.id}
-                direction="row"
-                justifyContent="space-between"
-                alignItems="flex-start"
-                sx={{ py: 1, borderBottom: '1px solid', borderColor: 'divider' }}
-              >
-                <Box>
-                  <Typography variant="body2" fontWeight={500}>
-                    {p.payment_date?.slice(0, 10)}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
-                    {p.payment_method}
-                  </Typography>
-                </Box>
-                <Stack alignItems="flex-end">
-                  <Typography variant="body2" fontWeight={600}>
-                    ${parseFloat(p.amount_paid).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    {' '}
-                    <Typography component="span" variant="caption" color="text.secondary">to you</Typography>
-                  </Typography>
-                  {feeDollars != null && (
-                    <Tooltip title="ACH processing fee charged to the tenant. The tenant paid this on top of rent — it goes to the payment processor. You receive the full rent amount." arrow>
-                      <Typography variant="caption" color="text.disabled" sx={{ cursor: 'help' }}>
-                        +${feeDollars.toFixed(2)} processing fee (tenant paid)
-                      </Typography>
-                    </Tooltip>
-                  )}
-                  {feeDollars != null && (
-                    <Typography variant="caption" color="text.secondary">
-                      Tenant total: ${totalCharged.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </Typography>
-                  )}
-                  <Typography variant="caption" color={p.status === 'completed' ? 'success.main' : 'warning.main'} sx={{ textTransform: 'capitalize' }}>
-                    {p.status}
-                  </Typography>
-                </Stack>
-              </Stack>
-            )})}          </Stack>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ChargesPage() {
-  const navigate = useNavigate()
-  const user = useAuthStore((s) => s.user)
+  const navigate   = useNavigate()
+  const user       = useAuthStore((s) => s.user)
   const isLandlord = user?.role === 'landlord'
   const isEmployee = user?.role === 'employee'
-  const theme = useTheme()
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+  const theme      = useTheme()
+  const isMobile   = useMediaQuery(theme.breakpoints.down('sm'))
 
-  const [createOpen, setCreateOpen] = useState(false)
-  const [editCharge, setEditCharge] = useState(null)
-  const [voidTarget, setVoidTarget] = useState(null)
-  const [recordCharge, setRecordCharge] = useState(null)
-  const [historyCharge, setHistoryCharge] = useState(null)
+  const [createOpen,   setCreateOpen]   = useState(false)
+  const [detailCharge, setDetailCharge] = useState(null)
 
   // Filter state
   const [filterPropertyId, setFilterPropertyId] = useState(null)
-  const [filterLeaseId, setFilterLeaseId] = useState(null)
-  // 'all' | 'unpaid' | 'pending' | 'paid' | 'voided'
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [filterLeaseId,    setFilterLeaseId]     = useState(null)
+  const [statusFilter,     setStatusFilter]      = useState('all')
 
-  // Properties for the filter dropdown
   const { data: propsData } = useProperties()
   const properties = Array.isArray(propsData) ? propsData : (propsData?.properties ?? [])
 
-  // Landlords always load (ownerId scoping happens server-side).
-  // Admins require at least a property or lease selection to avoid huge unscoped queries.
+  // Admins require a property or lease filter to avoid huge unscoped queries.
   const adminHasFilter = !!(filterPropertyId || filterLeaseId)
-  const shouldLoad = isLandlord || isEmployee || adminHasFilter
+  const shouldLoad     = isLandlord || isEmployee || adminHasFilter
 
-  // Build backend query params. unpaidOnly handled server-side for the Unpaid filter;
-  // Paid and Voided are filtered client-side from the full dataset.
   const backendParams = shouldLoad
     ? {
-        ...(filterLeaseId    ? { leaseId: filterLeaseId }       : {}),
-        ...(filterPropertyId && !filterLeaseId ? { propertyId: filterPropertyId } : {}),
-        ...(statusFilter === 'unpaid' ? { unpaidOnly: true } : {}),
+        ...(filterLeaseId                         ? { leaseId: filterLeaseId }       : {}),
+        ...(filterPropertyId && !filterLeaseId    ? { propertyId: filterPropertyId } : {}),
+        ...(statusFilter === 'unpaid'             ? { unpaidOnly: true }             : {}),
       }
     : undefined
 
-  // All hooks must be declared before any conditional return (React Rules of Hooks).
-  const { data, isLoading } = useCharges(backendParams)
+  const { data, isLoading }             = useCharges(backendParams)
   const { mutate: create, isPending: creating } = useCreateCharge()
-  const { mutate: update, isPending: updating } = useUpdateCharge()
-  const { mutate: doVoid, isPending: voiding } = useVoidCharge()
 
   const allRows = Array.isArray(data) ? data : (data?.charges ?? [])
 
-  // Client-side status filter for Paid / Pending / Voided (avoids an extra backend trip)
   const rows = useMemo(() => {
     if (statusFilter === 'paid')    return allRows.filter((r) => r.status === 'paid')
     if (statusFilter === 'pending') return allRows.filter((r) => r.status === 'pending')
@@ -407,8 +131,6 @@ export default function ChargesPage() {
     return allRows
   }, [allRows, statusFilter])
 
-  // If the landlord has no properties yet, prompt them to add one first.
-  // This return is intentionally placed AFTER all hooks above.
   if (isLandlord && propsData !== undefined && properties.length === 0) {
     return (
       <PageContainer title="Charges">
@@ -422,102 +144,26 @@ export default function ChargesPage() {
   }
 
   // ─── Columns ────────────────────────────────────────────────────────────────
+  // Row click opens ChargeDetailDrawer — all CRUD lives there, not here.
   const columns = [
-    { field: 'property_name', headerName: 'Property', width: 160 },
-    { field: 'unit_number',   headerName: 'Unit',     width: 90 },
-    { field: 'charge_type',   headerName: 'Type',     width: 110 },
-    { field: 'description',   headerName: 'Description', flex: 1 },
-    { field: 'amount', headerName: 'Amount', width: 160,
-      renderCell: ({ row }) => {
-        const full = Number(row.amount)
-        const paid = Number(row.total_paid ?? 0)
-        const remaining = Math.max(0, full - paid)
-        const feeDollars = row.stripe_fee_cents > 0 ? (row.stripe_fee_cents / 100) : null
-        return (
-          <Box>
-            <Typography variant="body2">${full.toLocaleString()}</Typography>
-            {row.status === 'partial' && (
-              <Typography variant="caption" color="warning.main">
-                Remaining: ${remaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </Typography>
-            )}
-            {row.status === 'paid' && (
-              <Typography variant="caption" color="success.main">Paid in full</Typography>
-            )}
-            {feeDollars != null && (row.status === 'pending' || row.status === 'paid' || row.status === 'partial') && (
-              <Tooltip title="ACH processing fee charged to the tenant on their most recent bank transfer. The tenant pays rent + this fee; you receive the full rent amount." arrow>
-                <Typography variant="caption" color="text.disabled" sx={{ display: 'block', cursor: 'help' }}>
-                  +${feeDollars.toFixed(2)} ACH fee
-                </Typography>
-              </Tooltip>
-            )}
-          </Box>
-        )
-      },
-    },
-    { field: 'due_date', headerName: 'Due', width: 120, valueFormatter: (v) => v?.slice(0, 10) },
+    { field: 'property_name', headerName: 'Property',         width: 150 },
+    { field: 'unit_number',   headerName: 'Unit',             width: 80  },
+    { field: 'charge_type',   headerName: 'Type',             width: 100 },
+    { field: 'description',   headerName: 'Description', flex: 1, minWidth: 120 },
     {
-      field: 'status',
-      headerName: 'Status',
-      width: 150,
-      renderCell: ({ value }) =>
-        value === 'pending' ? (
-          <Tooltip title="A bank transfer (ACH) from the tenant is in progress. It will settle in 1–3 business days. You may still record an offline payment below." arrow>
-            <Box><StatusChip status={value} /></Box>
-          </Tooltip>
-        ) : (
-          <StatusChip status={value} />
-        ),
+      field: 'amount',
+      headerName: 'Amount / Balance',
+      width: 180,
+      renderCell: ({ row }) => (
+        <ChargeAmountCell
+          amount={row.amount}
+          totalPaid={row.total_paid}
+          status={row.status}
+          dueDate={row.due_date}
+        />
+      ),
     },
-    {
-      field: '_actions',
-      headerName: '',
-      width: 160,
-      sortable: false,
-      renderCell: ({ row }) => {
-        const canEdit = row.status !== 'voided' && row.status !== 'paid'
-      // Backend blocks voiding any charge that has a completed payment (partial included)
-      const canVoid = row.status !== 'voided' && row.status !== 'paid' && row.status !== 'partial'
-        return (
-          <Stack direction="row" spacing={0.5}>
-            <Tooltip title="Edit">
-              <span>
-                <IconButton size="small" disabled={!canEdit} onClick={() => setEditCharge(row)}>
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
-            {(row.status === 'unpaid' || row.status === 'partial' || row.status === 'pending') && row.lease_id && (
-              <Tooltip title="Add Manual Payment">
-                <span>
-                  <IconButton size="small" color="success" onClick={() => setRecordCharge(row)}>
-                    <PaymentsIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            )}
-            {(row.status === 'partial' || row.status === 'paid' || row.status === 'pending') && (
-              <Tooltip title="Payment History">
-                <span>
-                  <IconButton size="small" color="info" onClick={() => setHistoryCharge(row)}>
-                    <HistoryIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            )}
-            {!isEmployee && (
-            <Tooltip title="Void charge">
-              <span>
-                <IconButton size="small" color="error" disabled={!canVoid} onClick={() => setVoidTarget(row)}>
-                  <BlockIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
-            )}
-          </Stack>
-        )
-      },
-    },
+    { field: 'due_date', headerName: 'Due', width: 110, valueFormatter: (v) => v?.slice(0, 10) },
   ]
 
   return (
@@ -531,7 +177,7 @@ export default function ChargesPage() {
     >
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Charges are amounts billed to a lease — rent due, late fees, utilities, etc.
-        Linking a charge to a lease automatically updates the tenant's running balance in the Ledger.
+        Linking a charge to a lease automatically updates the running balance in the Ledger.
       </Typography>
 
       {/* ── Filters ── */}
@@ -561,7 +207,6 @@ export default function ChargesPage() {
           </Box>
         </Stack>
 
-        {/* Status filter */}
         <ToggleButtonGroup
           value={statusFilter}
           exclusive
@@ -586,10 +231,17 @@ export default function ChargesPage() {
           addLabel="Add Charge"
         />
       ) : (
-        <DataTable rows={rows} columns={columns} loading={isLoading} />
+        <DataTable
+          rows={rows}
+          columns={columns}
+          loading={isLoading}
+          onRowClick={({ row }) => setDetailCharge(row)}
+          rowHeight={64}
+          sx={{ cursor: 'pointer' }}
+        />
       )}
 
-      {/* ── Create Dialog ── */}
+      {/* ── Create Charge Dialog ── */}
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle>New Charge</DialogTitle>
         <DialogContent>
@@ -604,63 +256,10 @@ export default function ChargesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Edit Dialog ── */}
-      <Dialog open={!!editCharge} onClose={() => setEditCharge(null)} maxWidth="sm" fullWidth fullScreen={isMobile}>
-        <DialogTitle>Edit Charge</DialogTitle>
-        <DialogContent>
-          <EditChargeForm
-            charge={editCharge}
-            onSubmit={(v) => {
-              update(
-                { id: editCharge.id, chargeType: v.chargeType, dueDate: v.dueDate, description: v.description },
-                { onSuccess: () => setEditCharge(null) },
-              )
-            }}
-            loading={updating}
-            onCancel={() => setEditCharge(null)}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Void Confirm Dialog ── */}
-      <Dialog open={!!voidTarget} onClose={() => setVoidTarget(null)} maxWidth="xs" fullWidth fullScreen={isMobile}>
-        <DialogTitle>Void Charge?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">
-            This will cancel the{' '}
-            <strong>${Number(voidTarget?.amount ?? 0).toLocaleString()} {voidTarget?.charge_type}</strong> charge
-            due <strong>{voidTarget?.due_date?.slice(0, 10)}</strong>.
-            {voidTarget?.lease_id && " A credit entry will be appended to the tenant's ledger to reverse the balance."}
-          </Typography>
-          <Typography variant="body2" color="error" sx={{ mt: 1 }}>
-            This action cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setVoidTarget(null)}>Cancel</Button>
-          <Button
-            color="error"
-            variant="contained"
-            disabled={voiding}
-            onClick={() => doVoid(voidTarget.id, { onSuccess: () => setVoidTarget(null) })}
-          >
-            {voiding ? 'Voiding…' : 'Void Charge'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* ── Record Manual Payment Dialog ── */}
-      <RecordPaymentDialog
-        charge={recordCharge}
-        open={!!recordCharge}
-        onClose={() => setRecordCharge(null)}
-      />
-
-      {/* ── Charge Payment History Dialog ── */}
-      <ChargePaymentHistoryDialog
-        charge={historyCharge}
-        open={!!historyCharge}
-        onClose={() => setHistoryCharge(null)}
+      {/* ── Charge Detail Drawer — CRUD hub: record payment / edit / history / void ── */}
+      <ChargeDetailDrawer
+        charge={detailCharge}
+        onClose={() => setDetailCharge(null)}
       />
     </PageContainer>
   )
