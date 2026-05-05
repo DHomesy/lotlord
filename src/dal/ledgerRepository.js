@@ -315,11 +315,13 @@ async function findCharges({ leaseId, unitId, tenantId, propertyId, forTenantId,
             rp.stripe_payment_intent_id,
             rp.stripe_fee_cents,
             rp_agg.total_paid,
+            rp_agg.pending_amount,
             CASE
-              WHEN rc.voided_at IS NOT NULL                      THEN 'voided'
-              WHEN rp_agg.total_paid >= rc.amount               THEN 'paid'
-              WHEN rp_agg.has_pending                            THEN 'pending'
-              WHEN rp_agg.total_paid > 0                        THEN 'partial'
+              WHEN rc.voided_at IS NOT NULL                               THEN 'voided'
+              WHEN rp_agg.total_paid >= rc.amount                        THEN 'paid'
+              WHEN rp_agg.total_paid > 0 AND rp_agg.has_pending         THEN 'partial'
+              WHEN rp_agg.has_pending                                    THEN 'pending'
+              WHEN rp_agg.total_paid > 0                                 THEN 'partial'
               ELSE 'unpaid'
             END                          AS status
        FROM rent_charges rc
@@ -327,6 +329,7 @@ async function findCharges({ leaseId, unitId, tenantId, propertyId, forTenantId,
        JOIN properties p ON p.id = u.property_id
        LEFT JOIN LATERAL (
          SELECT COALESCE(SUM(amount_paid) FILTER (WHERE status = 'completed'), 0) AS total_paid,
+                COALESCE(SUM(amount_paid) FILTER (WHERE status = 'pending'),   0) AS pending_amount,
                 bool_or(status = 'pending') AS has_pending
            FROM rent_payments
           WHERE charge_id = rc.id

@@ -287,7 +287,6 @@ export default function DocumentsPage() {
           Document saved. A copy was sent to the tenant.
         </Alert>
       </Snackbar>
-      />
     </PageContainer>
   )
 }

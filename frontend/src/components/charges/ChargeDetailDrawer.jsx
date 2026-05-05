@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -28,7 +28,7 @@ const METHOD_LABELS = {
   stripe_ach: 'ACH Bank Transfer', stripe_card: 'Card',
 }
 
-// ── Record Payment Form ───────────────────────────────────────────────────────
+// â”€â”€ Record Payment Form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const recordSchema = z.object({
   amountPaid:    z.coerce.number().positive('Amount must be positive'),
@@ -86,7 +86,7 @@ function RecordPaymentForm({ charge, onSuccess }) {
         </Alert>
       )}
       <TextField
-        label={`Amount paid ($) — max $${remaining.toLocaleString()}`}
+        label={`Amount paid ($) â€” max $${remaining.toLocaleString()}`}
         type="number"
         size="small"
         inputProps={{ step: '0.01', min: '0.01', max: String(remaining) }}
@@ -126,13 +126,13 @@ function RecordPaymentForm({ charge, onSuccess }) {
         disabled={isPending}
         startIcon={isPending ? <CircularProgress size={14} color="inherit" /> : <PaymentsIcon />}
       >
-        {isPending ? 'Saving…' : 'Record Payment'}
+        {isPending ? 'Savingâ€¦' : 'Record Payment'}
       </Button>
     </Stack>
   )
 }
 
-// ── Edit Charge Form ──────────────────────────────────────────────────────────
+// â”€â”€ Edit Charge Form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const editSchema = z.object({
   chargeType:  z.enum(['rent', 'late_fee', 'utility', 'maintenance', 'other']),
@@ -203,28 +203,28 @@ function EditChargeForm({ charge, onSuccess }) {
         disabled={isPending}
         startIcon={isPending ? <CircularProgress size={14} color="inherit" /> : <EditIcon />}
       >
-        {isPending ? 'Saving…' : 'Save Changes'}
+        {isPending ? 'Savingâ€¦' : 'Save Changes'}
       </Button>
     </Stack>
   )
 }
 
-// ── Main Drawer ───────────────────────────────────────────────────────────────
+// â”€â”€ Main Drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
- * ChargeDetailDrawer — admin/landlord/employee CRUD hub for a single charge.
+ * ChargeDetailDrawer â€” admin/landlord/employee CRUD hub for a single charge.
  *
  * Mobile-first: full-width on xs, 520px side panel on sm+.
  * Sections rendered via Accordion so each is independently collapsible:
- *   • Amount breakdown (always shown)
- *   • Payment History (when partial/paid/pending)
- *   • Record Manual Payment (when unpaid/partial/pending + lease linked)
- *   • Edit Charge (when charge is editable)
- *   • Void Charge danger zone (landlord only, when charge can be voided)
+ *   â€¢ Amount breakdown (always shown)
+ *   â€¢ Payment History (when partial/paid/pending)
+ *   â€¢ Record Manual Payment (when unpaid/partial/pending + lease linked)
+ *   â€¢ Edit Charge (when charge is editable)
+ *   â€¢ Void Charge danger zone (landlord only, when charge can be voided)
  *
  * Props:
- *   charge  – charge row object (null = drawer closed)
- *   onClose – () => void
+ *   charge  â€“ charge row object (null = drawer closed)
+ *   onClose â€“ () => void
  */
 export default function ChargeDetailDrawer({ charge, onClose }) {
   const user = useAuthStore((s) => s.user)
@@ -274,7 +274,7 @@ export default function ChargeDetailDrawer({ charge, onClose }) {
       onClose={onClose}
       PaperProps={{ sx: { width: { xs: '100%', sm: 520 }, display: 'flex', flexDirection: 'column' } }}
     >
-      {/* ── Sticky header ── */}
+      {/* â”€â”€ Sticky header â”€â”€ */}
       <Box
         sx={{
           px: 2, py: 1.5,
@@ -293,14 +293,14 @@ export default function ChargeDetailDrawer({ charge, onClose }) {
           {(charge.unit_number || charge.property_name) && (
             <Typography variant="caption" color="text.secondary" noWrap>
               {[charge.unit_number && `Unit ${charge.unit_number}`, charge.property_name]
-                .filter(Boolean).join(' · ')}
+                .filter(Boolean).join(' Â· ')}
             </Typography>
           )}
         </Box>
         <StatusChip status={charge.status} />
       </Box>
 
-      {/* ── Scrollable body ── */}
+      {/* â”€â”€ Scrollable body â”€â”€ */}
       <Box sx={{ flex: 1, overflowY: 'auto', pb: 4 }}>
 
         {/* Amount breakdown card */}
@@ -351,13 +351,13 @@ export default function ChargeDetailDrawer({ charge, onClose }) {
           </Box>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
             Due {charge.due_date?.slice(0, 10)}
-            {charge.description ? ` · ${charge.description}` : ''}
+            {charge.description ? ` Â· ${charge.description}` : ''}
           </Typography>
         </Box>
 
         <Divider />
 
-        {/* Payment History — shown when there are or may be payments */}
+        {/* Payment History â€” shown when there are or may be payments */}
         {(hasHistory || charge.status === 'paid') && (
           <Accordion
             defaultExpanded={charge.status === 'paid' || charge.status === 'partial'}
@@ -468,7 +468,7 @@ export default function ChargeDetailDrawer({ charge, onClose }) {
           </Accordion>
         )}
 
-        {/* Void — landlord only, danger zone */}
+        {/* Void â€” landlord only, danger zone */}
         {canVoid && (
           <>
             <Divider sx={{ mt: 1 }} />
@@ -513,268 +513,13 @@ export default function ChargeDetailDrawer({ charge, onClose }) {
                       startIcon={voiding ? <CircularProgress size={12} color="inherit" /> : null}
                       onClick={() => doVoid(charge.id, { onSuccess: onClose })}
                     >
-                      {voiding ? 'Voiding…' : 'Confirm Void'}
+                      {voiding ? 'Voidingâ€¦' : 'Confirm Void'}
                     </Button>
                   </Stack>
                 </Box>
               )}
             </Box>
           </>
-        )}
-      </Box>
-    </Drawer>
-  )
-}
-
-
-const METHOD_LABELS = {
-  stripe_ach:  'ACH Bank Transfer',
-  stripe_card: 'Card',
-  cash:        'Cash',
-  check:       'Cheque',
-  zelle:       'Zelle',
-  other:       'Other',
-}
-
-const TYPE_LABELS = {
-  rent:        'Rent',
-  late_fee:    'Late Fee',
-  utility:     'Utility',
-  maintenance: 'Maintenance',
-  other:       'Other',
-}
-
-function downloadReceipt(paymentId) {
-  api.getReceipt(paymentId).then((blob) => {
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `receipt-${paymentId.slice(0, 8)}.pdf`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  })
-}
-
-/**
- * ChargeDetailDrawer
- *
- * Right-side drawer showing full accounting for a single charge.
- * Works for both tenant and admin views.
- *
- * Props:
- *   charge   – the charge row (null = closed)
- *   onClose  – () => void
- *   onPay    – optional () => void — if provided, a "Pay Now" button appears (tenant)
- */
-export default function ChargeDetailDrawer({ charge, onClose, onPay }) {
-  const { data: payments = [], isLoading } = usePayments(
-    charge ? { leaseId: charge.lease_id, chargeId: charge.id } : undefined,
-  )
-
-  if (!charge) return null
-
-  const full      = Number(charge.amount ?? 0)
-  const paid      = Number(charge.total_paid ?? 0)
-  const remaining = Math.max(0, full - paid)
-  const pct       = full > 0 ? Math.min(100, Math.round((paid / full) * 100)) : 0
-
-  const canPay = onPay && (charge.status === 'unpaid' || charge.status === 'partial')
-
-  let barColor = 'inherit'
-  if (charge.status === 'paid')    barColor = 'success'
-  else if (charge.status === 'partial') barColor = 'warning'
-  else if (charge.status === 'pending') barColor = 'info'
-
-  return (
-    <Drawer
-      anchor="right"
-      open={!!charge}
-      onClose={onClose}
-      PaperProps={{ sx: { width: { xs: '100%', sm: 420 }, p: 0 } }}
-    >
-      {/* ── Header ── */}
-      <Box sx={{ px: 3, pt: 3, pb: 2, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="h6" fontWeight={600} sx={{ mb: 0.5 }}>
-            {TYPE_LABELS[charge.charge_type] ?? charge.charge_type}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {charge.description || 'No description'}
-          </Typography>
-        </Box>
-        <IconButton size="small" onClick={onClose} sx={{ mt: -0.5 }}>
-          <CloseIcon />
-        </IconButton>
-      </Box>
-
-      <Divider />
-
-      <Box sx={{ px: 3, py: 2, overflowY: 'auto', flex: 1 }}>
-
-        {/* ── Status + Due Date ── */}
-        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
-          <StatusChip status={charge.status} />
-          <Typography variant="body2" color="text.secondary">
-            Due {charge.due_date?.slice(0, 10)}
-          </Typography>
-        </Stack>
-
-        {/* ── Amount breakdown card ── */}
-        <Box
-          sx={{
-            border: 1,
-            borderColor: 'divider',
-            borderRadius: 2,
-            p: 2,
-            mb: 3,
-            bgcolor: 'background.paper',
-          }}
-        >
-          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
-            Amount breakdown
-          </Typography>
-
-          <Stack spacing={0.75}>
-            <Stack direction="row" justifyContent="space-between">
-              <Typography variant="body2" color="text.secondary">Total charged</Typography>
-              <Typography variant="body2" fontWeight={600}>
-                ${full.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </Typography>
-            </Stack>
-            <Stack direction="row" justifyContent="space-between">
-              <Typography variant="body2" color="text.secondary">Paid so far</Typography>
-              <Typography variant="body2" color={paid > 0 ? 'success.main' : 'text.disabled'} fontWeight={paid > 0 ? 600 : 400}>
-                ${paid.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </Typography>
-            </Stack>
-            {charge.status !== 'paid' && (
-              <Stack direction="row" justifyContent="space-between">
-                <Typography variant="body2" color="text.secondary">Remaining</Typography>
-                <Typography
-                  variant="body2"
-                  fontWeight={600}
-                  color={remaining > 0 ? 'warning.main' : 'success.main'}
-                >
-                  ${remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </Typography>
-              </Stack>
-            )}
-          </Stack>
-
-          {(charge.status === 'partial' || charge.status === 'paid' || charge.status === 'pending') && (
-            <>
-              <LinearProgress
-                variant="determinate"
-                value={pct}
-                color={barColor}
-                sx={{ height: 6, borderRadius: 3, mt: 1.5, mb: 0.5 }}
-              />
-              <Typography variant="caption" color="text.disabled">
-                {pct}% paid
-              </Typography>
-            </>
-          )}
-        </Box>
-
-        {/* ── Pending notice ── */}
-        {charge.status === 'pending' && (
-          <Box sx={{ mb: 2.5, p: 1.5, bgcolor: 'info.50', borderRadius: 1, border: 1, borderColor: 'info.200' }}>
-            <Typography variant="body2" color="info.main">
-              A bank transfer is in progress. It typically settles in 1–3 business days.
-              No further action is needed.
-            </Typography>
-          </Box>
-        )}
-
-        {/* ── Pay Now button (tenant only) ── */}
-        {canPay && (
-          <Button
-            variant="contained"
-            fullWidth
-            sx={{ mb: 3 }}
-            onClick={() => { onClose(); onPay(charge) }}
-          >
-            Pay ${remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })} remaining
-          </Button>
-        )}
-
-        <Divider sx={{ mb: 2.5 }} />
-
-        {/* ── Payment timeline ── */}
-        <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
-          Payment history
-        </Typography>
-
-        {isLoading ? (
-          <Box sx={{ py: 3, textAlign: 'center' }}>
-            <CircularProgress size={24} />
-          </Box>
-        ) : payments.length === 0 ? (
-          <Typography variant="body2" color="text.disabled">
-            No payments recorded yet.
-          </Typography>
-        ) : (
-          <Stack spacing={0} divider={<Divider />}>
-            {payments.map((p) => {
-              const feeDollars = p.stripe_fee_cents > 0 ? p.stripe_fee_cents / 100 : null
-              const tenantTotal = feeDollars != null
-                ? parseFloat(p.amount_paid) + feeDollars
-                : null
-              return (
-                <Stack
-                  key={p.id}
-                  direction="row"
-                  justifyContent="space-between"
-                  alignItems="flex-start"
-                  sx={{ py: 1.5 }}
-                >
-                  <Box>
-                    <Typography variant="body2" fontWeight={500}>
-                      {p.payment_date?.slice(0, 10)}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {METHOD_LABELS[p.payment_method] ?? p.payment_method}
-                    </Typography>
-                    {p.notes && (
-                      <Typography variant="caption" color="text.disabled" sx={{ display: 'block' }}>
-                        {p.notes}
-                      </Typography>
-                    )}
-                  </Box>
-                  <Stack alignItems="flex-end" spacing={0.25}>
-                    <Typography variant="body2" fontWeight={600}>
-                      ${parseFloat(p.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </Typography>
-                    {feeDollars != null && (
-                      <Tooltip title="ACH processing fee paid by tenant. You received the full rent amount." arrow>
-                        <Typography variant="caption" color="text.disabled" sx={{ cursor: 'help' }}>
-                          +${feeDollars.toFixed(2)} ACH fee
-                        </Typography>
-                      </Tooltip>
-                    )}
-                    {tenantTotal != null && (
-                      <Typography variant="caption" color="text.secondary">
-                        Tenant total: ${tenantTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </Typography>
-                    )}
-                    <Chip
-                      label={p.status}
-                      size="small"
-                      color={p.status === 'completed' ? 'success' : p.status === 'pending' ? 'info' : 'default'}
-                      variant="outlined"
-                    />
-                    <Tooltip title="Download receipt">
-                      <IconButton size="small" onClick={() => downloadReceipt(p.id)} sx={{ mt: 0.25 }}>
-                        <ReceiptIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                </Stack>
-              )
-            })}
-          </Stack>
         )}
       </Box>
     </Drawer>

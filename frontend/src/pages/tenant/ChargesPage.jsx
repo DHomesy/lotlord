@@ -247,6 +247,7 @@ export default function TenantChargesPage() {
         <ChargeAmountCell
           amount={row.amount}
           totalPaid={row.total_paid}
+          pendingAmount={row.pending_amount}
           status={row.status}
           dueDate={row.due_date}
         />
@@ -254,26 +255,14 @@ export default function TenantChargesPage() {
     },
     { field: 'due_date', headerName: 'Due', width: 110, valueFormatter: (v) => v?.slice(0, 10) },
     {
-      field: 'status',
-      headerName: 'Status',
-      width: 140,
-      renderCell: ({ value }) =>
-        value === 'pending' ? (
-          <Tooltip title="A bank transfer is in progress and will settle in 1–3 business days. No further action needed." arrow>
-            <Box><StatusChip status={value} /></Box>
-          </Tooltip>
-        ) : (
-          <StatusChip status={value} />
-        ),
-    },
-    {
       field: 'actions',
       headerName: '',
       width: 140,
       sortable: false,
       disableColumnMenu: true,
       renderCell: ({ row }) => {
-        if ((row.status === 'unpaid' || row.status === 'partial') && !row.voided_at) {
+      const pendingAmt = Number(row.pending_amount ?? 0)
+        if ((row.status === 'unpaid' || row.status === 'partial') && !row.voided_at && pendingAmt === 0) {
           const bal = row.status === 'partial' && row.total_paid != null
             ? Math.max(0, parseFloat(row.amount) - parseFloat(row.total_paid))
             : parseFloat(row.amount)

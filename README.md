@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.9.1 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.9.2 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 

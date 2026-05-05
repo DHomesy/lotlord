@@ -3,19 +3,28 @@ import { Box, Typography } from '@mui/material'
 /**
  * ChargeAmountCell
  *
- * Compact DataGrid cell. Top line: full charge amount. Bottom line: balance
- * due (amount minus any partial payments). Balance is painted red when the
- * due date has passed and the charge is still open.
+ * Compact DataGrid cell. Top line: full charge amount. Second line: contextual
+ * balance / in-transit indicator.
  *
  * Props:
- *   amount    {number|string}  Total charge amount in dollars
- *   totalPaid {number|string}  Amount collected so far
- *   status    {string}         unpaid | partial | pending | paid | voided
- *   dueDate   {string}         ISO date string YYYY-MM-DD
+ *   amount        {number|string}  Total charge amount in dollars
+ *   totalPaid     {number|string}  Sum of COMPLETED payments
+ *   pendingAmount {number|string}  Sum of in-flight (ACH pending) payments
+ *   status        {string}         unpaid | partial | pending | paid | voided
+ *   dueDate       {string}         ISO date string YYYY-MM-DD
+ *
+ * Status display logic:
+ *   paid         → "Paid in full" (green)
+ *   voided       → "Voided" (gray)
+ *   pending      → full charge is in transit (no completed payments yet)
+ *   partial      → some completed; show balance + any in-transit amount
+ *   unpaid       → nothing collected yet; show balance
  */
-export default function ChargeAmountCell({ amount, totalPaid, status, dueDate }) {
+export default function ChargeAmountCell({ amount, totalPaid, pendingAmount, status, dueDate }) {
   const full      = Number(amount ?? 0)
   const paid      = Number(totalPaid ?? 0)
+  const inTransit = Number(pendingAmount ?? 0)
+  // Remaining after completed payments
   const remaining = Math.max(0, full - paid)
 
   const today     = new Date().toISOString().slice(0, 10)
@@ -24,12 +33,7 @@ export default function ChargeAmountCell({ amount, totalPaid, status, dueDate })
     && status !== 'paid'
     && status !== 'voided'
 
-  // Balance to show for open / in-progress charges
-  const balance = (status === 'partial' || status === 'pending') ? remaining : full
-
-  const balanceColor = isPastDue
-    ? 'error.main'
-    : status === 'pending' ? 'info.main' : 'warning.main'
+  const balanceColor = isPastDue ? 'error.main' : 'warning.main'
 
   return (
     <Box sx={{ py: 0.5 }}>
@@ -37,16 +41,38 @@ export default function ChargeAmountCell({ amount, totalPaid, status, dueDate })
         ${full.toLocaleString('en-US', { minimumFractionDigits: 2 })}
       </Typography>
 
-      {(status === 'unpaid' || status === 'partial' || status === 'pending') && (
-        <Typography variant="caption" color={balanceColor}>
-          Balance: ${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-        </Typography>
-      )}
+      {/* Fully settled */}
       {status === 'paid' && (
         <Typography variant="caption" color="success.main">Paid in full</Typography>
       )}
+
+      {/* Cancelled */}
       {status === 'voided' && (
         <Typography variant="caption" color="text.disabled">Voided</Typography>
+      )}
+
+      {/* Pure pending: full amount in transit, no completed payments yet */}
+      {status === 'pending' && (
+        <Typography variant="caption" color="info.main">
+          ${inTransit > 0
+            ? inTransit.toLocaleString('en-US', { minimumFractionDigits: 2 })
+            : full.toLocaleString('en-US', { minimumFractionDigits: 2 })
+          } in transit
+        </Typography>
+      )}
+
+      {/* Open charges: show remaining balance + any in-transit note */}
+      {(status === 'unpaid' || status === 'partial') && (
+        <>
+          <Typography variant="caption" color={inTransit > 0 ? 'text.secondary' : balanceColor} display="block">
+            Balance: ${remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </Typography>
+          {inTransit > 0 && (
+            <Typography variant="caption" color="info.main" display="block">
+              ${inTransit.toLocaleString('en-US', { minimumFractionDigits: 2 })} in transit
+            </Typography>
+          )}
+        </>
       )}
     </Box>
   )

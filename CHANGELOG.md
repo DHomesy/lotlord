@@ -8,6 +8,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.9.2] — 2026-05-05 — Build fix: duplicate exports and JSX syntax error
+
+### Fixed
+- **`ChargeDetailDrawer`** — Removed a duplicate tail (duplicate `METHOD_LABELS`, `TYPE_LABELS`, and a second `export default function ChargeDetailDrawer`) that caused an esbuild compile failure in production builds.
+- **`DocumentsPage`** — Removed a stray `/>` after the `<Snackbar>` closing tag that caused an `invalid character inside JSX element` parse error.
+
+---
 ## [1.9.1] — 2026-05-05 — Charges UX redesign
 
 ### Changed
