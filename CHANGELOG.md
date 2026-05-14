@@ -8,6 +8,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.10.0] — 2026-05-14 — Sprint A: Per-landlord SMS + AI config foundation
+
+### Added
+- **Per-landlord SMS numbers** — Each landlord can provision a dedicated US local phone number via Twilio Messaging Services (`POST /api/v1/users/me/sms/provision`). Tenants receive and can reply to messages from that number. Numbers can be released (`DELETE /api/v1/users/me/sms/provision`) and status checked (`GET /api/v1/users/me/sms/status`).
+- **Inbound SMS routing** — The Twilio webhook (`POST /api/v1/webhooks/twilio/sms`) now resolves both the tenant (from `From`) and the landlord (from `To`) in parallel, giving Sprint B a clean context to route conversations to the right landlord.
+- **Outbound SMS routing** — `sendSms`, `sendSmsAdhoc`, `sendByTriggerEvent`, and `sendAllChannels` accept an optional `landlordId` and automatically send from the landlord’s provisioned number. Falls back to the platform number when no number is provisioned.
+- **AI config per landlord** — New columns on `users`: `ai_enabled`, `ai_reply_mode` (`approval`/`auto`), `ai_notify_on_send`, `ai_notify_channels`. Configurable via `PATCH /api/v1/users/me`. Default is approval mode.
+- **Profile UI — SMS Setup** — Landlords can provision/release their SMS number directly from the Profile page with area-code input (pre-filled from first property ZIP) and inline error handling for unavailable area codes.
+- **Profile UI — AI Settings** — Toggles for enable/disable, reply mode, notify-on-send, and notification channels (email/SMS). SMS channel checkbox is disabled until a number is provisioned.
+- **Migration `031`** — Adds all SMS provisioning and AI config columns to `users`.
+- **`src/services/twilioService.js`** — `provisionSmsNumber`, `deprovisionSmsNumber`, `getProvisioningStatus`.
+- **Unit tests** — 42 new unit tests across `twilioService`, inbound SMS routing, outbound SMS routing, and SMS provisioning controller (78 total).
+
+### Fixed
+- **Audit — `findById` missing columns** — `userRepository.findById` now returns all Sprint A columns. Previously, the provisioning 409 guard, `getProvisioningStatus`, `GET /me`, and outbound SMS routing were all broken because `twilio_sms_number` and AI config fields were absent from the SELECT.
+- **Audit — Twilio concurrent deprovision** — `deprovisionSmsNumber` now handles a Twilio 404 (service already deleted) gracefully instead of bubbling a 500.
+- **Audit — PII in logs** — SMS message body is no longer logged verbatim in `console.info`; only `bodyLength` is emitted.
+- **Audit — AI config state** — Profile page AI toggles now initialise from a fresh `GET /api/v1/users/me` response via `useMe()` rather than the stale auth store object, which never contained AI fields.
 ## [1.9.3] — 2026-05-05 — Partial payment in-transit UX fix
 
 ### Fixed

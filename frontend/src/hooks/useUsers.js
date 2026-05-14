@@ -46,6 +46,32 @@ export function useChangePassword() {
   return useMutation({ mutationFn: api.changePassword })
 }
 
+export const SMS_STATUS_KEY = ['sms-status']
+
+export function useSmsStatus(enabled = true) {
+  return useQuery({
+    queryKey: SMS_STATUS_KEY,
+    queryFn: api.getSmsStatus,
+    enabled,
+  })
+}
+
+export function useProvisionSms() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.provisionSms,
+    onSuccess: () => qc.invalidateQueries({ queryKey: SMS_STATUS_KEY }),
+  })
+}
+
+export function useDeprovisionSms() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.deprovisionSms,
+    onSuccess: () => qc.invalidateQueries({ queryKey: SMS_STATUS_KEY }),
+  })
+}
+
 export function useDeleteUser() {
   const qc = useQueryClient()
   return useMutation({

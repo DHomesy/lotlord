@@ -9,3 +9,6 @@ export const deleteUser = (id) => http.delete(`${base}/${id}`).then((r) => r.dat
 export const getMe = () => http.get(`${base}/me`).then((r) => r.data)
 export const updateMe = (data) => http.patch(`${base}/me`, data).then((r) => r.data)
 export const changePassword = (data) => http.post(`${base}/me/password`, data).then((r) => r.data)
+export const getSmsStatus = () => http.get(`${base}/me/sms/status`).then((r) => r.data)
+export const provisionSms = (data) => http.post(`${base}/me/sms/provision`, data).then((r) => r.data)
+export const deprovisionSms = () => http.delete(`${base}/me/sms/provision`).then((r) => r.data)

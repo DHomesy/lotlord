@@ -6,6 +6,7 @@ import { z } from 'zod'
 import {
   TextField, Stack, Button, Alert, Typography,
   Card, CardContent, CardActionArea, Divider, Box, CircularProgress, Chip, Grid,
+  FormControlLabel, Switch, FormGroup, Checkbox,
 } from '@mui/material'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
@@ -16,11 +17,14 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts'
 import HistoryIcon from '@mui/icons-material/History'
 import PeopleIcon from '@mui/icons-material/People'
+import SmsIcon from '@mui/icons-material/Sms'
+import SmartToyIcon from '@mui/icons-material/SmartToy'
 import PageContainer from '../../components/layout/PageContainer'
 import { useAuthStore } from '../../store/authStore'
-import { useUpdateMe, useChangePassword } from '../../hooks/useUsers'
+import { useUpdateMe, useChangePassword, useMe, useSmsStatus, useProvisionSms, useDeprovisionSms } from '../../hooks/useUsers'
 import { useConnectStatus, useConnectOnboard, useConnectLogin } from '../../hooks/useStripeSetup'
 import { useMySubscription, useCreateCheckoutSession, useCreateBillingPortalSession } from '../../hooks/useBilling'
+import { useProperties } from '../../hooks/useProperties'
 import { PLANS, hasStarter, hasCommercial, planTier } from '../../lib/plans'
 
 const profileSchema = z.object({
@@ -48,6 +52,55 @@ export default function AdminProfilePage() {
   const { data: subscription, isLoading: loadingSubscription }               = useMySubscription()
   const { mutate: startCheckout,  isPending: startingCheckout, isError: checkoutFailed  } = useCreateCheckoutSession()
   const { mutate: openPortal,     isPending: openingPortal     }             = useCreateBillingPortalSession()
+
+  // SMS provisioning
+  const { data: smsStatus, isLoading: loadingSms } = useSmsStatus(isLandlord)
+  const { mutate: provisionSms, isPending: provisioning, error: provisionError } = useProvisionSms()
+  const { mutate: deprovisionSms, isPending: deprovisioning } = useDeprovisionSms()
+
+  // Properties — for area code pre-fill
+  const { data: propertiesData } = useProperties({ limit: 1 })
+  const firstZip = propertiesData?.properties?.[0]?.zip || propertiesData?.[0]?.zip || ''
+  const defaultAreaCode = firstZip.replace(/\D/g, '').substring(0, 3)
+
+  const [areaCode, setAreaCode] = useState('')
+
+  // Pre-fill area code once properties load
+  useEffect(() => {
+    if (defaultAreaCode && !areaCode) setAreaCode(defaultAreaCode)
+  }, [defaultAreaCode])
+
+  // AI config local state — initialised from server via useMe() so it reflects saved values.
+  // Auth store user object does not include AI config fields.
+  const { data: meData } = useMe()
+  const [aiEnabled,        setAiEnabled]        = useState(true)
+  const [aiReplyMode,      setAiReplyMode]      = useState('approval')
+  const [aiNotifyOnSend,   setAiNotifyOnSend]   = useState(true)
+  const [aiNotifyChannels, setAiNotifyChannels] = useState(['email'])
+  const [aiSaveSuccess,    setAiSaveSuccess]    = useState(false)
+  const { mutate: saveAiConfig, isPending: savingAi } = useUpdateMe()
+
+  // Sync AI state from server once the /me response loads
+  useEffect(() => {
+    if (!meData) return
+    setAiEnabled(meData.ai_enabled        ?? true)
+    setAiReplyMode(meData.ai_reply_mode    ?? 'approval')
+    setAiNotifyOnSend(meData.ai_notify_on_send ?? true)
+    setAiNotifyChannels(meData.ai_notify_channels ?? ['email'])
+  }, [meData?.id])
+
+  function handleSaveAi() {
+    saveAiConfig(
+      { aiEnabled, aiReplyMode, aiNotifyOnSend, aiNotifyChannels },
+      { onSuccess: () => { setAiSaveSuccess(true); setTimeout(() => setAiSaveSuccess(false), 3000) } },
+    )
+  }
+
+  function toggleAiChannel(channel) {
+    setAiNotifyChannels((prev) =>
+      prev.includes(channel) ? prev.filter((c) => c !== channel) : [...prev, channel],
+    )
+  }
   const [connectBanner,  setConnectBanner]  = useState(null) // 'success' | 'refresh' | null
   const [billingBanner,  setBillingBanner]  = useState(null) // 'success' | 'canceled' | null
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
@@ -497,6 +550,185 @@ export default function AdminProfilePage() {
           )}
         </Box>
       )}
+      </>)}
+
+      {/* ── SMS Setup (landlord only) ── */}
+      {isLandlord && (<>
+      <Divider sx={{ my: 4 }} />
+      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
+        <SmsIcon color="primary" />
+        <Typography variant="h6">SMS Number</Typography>
+      </Stack>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Assign a dedicated local phone number to your account. Tenants will see this number
+        when you send them SMS messages, and can reply directly to start a conversation.
+      </Typography>
+
+      {loadingSms ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <CircularProgress size={16} />
+          <Typography variant="body2" color="text.secondary">Loading…</Typography>
+        </Box>
+      ) : smsStatus?.provisioned ? (
+        <Stack spacing={1.5} sx={{ maxWidth: 440 }}>
+          <Card variant="outlined">
+            <CardContent sx={{ py: '10px !important', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <CheckCircleIcon fontSize="small" color="success" />
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="body2" fontWeight={500}>
+                  {smsStatus.phoneNumber.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, '+1 ($1) $2-$3')}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">Your dedicated SMS number</Typography>
+              </Box>
+              <Button
+                size="small"
+                color="error"
+                variant="outlined"
+                onClick={() => deprovisionSms()}
+                disabled={deprovisioning}
+              >
+                {deprovisioning ? 'Releasing…' : 'Release Number'}
+              </Button>
+            </CardContent>
+          </Card>
+        </Stack>
+      ) : (
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="flex-start" sx={{ maxWidth: 440 }}>
+          <TextField
+            label="Area Code"
+            value={areaCode}
+            onChange={(e) => setAreaCode(e.target.value.replace(/\D/g, '').slice(0, 3))}
+            inputProps={{ maxLength: 3 }}
+            size="small"
+            sx={{ width: 120 }}
+            helperText="3 digits, e.g. 512"
+          />
+          <Button
+            variant="contained"
+            disabled={provisioning || areaCode.length !== 3}
+            onClick={() => provisionSms({ areaCode })}
+            sx={{ mt: { xs: 0, sm: '2px' } }}
+          >
+            {provisioning ? 'Setting up…' : 'Set Up SMS Number'}
+          </Button>
+        </Stack>
+      )}
+
+      {provisionError && (
+        <Alert severity="error" sx={{ mt: 1.5, maxWidth: 440 }}>
+          {provisionError?.response?.data?.code === 'NO_NUMBERS_IN_AREA_CODE'
+            ? `No available numbers in area code ${areaCode} — please try a nearby code.`
+            : (provisionError?.response?.data?.error ?? 'Something went wrong. Please try again.')}
+        </Alert>
+      )}
+
+      <Alert severity="info" icon={false} sx={{ mt: 2, maxWidth: 440, fontSize: '0.8rem' }}>
+        Want to use your existing business number? SMS porting is available — contact support
+        and we&apos;ll move your number over. This typically takes 5–7 business days and your
+        existing messages will continue to work throughout.
+      </Alert>
+      </>)}
+
+      {/* ── AI Settings (landlord only) ── */}
+      {isLandlord && (<>
+      <Divider sx={{ my: 4 }} />
+      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 0.5 }}>
+        <SmartToyIcon color="primary" />
+        <Typography variant="h6">AI Assistant</Typography>
+      </Stack>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        The AI assistant drafts replies to tenant messages on your behalf. Configure how it
+        behaves below.
+      </Typography>
+
+      {aiSaveSuccess && <Alert severity="success" sx={{ mb: 2, maxWidth: 440 }}>Settings saved!</Alert>}
+
+      <Stack spacing={2} sx={{ maxWidth: 440 }}>
+        <FormControlLabel
+          control={<Switch checked={aiEnabled} onChange={(e) => setAiEnabled(e.target.checked)} />}
+          label={<><strong>Enable AI Assistant</strong></>}
+        />
+
+        <FormControlLabel
+          control={
+            <Switch
+              checked={aiReplyMode === 'approval'}
+              onChange={(e) => setAiReplyMode(e.target.checked ? 'approval' : 'auto')}
+              disabled={!aiEnabled}
+            />
+          }
+          label={
+            <Box>
+              <Typography variant="body2"><strong>Require approval before sending</strong></Typography>
+              <Typography variant="caption" color="text.secondary">
+                {aiReplyMode === 'approval'
+                  ? 'AI drafts a reply for you to review — nothing sends without your OK.'
+                  : 'AI sends replies automatically without your review.'}
+              </Typography>
+              {aiReplyMode === 'auto' && (
+                <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.25 }}>
+                  We recommend approval mode while you get familiar with the assistant.
+                </Typography>
+              )}
+            </Box>
+          }
+        />
+
+        <FormControlLabel
+          control={
+            <Switch
+              checked={aiNotifyOnSend}
+              onChange={(e) => setAiNotifyOnSend(e.target.checked)}
+              disabled={!aiEnabled || aiReplyMode === 'approval'}
+            />
+          }
+          label={<><strong>Notify me when AI sends a message</strong></>}
+        />
+
+        {aiNotifyOnSend && aiReplyMode === 'auto' && aiEnabled && (
+          <Box sx={{ pl: 1 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+              Notify via:
+            </Typography>
+            <FormGroup row>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={aiNotifyChannels.includes('email')}
+                    onChange={() => toggleAiChannel('email')}
+                  />
+                }
+                label={<Typography variant="body2">Email</Typography>}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={aiNotifyChannels.includes('sms')}
+                    onChange={() => toggleAiChannel('sms')}
+                    disabled={!smsStatus?.provisioned}
+                  />
+                }
+                label={
+                  <Typography variant="body2">
+                    SMS{!smsStatus?.provisioned && <Typography component="span" variant="caption" color="text.secondary"> (set up an SMS number above first)</Typography>}
+                  </Typography>
+                }
+              />
+            </FormGroup>
+          </Box>
+        )}
+
+        <Button
+          variant="contained"
+          onClick={handleSaveAi}
+          disabled={savingAi || !aiEnabled && aiNotifyChannels.length === 0}
+          sx={{ alignSelf: 'flex-start' }}
+        >
+          {savingAi ? 'Saving…' : 'Save AI Settings'}
+        </Button>
+      </Stack>
       </>)}
     </PageContainer>
   )

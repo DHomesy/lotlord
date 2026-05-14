@@ -66,10 +66,11 @@ async function executeSend({ logId, recipientEmail, subject, html, text }) {
 
 /**
  * Internal: send an SMS via Twilio and update the log entry status.
+ * @param {string} [fromNumber] - E.164 sender override (landlord's number). Defaults to platform number.
  */
-async function executeSendSms({ logId, to, body }) {
+async function executeSendSms({ logId, to, body, fromNumber }) {
   try {
-    await sendSms({ to, body });
+    await sendSms({ to, body, from: fromNumber });
     await notificationRepo.updateLogEntry(logId, {
       status: 'sent',
       sentAt: new Date().toISOString(),
@@ -125,7 +126,7 @@ async function sendAdhoc({ recipientId, subject, html, text }) {
  * @param {object}  [opts.variables]  - Key/value pairs for {{placeholder}} substitution
  * @returns {Promise<object>}         - The notifications_log row
  */
-async function sendFromTemplate({ templateId, recipientId, variables = {} }) {
+async function sendFromTemplate({ templateId, recipientId, variables = {}, fromNumber }) {
   if (!templateId) throw Object.assign(new Error('templateId is required'), { status: 400 });
 
   const template = await notificationRepo.findTemplateById(templateId);
@@ -146,7 +147,7 @@ async function sendFromTemplate({ templateId, recipientId, variables = {} }) {
       body: renderedBody,
     });
 
-    await executeSendSms({ logId: logEntry.id, to: recipient.phone, body: renderedBody });
+    await executeSendSms({ logId: logEntry.id, to: recipient.phone, body: renderedBody, fromNumber });
     return notificationRepo.findLogById(logEntry.id);
   }
 
@@ -187,7 +188,7 @@ async function sendFromTemplate({ templateId, recipientId, variables = {} }) {
  * @param {string}  [opts.channel]     'email' (default) or 'sms'
  * @returns {Promise<object|null>}     notifications_log row, or null if no template found
  */
-async function sendByTriggerEvent({ triggerEvent, recipientId, variables = {}, channel = 'email' }) {
+async function sendByTriggerEvent({ triggerEvent, recipientId, variables = {}, channel = 'email', landlordId }) {
   const template = await notificationRepo.findTemplateByEvent(triggerEvent, channel);
   if (!template) {
     console.warn(`[notification] No ${channel} template for trigger_event='${triggerEvent}' — skipping recipient ${recipientId}`);
@@ -199,7 +200,16 @@ async function sendByTriggerEvent({ triggerEvent, recipientId, variables = {}, c
     console.warn('[notification] FRONTEND_URL env var is not set — portal links in email templates will be broken');
   }
   const mergedVariables = { portal_url: env.FRONTEND_URL || '', ...variables };
-  return sendFromTemplate({ templateId: template.id, recipientId, variables: mergedVariables });
+
+  // Resolve the landlord's provisioned SMS number for outbound SMS routing.
+  // If no number is provisioned, falls back to the platform number (handled in sendSms).
+  let fromNumber;
+  if (channel === 'sms' && landlordId) {
+    const landlord = await userRepo.findById(landlordId);
+    fromNumber = landlord?.twilio_sms_number || undefined;
+  }
+
+  return sendFromTemplate({ templateId: template.id, recipientId, variables: mergedVariables, fromNumber });
 }
 
 /**
@@ -211,8 +221,15 @@ async function sendByTriggerEvent({ triggerEvent, recipientId, variables = {}, c
  * @param {string} opts.body         SMS message body (max ~1600 chars; 160 per segment)
  * @returns {Promise<object>}        The notifications_log row
  */
-async function sendSmsAdhoc({ recipientId, body }) {
+async function sendSmsAdhoc({ recipientId, body, landlordId }) {
   const recipient = await resolveRecipientPhone(recipientId);
+
+  // Resolve the landlord's provisioned number so the message arrives from their personal line.
+  let fromNumber;
+  if (landlordId) {
+    const landlord = await userRepo.findById(landlordId);
+    fromNumber = landlord?.twilio_sms_number || undefined;
+  }
 
   const logEntry = await notificationRepo.createLogEntry({
     id: uuidv4(),
@@ -224,7 +241,7 @@ async function sendSmsAdhoc({ recipientId, body }) {
     body,
   });
 
-  await executeSendSms({ logId: logEntry.id, to: recipient.phone, body });
+  await executeSendSms({ logId: logEntry.id, to: recipient.phone, body, fromNumber });
   return notificationRepo.findLogById(logEntry.id);
 }
 
@@ -237,10 +254,10 @@ async function sendSmsAdhoc({ recipientId, body }) {
  *
  * @returns {Promise<object|null>}  The email channel result (null if email template missing)
  */
-async function sendAllChannels({ triggerEvent, recipientId, variables = {} }) {
+async function sendAllChannels({ triggerEvent, recipientId, variables = {}, landlordId }) {
   const [emailResult, smsResult] = await Promise.allSettled([
     sendByTriggerEvent({ triggerEvent, recipientId, variables, channel: 'email' }),
-    sendByTriggerEvent({ triggerEvent, recipientId, variables, channel: 'sms' }),
+    sendByTriggerEvent({ triggerEvent, recipientId, variables, channel: 'sms', landlordId }),
   ]);
 
   if (smsResult.status === 'rejected') {

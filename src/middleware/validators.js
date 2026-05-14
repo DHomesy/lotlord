@@ -319,6 +319,26 @@ const updateUserValidators = [
   body('avatarUrl').optional({ values: 'falsy' }).isURL({ protocols: ['http', 'https'], require_protocol: true }).withMessage('avatarUrl must be a valid http or https URL'),
 ];
 
+// ── /me update (self-update — extends basic fields with AI config) ────────────
+const updateMeValidators = [
+  ...updateUserValidators,
+  body('aiEnabled').optional().isBoolean().withMessage('aiEnabled must be a boolean'),
+  body('aiReplyMode').optional().isIn(['approval', 'auto']).withMessage('aiReplyMode must be \'approval\' or \'auto\''),
+  body('aiNotifyOnSend').optional().isBoolean().withMessage('aiNotifyOnSend must be a boolean'),
+  body('aiNotifyChannels')
+    .optional()
+    .isArray().withMessage('aiNotifyChannels must be an array')
+    .custom((arr) => arr.every((ch) => ['email', 'sms'].includes(ch)))
+    .withMessage('aiNotifyChannels may only contain \'email\' and/or \'sms\''),
+];
+
+// ── SMS provisioning ──────────────────────────────────────────────────────────
+const provisionSmsValidators = [
+  body('areaCode')
+    .notEmpty().withMessage('areaCode is required')
+    .matches(/^\d{3}$/).withMessage('areaCode must be exactly 3 digits'),
+];
+
 module.exports = {
   validate,
   registerValidators,
@@ -349,4 +369,6 @@ module.exports = {
   forgotPasswordValidators,
   resetPasswordValidators,
   updateUserValidators,
+  updateMeValidators,
+  provisionSmsValidators,
 };

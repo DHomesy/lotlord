@@ -29,6 +29,10 @@ coverage/
 # Migrations lock (keep migrations themselves, not lock files)
 .node-pg-migrate-lock
 
+# Local planning docs
+SPRINT-AI-COMMS.md
+NOTES.md
+
 # Local notes
 todo.txt
 testingEfforst.txt

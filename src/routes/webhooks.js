@@ -52,19 +52,33 @@ router.post('/twilio/sms', async (req, res) => {
   }
 
   // ── 2. Parse the inbound message ────────────────────────────────────────────
-  const from       = req.body.From || '';       // E.164 sender number, e.g. +14155551234
+  const from       = req.body.From || '';       // E.164 sender (tenant), e.g. +14155551234
+  const to         = req.body.To   || '';       // E.164 destination (landlord's number or platform number)
   const body       = req.body.Body || '';
   const messageSid = req.body.MessageSid || '';
 
-  console.info(`[twilio inbound] MessageSid=${messageSid} From=${from} Body="${body}"`);
+  // Body is intentionally omitted from the log line — it may contain PII / sensitive content.
+  console.info(`[twilio inbound] MessageSid=${messageSid} From=${from} To=${to} bodyLength=${body.length}`);
 
-  // ── 3. Identify the sender (best-effort) ────────────────────────────────────
-  // If the phone number belongs to a known user, log the message for audit.
-  // Unknown senders are console-logged only (recipient_id is NOT NULL in DB).
+  // ── 3. Identify sender + landlord context ────────────────────────────────────
+  // sender  = the tenant who texted in (matched by their phone number)
+  // landlord = resolved from the destination number (each landlord has a unique Twilio number)
+  // Both lookups are best-effort — unknown parties are logged and the message is still acknowledged.
   try {
-    const sender = await userRepo.findByPhone(from);
-    if (sender) {
-      await notificationRepo.createLogEntry({
+    const [sender, landlord] = await Promise.all([
+      userRepo.findByPhone(from),
+      userRepo.findByTwilioSmsNumber(to),
+    ]);
+
+    if (!sender) {
+      console.warn(`[twilio inbound] Unknown sender: ${from} — message not persisted`);
+    } else {
+      if (!landlord) {
+        // Message arrived at an unrecognised number (e.g. platform number or stale provisioning)
+        console.warn(`[twilio inbound] No landlord found for destination ${to} — logging without landlord context`);
+      }
+
+      const logEntry = await notificationRepo.createLogEntry({
         id:          uuidv4(),
         templateId:  null,
         recipientId: sender.id,
@@ -73,9 +87,16 @@ router.post('/twilio/sms', async (req, res) => {
         subject:     null,
         body,
       });
-      console.info(`[twilio inbound] Matched user ${sender.id} (${sender.email})`);
-    } else {
-      console.warn(`[twilio inbound] Unknown sender: ${from} — message not persisted`);
+      console.info(`[twilio inbound] Matched sender=${sender.id} landlord=${landlord?.id ?? 'none'}`);
+
+      // ── AI agent hook (wired in Sprint B) ─────────────────────────────────────
+      // conversationService.handleInboundSms({
+      //   tenantUserId: sender.id,
+      //   landlordId:   landlord?.id ?? null,
+      //   content:      body,
+      //   logEntryId:   logEntry.id,
+      //   channel:      'sms',
+      // }).catch(err => console.error('[twilio] AI handling failed:', err.message));
     }
   } catch (err) {
     // Non-fatal — still acknowledge Twilio so they don't retry
