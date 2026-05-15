@@ -47,13 +47,23 @@ Always be professional, concise, and friendly.
  * @param {Object} opts
  * @param {Array<{role: string, content: string}>} opts.history - Prior messages in this conversation
  * @param {string} opts.newMessage - The latest message from the tenant
+ * @param {string} [opts.systemContext] - Optional plain-text context appended to the system prompt
+ *                                        (lease details, balance, property info from conversationService)
  * @returns {Promise<{ reply: string, tokensUsed: number, model: string }>}
  */
-async function generateReply({ history, newMessage }) {
+async function generateReply({ history, newMessage, systemContext = '' }) {
+  // Truncate to 2000 chars — same limit as classifyMessage — to cap token cost
+  // and constrain prompt injection via tenant-controlled message content.
+  const safeNewMessage = String(newMessage).substring(0, 2000);
+
+  const fullSystemPrompt = systemContext
+    ? `${SYSTEM_PROMPT}\n\nContext for this tenant:\n${systemContext}`
+    : SYSTEM_PROMPT;
+
   const messages = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: fullSystemPrompt },
     ...history.map((m) => ({ role: m.role, content: m.content })),
-    { role: 'user', content: newMessage },
+    { role: 'user', content: safeNewMessage },
   ];
 
   const response = await getClient().chat.completions.create({
@@ -71,4 +81,46 @@ async function generateReply({ history, newMessage }) {
   };
 }
 
-module.exports = { generateReply };
+/**
+ * Classify an inbound tenant message.
+ * Returns category, urgency score, and a one-sentence summary.
+ * Intentionally a separate call from generateReply so classification always
+ * runs even if reply generation fails or is skipped.
+ *
+ * @param {string} content - The raw tenant message text
+ * @returns {Promise<{ category: string, urgency: number, summary: string }>}
+ */
+async function classifyMessage(content) {
+  // Truncate to 2000 chars — limits cost and constrains prompt injection blast radius
+  const safeContent = String(content).substring(0, 2000);
+  const response = await getClient().chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      {
+        role: 'system',
+        content: 'You are a property management triage assistant. Classify the tenant message and respond with valid JSON only. No markdown, no explanation.',
+      },
+      {
+        role: 'user',
+        content: `Classify this tenant message. Respond with JSON only:\n{"category":"maintenance|payment|lease|general","urgency":1,"summary":"one sentence"}\n\nUrgency scale: 1=low, 2=minor, 3=normal, 4=high, 5=critical/emergency.\nUse urgency 5 for words like: emergency, flood, fire, gas leak, no heat, mold, uninhabitable.\nUse urgency 4 for: broken AC, no hot water, eviction mentions, lawyer, court.\n\nMessage: ${safeContent}`,
+      },
+    ],
+    max_tokens: 100,
+    temperature: 0,
+    response_format: { type: 'json_object' },
+  });
+
+  try {
+    const parsed = JSON.parse(response.choices[0].message.content);
+    const validCategories = ['maintenance', 'payment', 'lease', 'general'];
+    return {
+      category: validCategories.includes(parsed.category) ? parsed.category : 'general',
+      urgency:  Math.max(1, Math.min(5, parseInt(parsed.urgency, 10) || 3)),
+      summary:  (parsed.summary || '').substring(0, 200),
+    };
+  } catch {
+    return { category: 'general', urgency: 3, summary: '' };
+  }
+}
+
+module.exports = { generateReply, classifyMessage };

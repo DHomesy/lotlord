@@ -28,6 +28,8 @@ const invitationRoutes = require('./routes/invitations');
 const analyticsRoutes  = require('./routes/analytics');
 const billingRoutes    = require('./routes/billing');
 const auditRoutes      = require('./routes/audit');
+const inboxRoutes      = require('./routes/inbox');
+const supervisorRoutes = require('./routes/supervisor');
 
 const app = express();
 
@@ -136,6 +138,8 @@ app.use('/api/v1/ai', aiRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/billing', billingRoutes);
 app.use('/api/v1/audit', auditRoutes);
+app.use('/api/v1/inbox', inboxRoutes);
+app.use('/api/v1/supervisor', supervisorRoutes);
 
 // 404 & global error handler — must be last
 app.use(notFound);

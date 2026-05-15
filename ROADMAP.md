@@ -110,49 +110,22 @@ All repository queries become `WHERE organization_id = $1` in addition to (or in
 
 ---
 
-### AI Agent for Communications
+### ✅ AI Agent for Communications — shipped v1.10.0–v1.11.0
 
-**Goal:** Auto-respond to tenant SMS/emails with AI-generated replies using GPT-4o-mini.
+**Sprint A (v1.10.0):** Per-landlord SMS provisioning, AI config columns, inbound SMS routing to correct landlord context. See CHANGELOG for full detail.
 
-**Architecture:**
+**Sprint B (v1.11.0):** Full AI inbox with approve/edit/dismiss flow, auto-send mode, delivery failure recovery, AI Supervisor page, landlord notification on AI send. 150 unit tests.
 
-```
-Inbound SMS   → Twilio webhook → aiAgentService → OpenAI → reply via Twilio
-Inbound email → SES webhook   → aiAgentService → OpenAI → reply via SES
-All messages stored in ai_messages table for audit.
-```
+**Shipped guardrails:**
+- Escalation trigger words (`"emergency"`, `"lawyer"`, `"eviction"`) → `status = escalated`, `urgency = 5`, AI disabled
+- Rate limit: max 5 AI replies per tenant per 24 h window (`model_used IS NOT NULL` filter)
+- Approval mode (default): every draft requires landlord sign-off before delivery
+- Auto mode: available but not surfaced in landlord UI until 2+ weeks of clean concierge data
+- Every AI message stored in `ai_messages` with `model_used`, `tokens_used` for audit and cost tracking
+- HTML-only inbound emails stripped to plain text before reaching OpenAI
 
-**Guardrails (non-negotiable):**
-- AI may answer FAQs, confirm payment status, log maintenance requests, give lease dates
-- AI must NOT make payment arrangements, agree to lease changes, or promise anything legally binding
-- Escalation trigger words (`"emergency"`, `"lawyer"`, `"eviction"`) → flag for human review, disable AI replies
-- Rate limit: max 5 AI replies per tenant per day
-- Every AI message is stored in `ai_messages` for liability protection
-
-**Implementation Steps:**
-
-1. **Backend** — `src/services/aiAgentService.js`:
-   - `handleInboundMessage({ tenantId, channel, content })` — entry point from webhooks
-   - `generateReply({ conversationId, messageHistory })` — OpenAI call with system prompt
-   - System prompt includes: lease details, payment status, open maintenance requests
-
-2. **Backend** — wire into existing webhooks:
-   - `POST /webhooks/twilio/sms` — after logging, call `aiAgentService.handleInboundMessage`
-   - `POST /webhooks/ses` — after `emailInboxService.processInboundEmail`, call AI handler
-
-3. **Frontend** — `GET /ai/conversations` + `GET /ai/conversations/:id/messages` (route stubs exist):
-   - List all AI conversations (tenant, channel, status)
-   - Message thread view with escalation controls
-   - Admin can mark a conversation as `escalated` (disables AI, triggers alert)
-
-**Files to create:**
-
-| File | Purpose |
-|---|---|
-| `src/services/aiAgentService.js` | Core AI logic — context building, OpenAI call, reply routing |
-| `frontend/src/pages/admin/AIConversationsPage.jsx` | Admin view of all AI threads |
-
-**Environment variable required:** `OPENAI_API_KEY`
+**Remaining (Sprint C — not yet started):**
+- AI proactive daily digest (landlord briefing of things needing attention)
 
 ---
 

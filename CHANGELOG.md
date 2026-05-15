@@ -8,6 +8,41 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.11.0] — 2026-05-14 — Sprint B: AI Inbox + Approval Flow + Supervisor View
+
+### Added
+- **AI Inbox** — Inbound tenant SMS and email messages are now routed through an AI pipeline. Each landlord has a separate inbox (`GET /api/v1/inbox`) showing all active conversations classified by urgency (1–5) and category (maintenance / payment / lease / general).
+- **AI-suggested replies** — GPT-4o-mini generates a draft reply for every inbound tenant message. In `approval` mode the draft waits in the inbox for the landlord to Approve, Edit, or Dismiss. In `auto` mode the reply is sent immediately.
+- **Approve / Edit / Dismiss flow** — The AI draft banner in the inbox thread view exposes three actions:
+  - *Approve & Send* — delivers the draft via SMS or email and marks it sent.
+  - *Edit* — opens an inline textarea pre-filled with the draft; "Send edited reply" routes the modified text as a manual landlord reply and dismisses the original draft.
+  - *Dismiss* — silently removes the draft; conversation remains open for a new AI draft on the next message.
+- **Delivery failure recovery** — If the external delivery call fails after the DB commit, the draft is atomically restored to pending and a 503 is returned so the landlord can retry.
+- **Stale-draft guard** — Approve and Dismiss endpoints validate the URL `:msgId` against the pending draft; mismatches return 404, preventing double-approves across concurrent sessions.
+- **AI Supervisor page** (`/supervisor`, admin-only) — Cross-landlord operations view: filter by landlord, status, and urgency; inject supervisor override messages into any thread; escalate/resolve conversations. Accessible from the Admin Account card on the Profile page.
+- **Landlord notification on AI send** (`ai_sent_reply`) — When AI sends a message on a landlord's behalf (auto-mode or after approval), the landlord receives a notification on their configured channels (email / SMS) respecting `ai_notify_on_send` and `ai_notify_channels`. Fire-and-forget — notification failure never blocks the delivery path.
+- **Email inbox AI support** — Inbound SES emails now pass through the same AI pipeline as SMS. HTML-only emails are stripped to plain text before reaching OpenAI so classification and reply generation are not poisoned by raw markup.
+- **Conversation list live-refresh** — The AI Inbox conversation list polls every 30 s; thread view polls every 15 s. New conversations, unread badges, and AI draft indicators update without a page reload.
+- **Migration `032`** — Extends `ai_conversations` (`owner_id`, `last_message_at`, `unread_count`, `urgency`, `category`) and `ai_messages` (`suggested`, `approved_by`, `sent_at`, `supervisor_override`, `override_by`); adds `conversation_id` FK to `notifications_log`; adds six performance indexes.
+- **Migration `033`** — Expands `trigger_event` CHECK constraint with `ai_sent_reply` and `conversation_escalated`; seeds email and SMS notification templates for `ai_sent_reply`.
+- **`src/dal/conversationRepository.js`** — New repository: `findActive`, `findById`, `create`, `touchOnInbound`, `update`, `findAllByOwner`, `findAllForSupervisor`, `appendMessage`, `findMessages`, `findPendingSuggestion`, `markSent`, `unmarkSent`, `deleteSuggestion`, `countRecentAiReplies`.
+- **`src/services/conversationService.js`** — New service: `handleInboundSms`, `handleInboundEmail`, `resolveLandlordForTenant`, `resolveConversation`, `escalateConversation`, `markRead`, `sendManualReply`, `supervisorOverride`, `approveSuggestedReply`, `dismissSuggestedReply`.
+- **`src/controllers/inboxController.js`** + **`src/routes/inbox.js`** + **`src/routes/supervisor.js`** — Full REST API for landlord inbox and admin supervisor operations.
+- **`frontend/src/api/inbox.js`** + **`frontend/src/hooks/useInbox.js`** — API client and TanStack Query hooks for all inbox operations.
+- **`frontend/src/api/supervisor.js`** + **`frontend/src/hooks/useSupervisor.js`** + **`frontend/src/pages/admin/SupervisorPage.jsx`** — Supervisor frontend.
+- **Unit tests** — 72 new unit tests across `conversationService` (SMS/email inbound, approve, dismiss, edit, delivery failure, rate limiting, auto-mode, escalation, supervisor override) and `inboxController` (150 total, up from 78).
+
+### Fixed
+- **Audit — delivery failure ghost** — After marking a message sent in the DB, a failed Twilio/SES call left it permanently marked sent with the tenant never receiving it. `unmarkSent` now reverses the DB state on delivery failure.
+- **Audit — `:msgId` param ignored** — `approveDraft` and `dismissDraft` read `req.params.msgId` from the URL but never forwarded it, allowing any pending draft to be approved regardless of which one the UI was displaying.
+- **Audit — raw HTML to OpenAI** — HTML-only emails were passed directly to `classifyMessage` and `generateReply`, producing garbled classifications and nonsensical reply drafts. `stripHtml()` now pre-processes HTML content.
+- **Audit — redundant DB round-trip** — `_handleInbound` on the email path called `resolveLandlordForTenant` which re-fetched an already-loaded tenant record. Replaced with an inline lease lookup using the already-held `tenantRecord.id`.
+- **Audit — `findActive` incomplete status filter** — Only matched `status = 'open'`; escalated threads also require AI context. Fixed to `status IN ('open', 'escalated')`.
+- **Audit — `countRecentAiReplies` over-counted** — Manual and supervisor-override replies were counted against the AI rate limit. Fixed with `AND model_used IS NOT NULL`.
+- **Audit — race condition on double-approve** — Two concurrent approve requests could both pass the pending check and both attempt delivery. `markSent` is now the atomic gate; a `NULL` return throws 409.
+- **Audit — `resolveLandlordForTenant` ID confusion** — Function was querying leases by `userId` instead of `tenantRecord.id` (tenant PK), returning no matches for any tenant lookup.
+
+---
 ## [1.10.0] — 2026-05-14 — Sprint A: Per-landlord SMS + AI config foundation
 
 ### Added
