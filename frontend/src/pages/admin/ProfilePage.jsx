@@ -242,10 +242,11 @@ export default function AdminProfilePage() {
           </Typography>
           <Grid container spacing={2} sx={{ maxWidth: 600 }}>
             {[
-              { label: 'User Management',  desc: 'Create and manage user accounts',   icon: <ManageAccountsIcon color="action" />, path: '/users' },
-              { label: 'Audit Log',        desc: 'Review all system activity',         icon: <HistoryIcon color="action" />,        path: '/audit' },
-              { label: 'Subscriptions',    desc: 'View landlord subscription statuses', icon: <CardMembershipIcon color="action" />, path: '/subscriptions' },
-              { label: 'Team Members',     desc: 'Manage employee invitations',         icon: <PeopleIcon color="action" />,         path: '/team' },
+              { label: 'User Management',  desc: 'Create and manage user accounts',                   icon: <ManageAccountsIcon color="action" />, path: '/users' },
+              { label: 'Audit Log',        desc: 'Review all system activity',                          icon: <HistoryIcon color="action" />,        path: '/audit' },
+              { label: 'Subscriptions',    desc: 'View landlord subscription statuses',                 icon: <CardMembershipIcon color="action" />, path: '/subscriptions' },
+              { label: 'Team Members',     desc: 'Manage employee invitations',                         icon: <PeopleIcon color="action" />,         path: '/team' },
+              { label: 'AI Supervisor',    desc: 'Monitor and guide AI conversations across all landlords', icon: <SmartToyIcon color="action" />,   path: '/supervisor' },
             ].map(({ label, desc, icon, path }) => (
               <Grid item xs={12} sm={6} key={path}>
                 <Card variant="outlined" sx={{ height: '100%', '&:hover': { borderColor: 'primary.main' } }}>

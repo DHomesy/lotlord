@@ -23,10 +23,22 @@
  *   recipient_id — the matched user's UUID (required NOT NULL; unknown senders are skipped)
  */
 
-const { v4: uuidv4 }      = require('uuid');
-const { query }            = require('../config/db');
-const userRepo             = require('../dal/userRepository');
-const notificationRepo     = require('../dal/notificationRepository');
+const { v4: uuidv4 }         = require('uuid');
+const { query }               = require('../config/db');
+const userRepo                = require('../dal/userRepository');
+const notificationRepo        = require('../dal/notificationRepository');
+const conversationService     = require('./conversationService');
+
+// ── HTML stripping ────────────────────────────────────────────────────────────
+
+/**
+ * Strip HTML tags from a string to produce plain text.
+ * Used as a fallback when an email has no plain-text part — sending raw HTML
+ * to the AI would produce nonsense classification and garbled replies.
+ */
+function stripHtml(html) {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 // ── Deduplication ─────────────────────────────────────────────────────────────
 
@@ -92,8 +104,14 @@ async function processInboundEmail(msg) {
     `(userId=${sender.id}) subject="${msg.subject}" messageId=${msg.messageId}`,
   );
 
-  // 4. AI agent hook — will be wired up in the AI agent feature
-  // await aiService.handleInboundEmail({ logEntry, msg, sender });
+  // 4. AI agent hook
+  conversationService.handleInboundEmail({
+    tenantUserId: sender.id,
+    landlordId:   null,  // resolved inside service from active lease
+    content:      msg.text || (msg.html ? stripHtml(msg.html) : ''),
+    logEntryId:   logEntry.id,
+    channel:      'email',
+  }).catch((err) => console.error('[emailInbox] AI handling failed:', err.message));
 
   return logEntry;
 }

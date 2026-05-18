@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.9.3 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.11.0 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -238,7 +238,7 @@ PostgreSQL  AWS SES    Twilio      Stripe
               ┌──────────┐  ┌─────────────────┐
               │  AWS S3  │  │  OpenAI          │
               │(documents│  │  (AI Agent)      │
-              │  + infra)│  │  [planned]       │
+              │  + infra)│  │  gpt-4o-mini ✅  │
               └──────────┘  └─────────────────┘
 
 ┌─────────────────────────────────────────────┐
@@ -521,7 +521,11 @@ notification_templates
   trigger_event   TEXT CHECK (trigger_event IN (
                     'rent_due', 'rent_overdue', 'late_fee_applied',
                     'lease_expiring', 'maintenance_update',
-                    'payment_received', 'custom'
+                    'payment_received',
+                    'maintenance_submitted', 'maintenance_in_progress', 'maintenance_completed',
+                    'subscription_payment_failed', 'subscription_trial_ending',
+                    'ai_sent_reply', 'conversation_escalated',
+                    'custom'
                   ))
   subject         TEXT   -- email only
   body_template   TEXT   -- supports {{tenant_name}}, {{due_date}}, {{amount}}, etc.
@@ -552,9 +556,14 @@ notifications_log
 ai_conversations
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
   tenant_id       UUID REFERENCES tenants(id)
+  owner_id        UUID REFERENCES users(id)   -- landlord who owns this conversation (migration 032)
   channel         TEXT CHECK (channel IN ('sms', 'email'))
   thread_id       TEXT   -- external thread ref (e.g. Twilio conversation SID)
-  status          TEXT DEFAULT 'active' CHECK (status IN ('active', 'resolved', 'escalated'))
+  status          TEXT DEFAULT 'open' CHECK (status IN ('open', 'resolved', 'escalated'))
+  last_message_at TIMESTAMPTZ                  -- updated on every inbound/outbound message (migration 032)
+  unread_count    INT NOT NULL DEFAULT 0       -- increments on inbound; reset to 0 on markRead (migration 032)
+  urgency         INT CHECK (urgency BETWEEN 1 AND 5)  -- AI-classified 1=low 5=critical (migration 032)
+  category        TEXT CHECK (category IN ('maintenance','payment','lease','general'))  -- AI-classified (migration 032)
   created_at      TIMESTAMPTZ DEFAULT NOW()
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 
@@ -564,7 +573,12 @@ ai_messages
   role              TEXT CHECK (role IN ('user', 'assistant', 'system'))
   content           TEXT NOT NULL
   tokens_used       INT
-  model_used        TEXT  -- e.g. 'gpt-4o-mini'
+  model_used        TEXT   -- e.g. 'gpt-4o-mini'; NULL for manual/supervisor replies
+  suggested         BOOLEAN NOT NULL DEFAULT false   -- true = AI draft pending approval (migration 032)
+  approved_by       UUID REFERENCES users(id)        -- landlord who approved (migration 032)
+  sent_at           TIMESTAMPTZ                      -- NULL until delivered (migration 032)
+  supervisor_override BOOLEAN NOT NULL DEFAULT false -- injected by admin supervisor (migration 032)
+  override_by       UUID REFERENCES users(id)        -- admin who injected (migration 032)
   created_at        TIMESTAMPTZ DEFAULT NOW()
   -- NO updated_at — messages are immutable for audit purposes
 ```
@@ -633,6 +647,8 @@ Base URL: `/api/v1`
 | Notifications | `POST /notifications/send` (email, ad-hoc or template), `POST /notifications/send-sms` (ad-hoc SMS), `GET /notifications/log`, `GET /notifications/log/:id` |
 | Messages | `GET /notifications/messages` (conversation list), `POST /notifications/messages` (send message to tenant), `GET /notifications/messages/:tenantId` (conversation thread) |
 | Webhooks | `POST /webhooks/stripe`, `POST /webhooks/twilio/sms`, `POST /webhooks/ses` (inbound email from Lambda), `POST /webhooks/ses/bounce` (SNS bounce/complaint) |
+| AI Inbox | `GET /inbox`, `GET /inbox/:id`, `PATCH /inbox/:id` (resolve/escalate), `POST /inbox/:id/reply`, `POST /inbox/:id/messages/:msgId/approve`, `DELETE /inbox/:id/messages/:msgId` |
+| AI Supervisor | `GET /supervisor/conversations`, `POST /supervisor/conversations/:id/override`, `PATCH /supervisor/conversations/:id` (admin only) |
 | AI | `GET /ai/conversations`, `GET /ai/conversations/:id/messages` |
 | Audit Log | `GET /audit` (admin only; query params: `resourceType`, `action`, `userId`, `resourceId`, `startDate`, `endDate`, `page`, `limit`) |
 | Health | `GET /health` → `{ status, version, env }` — unauthenticated; useful for uptime monitoring |

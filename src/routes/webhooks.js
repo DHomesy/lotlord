@@ -1,12 +1,29 @@
 const router = require('express').Router();
 const express = require('express');
+const crypto = require('crypto');
 const twilio = require('twilio');
 const { v4: uuidv4 } = require('uuid');
 const stripeService = require('../services/stripeService');
 const emailInboxService = require('../services/emailInboxService');
+const conversationService = require('../services/conversationService');
 const userRepo = require('../dal/userRepository');
 const notificationRepo = require('../dal/notificationRepository');
 const env = require('../config/env');
+
+/**
+ * Constant-time secret comparison — prevents timing-based brute-force of webhook secrets.
+ * Returns false (rather than throwing) when lengths differ so callers just reject.
+ */
+function safeCompare(a, b) {
+  try {
+    const bA = Buffer.from(String(a));
+    const bB = Buffer.from(String(b));
+    if (bA.length !== bB.length) return false;
+    return crypto.timingSafeEqual(bA, bB);
+  } catch {
+    return false;
+  }
+}
 
 // POST /api/v1/webhooks/stripe
 // Raw body required — see app.js for the express.raw() middleware scoped to this path
@@ -89,14 +106,14 @@ router.post('/twilio/sms', async (req, res) => {
       });
       console.info(`[twilio inbound] Matched sender=${sender.id} landlord=${landlord?.id ?? 'none'}`);
 
-      // ── AI agent hook (wired in Sprint B) ─────────────────────────────────────
-      // conversationService.handleInboundSms({
-      //   tenantUserId: sender.id,
-      //   landlordId:   landlord?.id ?? null,
-      //   content:      body,
-      //   logEntryId:   logEntry.id,
-      //   channel:      'sms',
-      // }).catch(err => console.error('[twilio] AI handling failed:', err.message));
+      // ── AI agent hook ─────────────────────────────────────────────────────────
+      conversationService.handleInboundSms({
+        tenantUserId: sender.id,
+        landlordId:   landlord?.id ?? null,
+        content:      body,
+        logEntryId:   logEntry.id,
+        channel:      'sms',
+      }).catch((err) => console.error('[twilio] AI handling failed:', err.message));
     }
   } catch (err) {
     // Non-fatal — still acknowledge Twilio so they don't retry
@@ -118,8 +135,8 @@ router.post('/ses', async (req, res) => {
   // ── 1. Verify webhook secret ──────────────────────────────────────────────────
   // Skipped if SES_WEBHOOK_SECRET is not configured (allows local dev testing via Postman)
   if (env.SES_WEBHOOK_SECRET) {
-    const secret = req.headers['x-webhook-secret'];
-    if (secret !== env.SES_WEBHOOK_SECRET) {
+    const secret = req.headers['x-webhook-secret'] || '';
+    if (!safeCompare(secret, env.SES_WEBHOOK_SECRET)) {
       console.warn('[ses webhook] Invalid webhook secret — rejecting request');
       return res.status(401).json({ error: 'Invalid webhook secret' });
     }
@@ -158,7 +175,7 @@ router.post('/ses/bounce', express.json({ type: '*/*', limit: '64kb' }), async (
     // ── Secret guard ──────────────────────────────────────────────────────────
     // The CDK stack includes ?secret=<SES_WEBHOOK_SECRET> in the SNS subscription URL.
     // This prevents unauthenticated callers from triggering markEmailBounced on arbitrary addresses.
-    if (env.SES_WEBHOOK_SECRET && req.query.secret !== env.SES_WEBHOOK_SECRET) {
+    if (env.SES_WEBHOOK_SECRET && !safeCompare(req.query.secret || '', env.SES_WEBHOOK_SECRET)) {
       console.warn('[ses/bounce] Invalid or missing secret query param — ignoring notification');
       return;
     }
