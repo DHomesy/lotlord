@@ -1,30 +1,28 @@
 /**
- * Development seed — populates the DB with a clean QA baseline.
+ * Development grant script — upgrades a landlord account to enterprise plan.
  * Run: npm run seed
  *
- * WARNING: This will DELETE all existing data. Do not run against production.
+ * This script does NOT delete any data. All existing properties, tenants,
+ * leases, and charges are preserved.
  *
- * Accounts created:
- *   admin@lotlord.app      / password123  — Admin
- *   landlord@lotlord.app   / password123  — Landlord (enterprise plan, no Stripe required)
+ * Configure the target account via your .env file (never put real email
+ * addresses directly in this file — .env is gitignored, this file is not).
  *
- * Tenant: sign up manually via the frontend after running this seed.
- * The landlord has a property with vacant units ready to assign.
+ * Required in .env:
+ *   SEED_LANDLORD_EMAIL   email of the landlord account to upgrade
  *
- * Enterprise plan is set directly in the DB — subscription_status='active',
- * subscription_plan='enterprise'. No Stripe Customer ID is needed; the plan
- * gates only read these two columns.
+ * Falls back to 'landlord@lotlord.app' if the variable is not set (CI/other devs).
  */
 
 require('dotenv').config();
 const { Pool } = require('pg');
-const bcrypt = require('bcryptjs');
-const { v4: uuidv4 } = require('uuid');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
+
+const LANDLORD_EMAIL = process.env.SEED_LANDLORD_EMAIL || 'landlord@lotlord.app';
 
 async function seed() {
   const client = await pool.connect();
@@ -32,125 +30,43 @@ async function seed() {
   try {
     await client.query('BEGIN');
 
-    // ── Wipe all data in FK-safe order ────────────────────────────────────────
-    console.log('[seed] Clearing existing data...');
-    await client.query('DELETE FROM ai_messages');
-    await client.query('DELETE FROM ai_conversations');
-    await client.query('DELETE FROM audit_log');
-    await client.query('DELETE FROM notifications_log');
-    await client.query('DELETE FROM notification_templates');
-    await client.query('DELETE FROM documents');
-    await client.query('DELETE FROM maintenance_attachments');
-    await client.query('DELETE FROM maintenance_requests');
-    await client.query('DELETE FROM ledger_entries');
-    await client.query('DELETE FROM rent_payments');
-    await client.query('DELETE FROM rent_charges');
-    await client.query('DELETE FROM tenant_invitations');
-    await client.query('DELETE FROM password_reset_tokens');
-    await client.query('DELETE FROM leases');
-    await client.query('DELETE FROM tenants');
-    await client.query('DELETE FROM units');
-    await client.query('DELETE FROM properties');
-    await client.query('DELETE FROM users');
+    console.log(`[seed] Granting enterprise plan to ${LANDLORD_EMAIL}...`);
 
-    // ── Users ─────────────────────────────────────────────────────────────────
-    console.log('[seed] Creating users...');
-    const adminId    = uuidv4();
-    const landlordId = uuidv4();
-    const passwordHash = await bcrypt.hash('password123', 10);
-
-    // Admin
-    await client.query(
-      `INSERT INTO users (id, email, password_hash, role, first_name, last_name, phone, accepted_terms)
-       VALUES ($1, $2, $3, 'admin', 'Admin', 'User', '+15550000001', true)`,
-      [adminId, 'admin@lotlord.app', passwordHash],
+    const result = await client.query(
+      `UPDATE users
+          SET subscription_status  = 'active',
+              subscription_plan    = 'enterprise',
+              ai_enabled           = true,
+              ai_reply_mode        = 'approval',
+              ai_notify_on_send    = true,
+              ai_notify_channels   = ARRAY['email'],
+              updated_at           = NOW()
+        WHERE email = $1
+        RETURNING id, email, role`,
+      [LANDLORD_EMAIL],
     );
 
-    // Enterprise landlord — subscription set directly in DB, no Stripe Customer ID needed.
-    // The requiresStarter / requiresEnterprise middleware only checks subscription_status
-    // and subscription_plan; it never validates a Stripe ID at runtime.
-    await client.query(
-      `INSERT INTO users (id, email, password_hash, role, first_name, last_name, phone,
-                          subscription_status, subscription_plan, accepted_terms,
-                          ai_enabled, ai_reply_mode, ai_notify_on_send, ai_notify_channels)
-       VALUES ($1, $2, $3, 'landlord', 'Alex', 'Morgan', '+15550000002',
-               'active', 'enterprise', true,
-               true, 'approval', true, ARRAY['email'])`,
-      [landlordId, 'landlord@lotlord.app', passwordHash],
-    );
+    if (result.rowCount === 0) {
+      throw new Error(
+        `No user found with email "${LANDLORD_EMAIL}". ` +
+        `Create the account first, then re-run npm run seed.`,
+      );
+    }
 
-    // ── Property — multi-family with mix of vacant + occupied-ready units ─────
-    console.log('[seed] Creating property & units...');
-    const propertyId = uuidv4();
-    await client.query(
-      `INSERT INTO properties (id, owner_id, name, address_line1, city, state, zip, property_type)
-       VALUES ($1, $2, 'Maple Ridge Apartments', '123 Maple Street', 'Austin', 'TX', '78701', 'multi')`,
-      [propertyId, landlordId],
-    );
-
-    // Unit 101 — vacant, ready to assign to the tenant you sign up manually
-    const unit101Id = uuidv4();
-    await client.query(
-      `INSERT INTO units (id, property_id, unit_number, bedrooms, bathrooms, sq_ft, rent_amount, deposit_amount, status)
-       VALUES ($1, $2, '101', 2, 1, 850, 1450.00, 1450.00, 'vacant')`,
-      [unit101Id, propertyId],
-    );
-
-    // Unit 102 — vacant
-    const unit102Id = uuidv4();
-    await client.query(
-      `INSERT INTO units (id, property_id, unit_number, bedrooms, bathrooms, sq_ft, rent_amount, deposit_amount, status)
-       VALUES ($1, $2, '102', 1, 1, 620, 1100.00, 1100.00, 'vacant')`,
-      [unit102Id, propertyId],
-    );
-
-    // Unit 103 — vacant
-    const unit103Id = uuidv4();
-    await client.query(
-      `INSERT INTO units (id, property_id, unit_number, bedrooms, bathrooms, sq_ft, rent_amount, deposit_amount, status)
-       VALUES ($1, $2, '103', 3, 2, 1150, 1800.00, 1800.00, 'vacant')`,
-      [unit103Id, propertyId],
-    );
-
-    // Second property — single family, vacant
-    console.log('[seed] Creating second property...');
-    const property2Id = uuidv4();
-    await client.query(
-      `INSERT INTO properties (id, owner_id, name, address_line1, city, state, zip, property_type)
-       VALUES ($1, $2, '204 Oak House', '204 Oak Avenue', 'Austin', 'TX', '78703', 'single')`,
-      [property2Id, landlordId],
-    );
-
-    const unitHouseId = uuidv4();
-    await client.query(
-      `INSERT INTO units (id, property_id, unit_number, bedrooms, bathrooms, sq_ft, rent_amount, deposit_amount, status)
-       VALUES ($1, $2, 'HOUSE', 4, 2, 1800, 2800.00, 2800.00, 'vacant')`,
-      [unitHouseId, property2Id],
-    );
-
-    // ── Notification templates ────────────────────────────────────────────────
-    console.log('[seed] Creating notification templates...');
-    await client.query(
-      `INSERT INTO notification_templates (id, name, channel, trigger_event, subject, body_template)
-       VALUES ($1, 'Rent Due Reminder', 'email', 'rent_due',
-               'Rent Due Soon — {{property}} Unit {{unit}}',
-               'Hi {{tenant_name}},\n\nThis is a reminder that your rent of ${{amount}} is due on {{due_date}}.\n\nThank you!')`,
-      [uuidv4()],
-    );
+    const user = result.rows[0];
+    if (user.role !== 'landlord') {
+      throw new Error(
+        `User "${LANDLORD_EMAIL}" has role "${user.role}" — expected "landlord". ` +
+        `Only landlord accounts can hold a subscription plan.`,
+      );
+    }
 
     await client.query('COMMIT');
     console.log('\n[seed] Done ✓');
     console.log('');
-    console.log('  admin@lotlord.app      / password123  — Admin');
-    console.log('  landlord@lotlord.app   / password123  — Landlord (enterprise, AI enabled)');
+    console.log(`  ${user.email}  →  enterprise plan, AI inbox enabled (approval mode)`);
     console.log('');
-    console.log('  Properties:');
-    console.log('    Maple Ridge Apartments  — Units 101 (2br), 102 (1br), 103 (3br)  all vacant');
-    console.log('    204 Oak House           — HOUSE (4br)  vacant');
-    console.log('');
-    console.log('  Next steps:');
-    console.log('    1. Sign up a tenant via the frontend (POST /api/v1/auth/register)');
-    console.log('    2. Log in as landlord and send them an invitation, or create a lease directly');
+    console.log('  No data was deleted. All existing properties, tenants, and leases are intact.');
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[seed] Failed, rolled back:', err.message);
