@@ -5,7 +5,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "npm run migrate:up && npm start"
+startCommand = "npm run migrate:up && npm start && npm run seed"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
