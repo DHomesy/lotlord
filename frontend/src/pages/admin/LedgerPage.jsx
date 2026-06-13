@@ -99,7 +99,7 @@ function PortfolioTab() {
             </Button>
           }
         >
-          <strong>Portfolio Summary</strong> is a Starter plan feature. Upgrade to view cross-property
+          <strong>Portfolio Summary</strong> is a Growth plan feature. Upgrade to view cross-property
           income, outstanding balances, and net income analytics.
         </Alert>
       )}

@@ -11,7 +11,16 @@
  *   1. Deduplicate — skip messages already in notifications_log.external_id.
  *   2. Match sender email to a known user.
  *   3. Log to notifications_log (channel='email', status='received').
- *   4. Expose a hook point for the AI agent.
+ *   4. Extract conversationId from In-Reply-To for direct thread routing (F2).
+ *   5. Hand off to conversationService for AI processing.
+ *
+ * Conversation threading (F2):
+ *   Outbound conversation emails carry Message-ID: <conv-<uuid>-<ts>@domain>.
+ *   When the tenant replies, their client sets In-Reply-To to that Message-ID.
+ *   The regex below extracts the UUID and passes it as `conversationId` so the
+ *   conversation service can route directly to the correct thread without
+ *   a find-or-create lookup. Falls back gracefully when In-Reply-To is absent,
+ *   malformed, or references a conversation that doesn’t belong to this tenant.
  *
  * Schema columns used from notifications_log:
  *   external_id  — RFC 2822 Message-ID (UNIQUE, prevents double-processing retried webhooks)
@@ -104,13 +113,26 @@ async function processInboundEmail(msg) {
     `(userId=${sender.id}) subject="${msg.subject}" messageId=${msg.messageId}`,
   );
 
-  // 4. AI agent hook
+  // 4. Extract conversationId from the In-Reply-To header if present.
+  // Outbound emails from conversation threads set Message-ID: <conv-<uuid>-<ts>@domain>
+  // so the tenant's email client will set In-Reply-To: <conv-<uuid>-<ts>@domain> on reply.
+  // Parsing this lets us route directly to the correct conversation without a DB lookup.
+  const CONV_ID_RE = /conv-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+  const convMatch  = msg.inReplyTo ? CONV_ID_RE.exec(msg.inReplyTo) : null;
+  const conversationId = convMatch ? convMatch[1] : undefined;
+
+  if (conversationId) {
+    console.info(`[emailInbox] Routing reply to conversationId=${conversationId} via In-Reply-To`);
+  }
+
+  // 5. AI agent hook
   conversationService.handleInboundEmail({
-    tenantUserId: sender.id,
-    landlordId:   null,  // resolved inside service from active lease
-    content:      msg.text || (msg.html ? stripHtml(msg.html) : ''),
-    logEntryId:   logEntry.id,
-    channel:      'email',
+    tenantUserId:  sender.id,
+    landlordId:    null,  // resolved inside service from active lease
+    content:       msg.text || (msg.html ? stripHtml(msg.html) : ''),
+    logEntryId:    logEntry.id,
+    channel:       'email',
+    conversationId,
   }).catch((err) => console.error('[emailInbox] AI handling failed:', err.message));
 
   return logEntry;

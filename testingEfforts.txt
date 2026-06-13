@@ -157,3 +157,76 @@ I4 — Ledger Portfolio tab
 I5 — Test suite still green
 
  Run npm test → confirm 192 tests pass, 0 failures
+
+────────────────────────────────────────────────────────────────
+SECTION G — Sprint C (v1.12.0) QA Fixes, UI Polish & Email Threading
+────────────────────────────────────────────────────────────────
+
+G1 — B1: Unit edit for occupied units
+ Log in as landlord → go to Properties → open a property with an occupied unit
+ Click the edit (pencil) icon on an occupied unit
+ Confirm the edit drawer/dialog opens without errors and fields are pre-populated
+ Save without changing anything → confirm success, unit remains occupied
+ Change unit_number or notes → save → confirm PATCH fires and changes persist
+ Confirm status field shows "occupied" but cannot be changed to an invalid value
+
+G2 — B2: Admin charges in-transit amount
+ Log in as landlord → go to Charges
+ Filter to a property that has a charge with a pending ACH payment (partial or full)
+ Confirm the "in transit" amount shown matches the actual pending payment amount (not the full charge)
+ Confirm the balance displayed is correct (charge amount minus total paid)
+
+G3 — F1: Void guard on charges with payments
+ Log in as landlord → go to Charges
+ Open a charge that has at least one completed or pending payment
+ Attempt to void it → confirm a 409 error is shown: "Cannot void a charge that has existing payments..."
+ Open a charge with NO payments → void it → confirm success
+
+G4 — I1: Plan rename Starter → Growth
+ Log out → go to the landing page → confirm pricing tier shows "Growth" (not "Starter")
+ Log in as landlord → go to Profile/Billing → confirm "Growth plan" in any upgrade prompts
+ Go to Messages, Ledger, Team pages → confirm no "Starter plan" wording anywhere in the UI
+ Confirm Postman: GET /api/v1/users/me still returns subscription_plan: "starter" (key unchanged)
+
+G5 — I2: Free tier full inbox UI
+ Log in as landlord on free tier (no active subscription)
+ Go to Messages → confirm "New Message" button is visible and clickable (not disabled/tooltipped)
+ Confirm Conversations tab shows conversation list with no upsell alert blocking it
+ Confirm Automation tab still shows an upgrade prompt (automation requires paid plan)
+ Send a message to a tenant → confirm it delivers normally
+
+G6 — I3: Charges filter UX
+ Log in as landlord → go to Charges
+ Confirm filter section is inside a bordered Paper card
+ Confirm a Divider separates the property/lease selectors from the status toggle buttons
+ Test all status toggles (All / Unpaid / Pending / Paid / Voided) filter results correctly
+
+G7 — I4: Charges card layout + "Main" unit label
+ Log in as landlord → go to Charges → select a property
+ Confirm charges display as cards (not a DataGrid table)
+ Confirm each card shows: property name, unit label, charge type, description, amount, status chip
+ Open a single-family property → confirm unit label shows "Main" (not a unit number)
+ Open a multi-unit property → confirm unit label shows the actual unit number (e.g. "Unit 2B")
+ Log in as tenant → go to Charges → confirm card layout with Pay button on unpaid charges
+ Click Pay → confirm PaymentDialog opens correctly
+
+G8 — I5: Tenant phone at signup
+ Go to /register → confirm optional Phone field appears between Password and Terms checkbox
+ Register with no phone → confirm registration succeeds
+ Register with a valid phone (e.g. +1 555 000 0000) → confirm registration succeeds
+ Enter an invalid phone (e.g. "abc") → confirm validation error appears before submit
+ After registration, go to Profile → confirm phone is stored and can be updated
+
+G9 — F2: Tenant email reply threading
+ Log in as landlord → go to Messages → send a message to a tenant
+ Log in as the tenant email client (or check delivered email) → confirm Reply-To is the configured SES address
+ Reply to the email → confirm the reply appears in the correct conversation thread in Messages
+ Confirm the reply is NOT creating a new conversation (should append to existing)
+ Test with a tenant who has no prior conversation → confirm new conversation is created
+ Security: attempt to craft an In-Reply-To with a different tenant's conversation UUID → confirm message is NOT injected into that conversation (falls back to find-or-create for the replying tenant)
+
+G10 — Regression
+ Run npm test → confirm all tests still pass
+ Build frontend: cd frontend && npm run build → confirm no build errors
+ Load Charges page (admin and tenant) → confirm no console errors
+ Load Messages page → confirm no console errors

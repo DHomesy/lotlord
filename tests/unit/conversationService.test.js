@@ -454,6 +454,17 @@ describe('sendManualReply', () => {
     }));
   });
 
+  test('passes messageId containing conversationId to sendAdhoc for email channel (F2 threading)', async () => {
+    convRepo.findById.mockResolvedValue({ ...mockConversation, channel: 'email' });
+    notificationService.sendAdhoc = jest.fn().mockResolvedValue({});
+
+    await conversationService.sendManualReply(CONV_ID, { content: 'Email reply', senderId: LANDLORD_ID });
+
+    const callArgs = notificationService.sendAdhoc.mock.calls[0][0];
+    // messageId must encode the conversationId so the tenant's reply client threads correctly
+    expect(callArgs.messageId).toMatch(new RegExp(`^<conv-${CONV_ID}-\\d+@`));
+  });
+
   test('throws 404 when conversation not found', async () => {
     convRepo.findById.mockResolvedValue(null);
     await expect(conversationService.sendManualReply(CONV_ID, { content: 'Hi', senderId: LANDLORD_ID }))
@@ -524,6 +535,77 @@ describe('handleInboundEmail', () => {
     });
 
     expect(convRepo.create).toHaveBeenCalledWith(expect.objectContaining({ channel: 'email' }));
+  });
+
+  // ── F2 threading: directConvId ─────────────────────────────────────────────
+
+  test('routes directly to existing conversation when valid conversationId hint is provided', async () => {
+    tenantRepo.findByUserId.mockResolvedValue(mockTenantRecord);
+    // The found conversation belongs to this tenant — hint is trusted
+    convRepo.findById.mockResolvedValue({ ...mockConversation, tenant_id: TENANT_ID });
+    convRepo.appendMessage.mockResolvedValue({ id: 'msg-1' });
+    convRepo.touchOnInbound.mockResolvedValue();
+    userRepo.findById.mockResolvedValue({ ...mockLandlord, ai_enabled: false });
+
+    await conversationService.handleInboundEmail({
+      tenantUserId: TENANT_USER_ID, landlordId: LANDLORD_ID,
+      content: 'Threaded reply', logEntryId: LOG_ENTRY_ID,
+      conversationId: CONV_ID,
+    });
+
+    // Must use findById (direct routing), never findActive or create
+    expect(convRepo.findById).toHaveBeenCalledWith(CONV_ID);
+    expect(convRepo.findActive).not.toHaveBeenCalled();
+    expect(convRepo.create).not.toHaveBeenCalled();
+    expect(convRepo.appendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: CONV_ID, role: 'user',
+    }));
+  });
+
+  test('falls back to find-or-create when directConvId belongs to a different tenant (OWASP A01 security guard)', async () => {
+    tenantRepo.findByUserId.mockResolvedValue(mockTenantRecord);
+    // Conversation belongs to a DIFFERENT tenant — hint must be discarded
+    convRepo.findById.mockResolvedValue({ ...mockConversation, tenant_id: 'other-tenant-uuid' });
+    convRepo.findActive.mockResolvedValue(null);
+    const newConv = { ...mockConversation, id: 'new-conv-uuid' };
+    convRepo.create.mockResolvedValue(newConv);
+    convRepo.appendMessage.mockResolvedValue({ id: 'msg-1' });
+    convRepo.touchOnInbound.mockResolvedValue();
+    userRepo.findById.mockResolvedValue({ ...mockLandlord, ai_enabled: false });
+
+    await conversationService.handleInboundEmail({
+      tenantUserId: TENANT_USER_ID, landlordId: LANDLORD_ID,
+      content: 'Injection attempt', logEntryId: LOG_ENTRY_ID,
+      conversationId: CONV_ID,
+    });
+
+    // Hint discarded — normal find-or-create path runs
+    expect(convRepo.findActive).toHaveBeenCalled();
+    // Message appended to the legitimately created conversation, not the attacker's target
+    expect(convRepo.appendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: 'new-conv-uuid',
+    }));
+  });
+
+  test('falls back to find-or-create when directConvId is not found in DB', async () => {
+    tenantRepo.findByUserId.mockResolvedValue(mockTenantRecord);
+    convRepo.findById.mockResolvedValue(null); // stale / deleted conversation
+    convRepo.findActive.mockResolvedValue(mockConversation);
+    convRepo.appendMessage.mockResolvedValue({ id: 'msg-1' });
+    convRepo.touchOnInbound.mockResolvedValue();
+    userRepo.findById.mockResolvedValue({ ...mockLandlord, ai_enabled: false });
+
+    await conversationService.handleInboundEmail({
+      tenantUserId: TENANT_USER_ID, landlordId: LANDLORD_ID,
+      content: 'Reply to old thread', logEntryId: LOG_ENTRY_ID,
+      conversationId: 'stale-conv-uuid',
+    });
+
+    expect(convRepo.findActive).toHaveBeenCalled();
+    expect(convRepo.create).not.toHaveBeenCalled(); // findActive returned existing conv
+    expect(convRepo.appendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: CONV_ID,
+    }));
   });
 });
 

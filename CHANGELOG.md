@@ -8,6 +8,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.12.0] — 2026-05-18 — Sprint C: QA Fixes, UI Polish & Email Threading
+
+### Added
+- **Tenant email reply threading (F2)** — Outbound conversation emails now carry a custom `Message-ID: <conv-<uuid>-<ts>@domain>` header. When a tenant hits Reply, their email client sets `In-Reply-To` to that value. The SES Lambda already forwarded `inReplyTo`; `emailInboxService` now extracts the UUID from it and routes the reply directly to the correct AI conversation thread — no database scan or find-or-create needed. Falls back gracefully when `In-Reply-To` is absent or malformed.
+- **Phone at tenant signup (I5)** — Optional phone field added to the registration form with E.164-friendly regex validation and a "Used for SMS rent reminders" helper text. Backend validator already accepted phone at registration.
+- **Charges card layout (I4)** — Admin and tenant Charges pages now render a card-per-charge layout instead of a DataGrid table. Admin cards show property name, unit label, charge type, description, amount cell, status chip, and due date. Single-family properties display "Main" instead of the raw unit number. Cards use a coloured left border keyed to status (success/warning/info/default).
+- **"Main" unit label (I4)** — When `property_type = 'single'`, unit labels across the Charges card views render as "Main" regardless of the stored `unit_number`. Backend `findCharges` query now includes `p.id AS property_id_resolved` and `p.property_type` to support this without a second fetch.
+
+### Changed
+- **Plan renamed Starter → Growth (I1)** — All UI display strings updated across `plans.js`, `LandingPage.jsx`, `MessagesPage.jsx`, `LedgerPage.jsx`, `TeamPage.jsx`. Internal DB key `'starter'`, middleware guard names (`requiresStarter`), and frontend store keys are all unchanged — display only.
+- **Free tier gets full messaging UI (I2)** — The New Message button and conversation list are no longer gated behind the Growth plan on the frontend. Automated notifications still require Growth or above. AI inbox features are gated by `ai_enabled` on the landlord account (enterprise).
+- **Charges filter UX (I3)** — Admin ChargesPage filter section is now wrapped in a `Paper variant="outlined"` container with a `Divider` separating the property/lease selectors from the status toggle buttons.
+
+### Fixed
+- **Unit edit fails for occupied units (B1)** — `UnitForm.jsx` `editSchema` `status` enum now includes `'occupied'`. Previously Zod rejected the defaultValue when editing an occupied unit, silently preventing `onSubmit` from firing. `handleUpdateUnit` already strips `occupied` before the PATCH.
+- **Admin charges "in transit" showed full amount (B2)** — `pendingAmount={row.pending_amount}` was missing from the `ChargeAmountCell` call in the admin columns definition. The component defaulted `inTransit` to 0, showing the full charge amount as in-transit regardless of the actual pending payment.
+- **Void blocked when charge has payments (F1)** — `voidCharge` controller now fetches active (non-voided, non-failed) payments for the charge before marking it void. If any exist, a `409 CHARGE_HAS_PAYMENTS` error is returned. Previously voiding a partially-paid charge orphaned the payment record with no refund trail.
+
+### Security
+- **Cross-tenant message injection via forged In-Reply-To (F2 audit)** — When routing an inbound email reply via a `conversationId` extracted from `In-Reply-To`, the service now verifies that `conv.tenant_id === tenantRecord.id` before trusting the hint. A crafted email header with a different tenant's conversation ID is silently discarded and falls back to find-or-create. (OWASP A01: Broken Access Control)
+
+---
 ## [1.11.0] — 2026-05-14 — Sprint B: AI Inbox + Approval Flow + Supervisor View
 
 ### Added

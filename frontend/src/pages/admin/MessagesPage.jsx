@@ -437,7 +437,7 @@ function AutomationTab({ navigate, isPaid }) {
             </Button>
           }
         >
-          Automated notifications are delivered to tenants on the <strong>Starter plan ($15/mo)</strong> and above.
+          Automated notifications are delivered to tenants on the <strong>Growth plan ($15/mo)</strong> and above.
           On the free plan the jobs still run but no messages are delivered.
         </Alert>
       )}
@@ -1031,18 +1031,13 @@ export default function MessagesPage() {
       title="Messages"
       actions={
         tab === 0 ? (
-          <Tooltip title={!isPaid ? 'Requires Starter plan' : ''}>
-            <span>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => setComposeOpen(true)}
-                disabled={!isPaid}
-              >
-                New Message
-              </Button>
-            </span>
-          </Tooltip>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setComposeOpen(true)}
+          >
+            New Message
+          </Button>
         ) : null
       }
     >
@@ -1056,19 +1051,7 @@ export default function MessagesPage() {
       {/* ── Conversations ─────────────────────────────────────────────────── */}
       {tab === 0 && (
         <>
-          {!isPaid && (
-            <Alert
-              severity="info"
-              sx={{ mb: 2 }}
-              action={
-                <Button size="small" variant="contained" onClick={() => navigate('/profile?upgrade=1')}>
-                  Upgrade
-                </Button>
-              }
-            >
-              Sending messages to tenants requires the <strong>Starter plan ($15/mo)</strong>.
-            </Alert>
-          )}
+
           <Paper
             variant="outlined"
             sx={{ display: 'flex', height: 'calc(100vh - 240px)', minHeight: 400, overflow: 'hidden' }}

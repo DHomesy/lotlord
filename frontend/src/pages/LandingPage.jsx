@@ -79,7 +79,7 @@ const FAQ = [
   },
   {
     q: "What's included in the free plan?",
-    a: '1 property · up to 4 units · up to 4 active tenants · online ACH rent collection · tenant portal access · lease management · maintenance request tracking · document storage. Portfolio analytics require a Starter or higher plan.',
+    a: '1 property · up to 4 units · up to 4 active tenants · online ACH rent collection · tenant portal access · lease management · maintenance request tracking · document storage. Portfolio analytics require a Growth or higher plan.',
   },
   {
     q: 'How does online rent collection work?',
@@ -120,7 +120,7 @@ const PLANS = [
     badge: null,
   },
   {
-    name: 'Starter',
+    name: 'Growth',
     price: '$15',
     period: '/ mo',
     description: 'Ideal for growing landlords managing multiple properties.',
@@ -135,7 +135,7 @@ const PLANS = [
     price: '$49',
     period: '/ mo',
     description: 'For serious landlords with large or growing residential portfolios.',
-    features: ['Unlimited properties', 'Single & multi-family (up to 4 units each)', 'Team members — add staff & property managers', 'AI features (coming soon)', 'Document signing (coming soon)', 'Everything in Starter'],
+    features: ['Unlimited properties', 'Single & multi-family (up to 4 units each)', 'Team members — add staff & property managers', 'AI features (coming soon)', 'Document signing (coming soon)', 'Everything in Growth'],
     cta: 'Get Started',
     ctaVariant: 'outlined',
     highlight: false,

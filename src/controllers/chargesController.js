@@ -1,7 +1,8 @@
 const { v4: uuidv4 } = require('uuid');
-const ledgerRepo = require('../dal/ledgerRepository');
-const tenantRepo = require('../dal/tenantRepository');
-const leaseRepo  = require('../dal/leaseRepository');
+const ledgerRepo  = require('../dal/ledgerRepository');
+const tenantRepo  = require('../dal/tenantRepository');
+const leaseRepo   = require('../dal/leaseRepository');
+const paymentRepo = require('../dal/paymentRepository');
 const { getClient, query } = require('../config/db');
 const audit = require('../services/auditService');
 const { resolveOwnerId } = require('../lib/authHelpers');
@@ -280,6 +281,17 @@ async function voidCharge(req, res, next) {
     if (charge.voided_at) return res.status(409).json({ error: 'Charge is already voided' });
 
     await assertLandlordOwnsUnit(charge.unit_id, req.user);
+
+    // Block void if any payment (completed or pending) exists against this charge.
+    // Voiding would orphan the payment record and corrupt the ledger balance.
+    const existingPayment = await paymentRepo.findByChargeId(charge.id);
+    const activePayments = existingPayment.filter((p) => p.status !== 'voided' && p.status !== 'failed');
+    if (activePayments.length > 0) {
+      return res.status(409).json({
+        error: 'Cannot void a charge that has existing payments. Record a refund or credit instead.',
+        code: 'CHARGE_HAS_PAYMENTS',
+      });
+    }
 
     const result = await ledgerRepo.voidCharge({
       chargeId:  charge.id,

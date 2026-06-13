@@ -45,9 +45,9 @@ async function resolveRecipientPhone(recipientId) {
 /**
  * Internal: send an email and update the log entry status.
  */
-async function executeSend({ logId, recipientEmail, subject, html, text }) {
+async function executeSend({ logId, recipientEmail, subject, html, text, messageId }) {
   try {
-    await email.sendEmail({ to: recipientEmail, subject, html, text });
+    await email.sendEmail({ to: recipientEmail, subject, html, text, messageId });
     await notificationRepo.updateLogEntry(logId, {
       status: 'sent',
       sentAt: new Date().toISOString(),
@@ -100,7 +100,7 @@ async function executeSendSms({ logId, to, body, fromNumber }) {
  * @param {string} [opts.text]       - Optional plain-text fallback
  * @returns {Promise<object>}        - The notifications_log row
  */
-async function sendAdhoc({ recipientId, subject, html, text }) {
+async function sendAdhoc({ recipientId, subject, html, text, messageId }) {
   const recipient = await resolveRecipient(recipientId);
 
   const logEntry = await notificationRepo.createLogEntry({
@@ -113,7 +113,7 @@ async function sendAdhoc({ recipientId, subject, html, text }) {
     body: html,
   });
 
-  await executeSend({ logId: logEntry.id, recipientEmail: recipient.email, subject, html, text });
+  await executeSend({ logId: logEntry.id, recipientEmail: recipient.email, subject, html, text, messageId });
   return notificationRepo.findLogById(logEntry.id);
 }
 

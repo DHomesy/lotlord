@@ -365,3 +365,147 @@ describe('GET /api/v1/charges/:id — employee IDOR + co-tenant access (Final Au
     expect(res.status).toBe(200);
   });
 });
+
+// ── POST /api/v1/charges/:id/void (F1 — void guard) ──────────────────────────
+// Each test gets a fresh charge via beforeEach so mutations don't bleed across cases.
+
+describe('POST /api/v1/charges/:id/void', () => {
+  let voidChargeId;
+
+  beforeEach(async () => {
+    voidChargeId = uuidv4();
+    await fx.pool.query(
+      `INSERT INTO rent_charges (id, unit_id, lease_id, tenant_id, charge_type, amount, due_date)
+       VALUES ($1, $2, $3, $4, 'rent', 750, CURRENT_DATE + INTERVAL '3 months')`,
+      [voidChargeId, fx.unitA.id, fx.leaseA.id, fx.tenantA.tenantProfileId],
+    );
+  });
+
+  afterEach(async () => {
+    await fx.pool.query(`DELETE FROM rent_payments WHERE charge_id = $1`, [voidChargeId]);
+    await fx.pool.query(`DELETE FROM rent_charges   WHERE id = $1`,       [voidChargeId]);
+  });
+
+  it('returns 200 and stamps voided_at / voided_by on success', async () => {
+    const res = await request(app)
+      .post(`/api/v1/charges/${voidChargeId}/void`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+
+    expect(res.status).toBe(200);
+
+    const { rows } = await fx.pool.query(
+      `SELECT voided_at, voided_by FROM rent_charges WHERE id = $1`,
+      [voidChargeId],
+    );
+    expect(rows[0].voided_at).not.toBeNull();
+    expect(rows[0].voided_by).toBe(fx.landlordA.id);
+  });
+
+  it('returns 409 with code CHARGE_HAS_PAYMENTS when a completed payment exists', async () => {
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, $3, 750, CURRENT_DATE, 'stripe', 'completed')`,
+      [uuidv4(), fx.leaseA.id, voidChargeId],
+    );
+
+    const res = await request(app)
+      .post(`/api/v1/charges/${voidChargeId}/void`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('CHARGE_HAS_PAYMENTS');
+
+    // Charge must remain un-voided
+    const { rows } = await fx.pool.query(
+      `SELECT voided_at FROM rent_charges WHERE id = $1`, [voidChargeId],
+    );
+    expect(rows[0].voided_at).toBeNull();
+  });
+
+  it('returns 409 with code CHARGE_HAS_PAYMENTS when a pending (in-flight) payment exists', async () => {
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, $3, 750, CURRENT_DATE, 'stripe', 'pending')`,
+      [uuidv4(), fx.leaseA.id, voidChargeId],
+    );
+
+    const res = await request(app)
+      .post(`/api/v1/charges/${voidChargeId}/void`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('CHARGE_HAS_PAYMENTS');
+  });
+
+  it('allows void when only a voided payment exists (voided payments are not blocking)', async () => {
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, $3, 750, CURRENT_DATE, 'stripe', 'voided')`,
+      [uuidv4(), fx.leaseA.id, voidChargeId],
+    );
+
+    const res = await request(app)
+      .post(`/api/v1/charges/${voidChargeId}/void`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('allows void when only a failed payment exists (failed payments are not blocking)', async () => {
+    await fx.pool.query(
+      `INSERT INTO rent_payments (id, lease_id, charge_id, amount_paid, payment_date, payment_method, status)
+       VALUES ($1, $2, $3, 750, CURRENT_DATE, 'stripe', 'failed')`,
+      [uuidv4(), fx.leaseA.id, voidChargeId],
+    );
+
+    const res = await request(app)
+      .post(`/api/v1/charges/${voidChargeId}/void`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 409 when charge is already voided (idempotency guard)', async () => {
+    // First void succeeds
+    await request(app)
+      .post(`/api/v1/charges/${voidChargeId}/void`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+
+    // Second void must fail
+    const res = await request(app)
+      .post(`/api/v1/charges/${voidChargeId}/void`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/already voided/i);
+  });
+
+  it('returns 403 when landlordB tries to void landlordA charge (IDOR)', async () => {
+    const res = await request(app)
+      .post(`/api/v1/charges/${voidChargeId}/void`)
+      .set('Authorization', `Bearer ${fx.landlordB.token}`);
+
+    expect(res.status).toBe(403);
+
+    // Confirm charge was NOT voided
+    const { rows } = await fx.pool.query(
+      `SELECT voided_at FROM rent_charges WHERE id = $1`, [voidChargeId],
+    );
+    expect(rows[0].voided_at).toBeNull();
+  });
+
+  it('returns 404 when charge does not exist', async () => {
+    const res = await request(app)
+      .post(`/api/v1/charges/${uuidv4()}/void`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 401 for unauthenticated requests', async () => {
+    const res = await request(app)
+      .post(`/api/v1/charges/${voidChargeId}/void`);
+
+    expect(res.status).toBe(401);
+  });
+});

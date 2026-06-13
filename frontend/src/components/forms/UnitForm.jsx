@@ -16,7 +16,9 @@ const editSchema = z.object({
   bedrooms: z.coerce.number().int().min(0).default(1),
   bathrooms: z.coerce.number().min(0).default(1),
   rentAmount: z.coerce.number().min(0, 'Rent must be 0 or more'),
-  status: z.enum(['vacant', 'maintenance']).optional(),
+  // 'occupied' is included so Zod doesn't reject the defaultValue when the unit is
+  // occupied. handleUpdateUnit in PropertyDetailPage strips it before the PATCH.
+  status: z.enum(['vacant', 'occupied', 'maintenance']).optional(),
 })
 
 /**

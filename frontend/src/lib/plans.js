@@ -4,7 +4,7 @@
  * Tiers (lowest → highest):
  *   0 — free       (no subscription)  1 property, 4 units, 4 tenants. ACH included.
  *   1 — starter    ($15/mo)           up to 25 properties. ACH + analytics.
- *   2 — enterprise ($49/mo)           unlimited residential properties. Starter + future premium features.
+ *   2 — enterprise ($49/mo)           unlimited residential properties. Growth + future premium features.
  *   3 — commercial ($79/mo + $2/unit) unlimited properties incl. commercial. Per-unit billing for commercial units.
  *
  * The `plan` string comes from subscription.plan which is populated by the
@@ -19,7 +19,7 @@
 export const PLANS = {
   starter: {
     key:         'starter',
-    label:       'Starter',
+    label:       'Growth',
     price:       15,
     unitAddon:   null,
     description: 'Up to 25 properties, analytics & portfolio reporting',
@@ -41,7 +41,7 @@ export const PLANS = {
     features:    [
       'Unlimited properties',
       'Single & multi-family (up to 4 units each)',
-      'Everything in Starter',
+      'Everything in Growth',
       'Team members — add unlimited staff/managers',
       'AI features (coming soon)',
       'Document signing (coming soon)',
@@ -72,7 +72,7 @@ export function planTier(plan) {
   return 0
 }
 
-/** True if the landlord has any active paid subscription (Starter, Enterprise, or Commercial). */
+/** True if the landlord has any active paid subscription (Growth, Enterprise, or Commercial). */
 export function hasStarter(subscription) {
   return ['active', 'trialing'].includes(subscription?.status)
 }

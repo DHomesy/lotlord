@@ -9,12 +9,21 @@
  *  - Resolving / escalating threads
  *  - Supervisor (admin) overrides
  *  - Notifying landlords when AI sends on their behalf
+ *  - Direct email thread routing via encoded Message-ID (F2)
+ *
+ * Conversation threading (F2):
+ *   _deliverMessage() sets Message-ID: <conv-<id>-<ts>@domain> on outbound emails.
+ *   _handleInbound() accepts an optional `conversationId` extracted from the tenant's
+ *   In-Reply-To header, bypasses find-or-create, and routes directly to the correct
+ *   thread. Tenant ownership is verified before trusting the hint to prevent
+ *   cross-tenant message injection (OWASP A01).
  *
  * All functions are designed to be safe to call fire-and-forget from webhooks
  * (errors are thrown up to the caller who decides whether to log or rethrow).
  */
 
 const { v4: uuidv4 } = require('uuid');
+const env              = require('../config/env');
 const convRepo         = require('../dal/conversationRepository');
 const userRepo         = require('../dal/userRepository');
 const tenantRepo       = require('../dal/tenantRepository');
@@ -45,8 +54,8 @@ async function handleInboundSms({ tenantUserId, landlordId, content, logEntryId,
  * Handle an inbound email from a tenant.
  * Called fire-and-forget from emailInboxService.
  */
-async function handleInboundEmail({ tenantUserId, landlordId, content, logEntryId, channel = 'email' }) {
-  return _handleInbound({ tenantUserId, landlordId, content, logEntryId, channel });
+async function handleInboundEmail({ tenantUserId, landlordId, content, logEntryId, channel = 'email', conversationId }) {
+  return _handleInbound({ tenantUserId, landlordId, content, logEntryId, channel, conversationId });
 }
 
 /**
@@ -239,31 +248,58 @@ async function supervisorOverride(conversationId, content, adminId) {
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
-async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, channel }) {
+async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, channel, conversationId: directConvId }) {
   if (!tenantUserId) return; // Unknown sender — nothing to do
 
   // Look up the tenants record for this user
   const tenantRecord = await tenantRepo.findByUserId(tenantUserId);
   if (!tenantRecord) return;
 
-  // If no landlord context, resolve from the tenant's active lease using the
-  // already-fetched tenantRecord — avoids a second findByUserId round-trip.
-  const resolvedLandlordId = landlordId
-    || (await leaseRepo.findAll({ tenantId: tenantRecord.id, status: 'active', limit: 1 }))[0]?.owner_id
-    || null;
+  // Direct routing: if the inbound email's In-Reply-To header encoded a conversationId,
+  // use it to find the exact conversation without a find-or-create round-trip.
+  let conv;
+  let resolvedLandlordId;
 
-  // Find or create a conversation
-  let conv = resolvedLandlordId
-    ? await convRepo.findActive({ tenantId: tenantRecord.id, ownerId: resolvedLandlordId, channel })
-    : null;
+  if (directConvId) {
+    conv = await convRepo.findById(directConvId);
+    if (conv) {
+      // Security: verify the conversation belongs to this tenant before routing.
+      // An attacker could craft an In-Reply-To header with a different tenant's
+      // conversation ID to inject messages into that thread. (OWASP A01: Broken Access Control)
+      if (conv.tenant_id !== tenantRecord.id) {
+        console.warn(
+          `[conversationService] directConvId ${directConvId} belongs to tenant ${conv.tenant_id} ` +
+          `but inbound message is from tenant ${tenantRecord.id} — ignoring hint, falling back to find-or-create`,
+        );
+        conv = null;
+      } else {
+        resolvedLandlordId = conv.owner_id;
+      }
+    } else {
+      console.warn(`[conversationService] directConvId ${directConvId} not found — falling back to find-or-create`);
+    }
+  }
 
   if (!conv) {
-    conv = await convRepo.create({
-      id:       uuidv4(),
-      tenantId: tenantRecord.id,
-      ownerId:  resolvedLandlordId || null,
-      channel,
-    });
+    // If no landlord context, resolve from the tenant's active lease using the
+    // already-fetched tenantRecord — avoids a second findByUserId round-trip.
+    resolvedLandlordId = landlordId
+      || (await leaseRepo.findAll({ tenantId: tenantRecord.id, status: 'active', limit: 1 }))[0]?.owner_id
+      || null;
+
+    // Find or create a conversation
+    conv = resolvedLandlordId
+      ? await convRepo.findActive({ tenantId: tenantRecord.id, ownerId: resolvedLandlordId, channel })
+      : null;
+
+    if (!conv) {
+      conv = await convRepo.create({
+        id:       uuidv4(),
+        tenantId: tenantRecord.id,
+        ownerId:  resolvedLandlordId || null,
+        channel,
+      });
+    }
   }
 
   // Append the inbound message
@@ -370,11 +406,18 @@ async function _deliverMessage({ content, channel, tenantUser, landlord, convers
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/\n/g, '<br>');
+
+    // Encode the conversationId into the email's Message-ID so the tenant's reply
+    // client will set In-Reply-To: <conv-<id>@...>, enabling direct thread routing.
+    const domain    = (env.SES_FROM_ADDRESS || 'lotlord.app').split('@')[1] || 'lotlord.app';
+    const messageId = conversationId ? `<conv-${conversationId}-${Date.now()}@${domain}>` : undefined;
+
     await notificationService.sendAdhoc({
       recipientId: tenantUser.id,
       subject:     'Message from your property manager',
       html:        `<p>${safeHtml}</p>`,
       text:        content,
+      messageId,
     });
   }
 }

@@ -26,6 +26,10 @@ const schema = z.object({
   lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Enter a valid email'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
+  phone: z.string().optional().refine(
+    (v) => !v || /^[+]?[(]?[0-9]{3}[)]?[-\s.]?[0-9]{3}[-\s.]?[0-9]{4,6}$/.test(v),
+    { message: 'Enter a valid phone number' },
+  ),
   acceptedTerms: z.literal(true, {
     errorMap: () => ({ message: 'You must accept the Terms of Service and Privacy Policy to continue' }),
   }),
@@ -125,10 +129,20 @@ export default function RegisterPage() {
               label="Password"
               type="password"
               fullWidth
-              sx={{ mb: 3 }}
+              sx={{ mb: 2 }}
               {...field('password')}
               error={!!errors.password}
               helperText={errors.password?.message}
+            />
+            <TextField
+              label="Phone (optional)"
+              type="tel"
+              fullWidth
+              sx={{ mb: 3 }}
+              {...field('phone')}
+              error={!!errors.phone}
+              helperText={errors.phone?.message ?? 'Used for SMS rent reminders'}
+              placeholder="+1 (555) 000-0000"
             />
 
             {/* Terms of Service + Privacy Policy acceptance */}

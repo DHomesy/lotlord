@@ -3,15 +3,14 @@ import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
-  Alert, Box, Button, Dialog, DialogTitle, DialogContent,
-  MenuItem, Stack, TextField,
+  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogTitle, DialogContent, Divider,
+  MenuItem, Paper, Stack, TextField,
   ToggleButton, ToggleButtonGroup, Typography,
   useTheme, useMediaQuery,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import { useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/layout/PageContainer'
-import DataTable from '../../components/common/DataTable'
 import EmptyState from '../../components/common/EmptyState'
 import ChargeAmountCell from '../../components/charges/ChargeAmountCell'
 import ChargeDetailDrawer from '../../components/charges/ChargeDetailDrawer'
@@ -86,6 +85,59 @@ function CreateChargeForm({ onSubmit, loading }) {
   )
 }
 
+// ─── Charge Card ──────────────────────────────────────────────────────────────
+
+const STATUS_COLOR = { paid: 'success', unpaid: 'warning', partial: 'info', pending: 'info', voided: 'default' }
+
+function ChargeCard({ row, properties, onClick }) {
+  const prop      = properties.find((p) => p.id === row.property_id_resolved)
+  const unitLabel = prop?.property_type === 'single' ? 'Main' : (row.unit_number ? `Unit ${row.unit_number}` : '—')
+  const color     = STATUS_COLOR[row.status] ?? 'default'
+
+  return (
+    <Paper
+      variant="outlined"
+      onClick={() => onClick(row)}
+      sx={{
+        p: 2,
+        cursor: 'pointer',
+        borderLeft: 4,
+        borderLeftColor: `${color}.main`,
+        '&:hover': { bgcolor: 'action.hover' },
+        transition: 'background-color 0.15s',
+      }}
+    >
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+        <Box flex={1} minWidth={0}>
+          <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" mb={0.25}>
+            <Typography variant="body2" fontWeight={600}>{row.property_name}</Typography>
+            <Typography variant="body2" color="text.disabled">·</Typography>
+            <Typography variant="body2" color="text.secondary">{unitLabel}</Typography>
+          </Stack>
+          <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
+            {(row.charge_type ?? '').replace(/_/g, ' ')} · Due {row.due_date?.slice(0, 10) ?? '—'}
+          </Typography>
+          {row.description && (
+            <Typography variant="body2" color="text.secondary" noWrap sx={{ mt: 0.5 }}>
+              {row.description}
+            </Typography>
+          )}
+        </Box>
+        <Stack alignItems="flex-end" spacing={0.75} flexShrink={0}>
+          <Chip label={row.status} color={color} size="small" />
+          <ChargeAmountCell
+            amount={row.amount}
+            totalPaid={row.total_paid}
+            pendingAmount={row.pending_amount}
+            status={row.status}
+            dueDate={row.due_date}
+          />
+        </Stack>
+      </Stack>
+    </Paper>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ChargesPage() {
@@ -143,29 +195,6 @@ export default function ChargesPage() {
     )
   }
 
-  // ─── Columns ────────────────────────────────────────────────────────────────
-  // Row click opens ChargeDetailDrawer — all CRUD lives there, not here.
-  const columns = [
-    { field: 'property_name', headerName: 'Property',         width: 150 },
-    { field: 'unit_number',   headerName: 'Unit',             width: 80  },
-    { field: 'charge_type',   headerName: 'Type',             width: 100 },
-    { field: 'description',   headerName: 'Description', flex: 1, minWidth: 120 },
-    {
-      field: 'amount',
-      headerName: 'Amount / Balance',
-      width: 180,
-      renderCell: ({ row }) => (
-        <ChargeAmountCell
-          amount={row.amount}
-          totalPaid={row.total_paid}
-          status={row.status}
-          dueDate={row.due_date}
-        />
-      ),
-    },
-    { field: 'due_date', headerName: 'Due', width: 110, valueFormatter: (v) => v?.slice(0, 10) },
-  ]
-
   return (
     <PageContainer
       title="Charges"
@@ -181,64 +210,67 @@ export default function ChargesPage() {
       </Typography>
 
       {/* ── Filters ── */}
-      <Stack spacing={2} sx={{ mb: 2 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ maxWidth: 760 }}>
-          <TextField
-            select
-            label="Property"
-            value={filterPropertyId ?? ''}
-            onChange={(e) => { setFilterPropertyId(e.target.value || null); setFilterLeaseId(null) }}
-            sx={{ minWidth: 220 }}
+      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+        <Stack spacing={2}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <TextField
+              select
+              label="Property"
+              value={filterPropertyId ?? ''}
+              onChange={(e) => { setFilterPropertyId(e.target.value || null); setFilterLeaseId(null) }}
+              sx={{ minWidth: 220 }}
+              size="small"
+            >
+              <MenuItem value="">All Properties</MenuItem>
+              {properties.map((p) => (
+                <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+              ))}
+            </TextField>
+
+            <Box sx={{ minWidth: 280 }}>
+              <LeasePicker
+                value={filterLeaseId}
+                onChange={(v) => setFilterLeaseId(v)}
+                label="Lease (optional)"
+                onlyActive={false}
+              />
+            </Box>
+          </Stack>
+
+          <Divider />
+
+          <ToggleButtonGroup
+            value={statusFilter}
+            exclusive
+            onChange={(_, v) => { if (v) setStatusFilter(v) }}
             size="small"
+            sx={{ flexWrap: 'wrap' }}
           >
-            <MenuItem value="">All Properties</MenuItem>
-            {properties.map((p) => (
-              <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
-            ))}
-          </TextField>
-
-          <Box sx={{ minWidth: 280 }}>
-            <LeasePicker
-              value={filterLeaseId}
-              onChange={(v) => setFilterLeaseId(v)}
-              label="Lease (optional)"
-              onlyActive={false}
-            />
-          </Box>
+            <ToggleButton value="all">All</ToggleButton>
+            <ToggleButton value="unpaid">Unpaid</ToggleButton>
+            <ToggleButton value="pending">Pending</ToggleButton>
+            <ToggleButton value="paid">Paid</ToggleButton>
+            <ToggleButton value="voided">Voided</ToggleButton>
+          </ToggleButtonGroup>
         </Stack>
-
-        <ToggleButtonGroup
-          value={statusFilter}
-          exclusive
-          onChange={(_, v) => { if (v) setStatusFilter(v) }}
-          size="small"
-          sx={{ flexWrap: 'wrap' }}
-        >
-          <ToggleButton value="all">All</ToggleButton>
-          <ToggleButton value="unpaid">Unpaid</ToggleButton>
-          <ToggleButton value="pending">Pending</ToggleButton>
-          <ToggleButton value="paid">Paid</ToggleButton>
-          <ToggleButton value="voided">Voided</ToggleButton>
-        </ToggleButtonGroup>
-      </Stack>
+      </Paper>
 
       {!shouldLoad ? (
         <Alert severity="info">Select a property or lease above to view charges.</Alert>
-      ) : !isLoading && rows.length === 0 ? (
+      ) : isLoading ? (
+        <Box sx={{ py: 6, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>
+      ) : rows.length === 0 ? (
         <EmptyState
           message="No charges found for the selected filters."
           onAdd={() => setCreateOpen(true)}
           addLabel="Add Charge"
         />
       ) : (
-        <DataTable
-          rows={rows}
-          columns={columns}
-          loading={isLoading}
-          onRowClick={({ row }) => setDetailCharge(row)}
-          rowHeight={64}
-          sx={{ cursor: 'pointer' }}
-        />
+        <Stack spacing={1.5}>
+          {rows.map((row) => (
+            <ChargeCard key={row.id} row={row} properties={properties} onClick={setDetailCharge} />
+          ))}
+        </Stack>
       )}
 
       {/* ── Create Charge Dialog ── */}

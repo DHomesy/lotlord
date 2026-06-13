@@ -191,7 +191,7 @@ export default function TeamPage() {
             </Button>
           }
         >
-          Adding team members requires the <strong>Starter plan ($15/mo)</strong>. Upgrade to invite up to 5 employees.
+          Adding team members requires the <strong>Growth plan ($15/mo)</strong>. Upgrade to invite up to 5 employees.
         </Alert>
       )}
 

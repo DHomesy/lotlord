@@ -1,9 +1,9 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Tab, Tabs, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions,
+  Tab, Tabs, Typography, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
   RadioGroup, FormControlLabel, Radio, Alert, Stack, CircularProgress, Divider, Box,
-  Tooltip, useTheme, useMediaQuery,
+  Paper, Tooltip, useTheme, useMediaQuery,
 } from '@mui/material'
 import PaymentIcon from '@mui/icons-material/Payment'
 import PageContainer from '../../components/layout/PageContainer'
@@ -214,7 +214,59 @@ function PaymentDialog({ charge, open, onClose, fullScreen = false }) {
     </Dialog>
   )
 }
+// ── Tenant Charge Card ────────────────────────────────────────────────────────────────
+const TENANT_STATUS_COLOR = { paid: 'success', unpaid: 'warning', partial: 'info', pending: 'info', voided: 'default' }
 
+function TenantChargeCard({ row, onPay }) {
+  const color      = TENANT_STATUS_COLOR[row.status] ?? 'default'
+  const pendingAmt = Number(row.pending_amount ?? 0)
+  const canPay     = (row.status === 'unpaid' || row.status === 'partial') && !row.voided_at && pendingAmt === 0
+  const bal        = canPay
+    ? (row.status === 'partial' && row.total_paid != null
+        ? Math.max(0, parseFloat(row.amount) - parseFloat(row.total_paid))
+        : parseFloat(row.amount))
+    : 0
+
+  return (
+    <Paper
+      variant="outlined"
+      sx={{ p: 2, borderLeft: 4, borderLeftColor: `${color}.main` }}
+    >
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+        <Box flex={1} minWidth={0}>
+          <Stack direction="row" spacing={1} alignItems="center" mb={0.25} flexWrap="wrap">
+            <Typography variant="body2" fontWeight={600} sx={{ textTransform: 'capitalize' }}>
+              {(row.charge_type ?? '').replace(/_/g, ' ')}
+            </Typography>
+            <Chip label={row.status} color={color} size="small" />
+          </Stack>
+          {row.description && (
+            <Typography variant="body2" color="text.secondary" noWrap>
+              {row.description}
+            </Typography>
+          )}
+          <Typography variant="caption" color="text.secondary">
+            Due {row.due_date?.slice(0, 10) ?? '—'}
+          </Typography>
+        </Box>
+        <Stack alignItems="flex-end" spacing={1} flexShrink={0}>
+          <ChargeAmountCell
+            amount={row.amount}
+            totalPaid={row.total_paid}
+            pendingAmount={row.pending_amount}
+            status={row.status}
+            dueDate={row.due_date}
+          />
+          {canPay && (
+            <Button size="small" startIcon={<PaymentIcon />} onClick={() => onPay(row)}>
+              Pay ${bal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </Button>
+          )}
+        </Stack>
+      </Stack>
+    </Paper>
+  )
+}
 // ── TenantChargesPage ────────────────────────────────────────────────────────
 export default function TenantChargesPage() {
   const [chargeTab, setChargeTab] = useState(1) // 0 = Outstanding, 1 = All
@@ -235,51 +287,6 @@ export default function TenantChargesPage() {
     activeLeaseFallback?.id ? { leaseId: activeLeaseFallback.id } : undefined,
   )
   const paymentRows = Array.isArray(paymentsData) ? paymentsData : (paymentsData?.payments ?? [])
-
-  const chargeColumns = [
-    { field: 'charge_type', headerName: 'Type', width: 110 },
-    { field: 'description', headerName: 'Description', flex: 1, minWidth: 120 },
-    {
-      field: 'amount',
-      headerName: 'Amount',
-      width: 200,
-      renderCell: ({ row }) => (
-        <ChargeAmountCell
-          amount={row.amount}
-          totalPaid={row.total_paid}
-          pendingAmount={row.pending_amount}
-          status={row.status}
-          dueDate={row.due_date}
-        />
-      ),
-    },
-    { field: 'due_date', headerName: 'Due', width: 110, valueFormatter: (v) => v?.slice(0, 10) },
-    {
-      field: 'actions',
-      headerName: '',
-      width: 140,
-      sortable: false,
-      disableColumnMenu: true,
-      renderCell: ({ row }) => {
-      const pendingAmt = Number(row.pending_amount ?? 0)
-        if ((row.status === 'unpaid' || row.status === 'partial') && !row.voided_at && pendingAmt === 0) {
-          const bal = row.status === 'partial' && row.total_paid != null
-            ? Math.max(0, parseFloat(row.amount) - parseFloat(row.total_paid))
-            : parseFloat(row.amount)
-          return (
-            <Button
-              size="small"
-              startIcon={<PaymentIcon />}
-              onClick={() => setSelectedCharge(row)}
-            >
-              Pay ${bal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-            </Button>
-          )
-        }
-        return null
-      },
-    },
-  ]
 
   const paymentColumns = [
     { field: 'payment_date', headerName: 'Date', width: 130, valueFormatter: (v) => v?.slice(0, 10) },
@@ -319,12 +326,17 @@ export default function TenantChargesPage() {
         <Tab label="Outstanding" />
         <Tab label="All" />
       </Tabs>
-      <DataTable
-        rows={chargeRows}
-        columns={chargeColumns}
-        loading={loadingCharges}
-        rowHeight={64}
-      />
+      {loadingCharges ? (
+        <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>
+      ) : chargeRows.length === 0 ? (
+        <Typography color="text.secondary" sx={{ py: 2 }}>No charges found.</Typography>
+      ) : (
+        <Stack spacing={1.5}>
+          {chargeRows.map((row) => (
+            <TenantChargeCard key={row.id} row={row} onPay={setSelectedCharge} />
+          ))}
+        </Stack>
+      )}
 
       <Divider sx={{ my: 4 }} />
 

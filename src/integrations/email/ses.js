@@ -1,22 +1,30 @@
 /**
  * Email integration — AWS SES (SDK v3)
  * -------------------------------------
- * OUTBOUND:  sendEmail()    — send transactional email via SES SendEmailCommand
+ * OUTBOUND:  sendEmail()    — send transactional email via raw MIME (SendRawEmailCommand)
  * REPLY:     replyToEmail() — reply in-thread using RFC 2822 headers via SendRawEmailCommand
+ *
+ * Conversation threading (F2):
+ *   Outbound messages sent via the conversation service embed a custom
+ *   Message-ID: <conv-<conversationId>-<ts>@domain> header. When the tenant
+ *   hits Reply, their email client sets In-Reply-To to that value. The SES
+ *   inbound Lambda forwards it as `inReplyTo` in the webhook payload, and
+ *   emailInboxService extracts the conversationId from the pattern for direct
+ *   routing — no database scan needed.
  *
  * Inbound flow (SES → S3 → SQS → Lambda → API):
  *   1. SES receipt rule stores raw .eml to S3 (infra/lib/email-stack.js)
  *   2. S3 event notification fires → SQS queue
  *   3. Lambda (infra/lambda/ses-inbound/index.js) parses the email and POSTs
  *      the structured payload to POST /api/v1/webhooks/ses
- *   4. emailInboxService.processInboundEmail() handles dedup + logging
+ *   4. emailInboxService.processInboundEmail() handles dedup + threading + logging
  *
  * Required env vars:
  *   AWS_REGION            — e.g. us-east-1
  *   AWS_ACCESS_KEY_ID     — IAM user key (output by CDK stack)
  *   AWS_SECRET_ACCESS_KEY — IAM user secret (output by CDK stack)
  *   SES_FROM_ADDRESS      — e.g. noreply@lotlord.app
- *   SES_REPLY_TO_ADDRESS  — e.g. reply@lotlord.app  (tenants reply here)
+ *   SES_REPLY_TO_ADDRESS  — e.g. reply@lotlord.app  (tenants reply here; receipt rule routes this to S3)
  *   SES_CONFIGURATION_SET — e.g. lotlord-config-set (enables bounce tracking)
  */
 
@@ -74,8 +82,10 @@ function wrapBase64(b64) {
  * @param {string}  opts.subject  Subject line
  * @param {string}  opts.html     HTML body
  * @param {string}  [opts.text]   Plain-text fallback (auto-stripped from HTML if omitted)
+ * @param {string}  [opts.messageId] Custom Message-ID header value (e.g. '<conv-<id>@domain>').
+ *                                    Allows the reply client to thread via In-Reply-To.
  */
-async function sendEmail({ to, subject, html, text }) {
+async function sendEmail({ to, subject, html, text, messageId }) {
   const plainText = text || html.replace(/<[^>]+>/g, '');
   const boundary  = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const unsubAddr = env.SES_REPLY_TO_ADDRESS || env.SES_FROM_ADDRESS;
@@ -94,6 +104,7 @@ async function sendEmail({ to, subject, html, text }) {
     `List-Unsubscribe: <mailto:${sanitizeHeader(unsubAddr)}?subject=unsubscribe>`,
     `List-Unsubscribe-Post: List-Unsubscribe=One-Click`,
   ];
+  if (messageId)                headerLines.push(`Message-ID: ${sanitizeHeader(messageId)}`);
   if (env.SES_REPLY_TO_ADDRESS) headerLines.push(`Reply-To: ${sanitizeHeader(env.SES_REPLY_TO_ADDRESS)}`);
 
   const rawMessage = [
