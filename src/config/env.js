@@ -31,6 +31,9 @@ module.exports = {
   // Frontend
   // Used for CORS allowed-origin in production. Comma-separate multiple origins.
   FRONTEND_URL: optional('FRONTEND_URL', 'http://localhost:5173'),
+  // Scopes the httpOnly refresh-token cookie to a shared domain (e.g. .lotlord.app)
+  // so www.* and api.* subdomains can both receive it. Leave unset in test/staging.
+  COOKIE_DOMAIN: optional('COOKIE_DOMAIN'),
 
   // AWS SES — outbound email
   // AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are standard SDK env vars;

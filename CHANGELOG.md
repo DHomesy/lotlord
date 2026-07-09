@@ -8,6 +8,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.12.1] — 2026-07-09 — Environment Separation & Ops Fixes
+
+### Added
+- **Payment reconciliation script** (`scripts/reconcile-payments.js`) — One-off utility that finds `rent_payments` stuck in `pending` status, fetches the real state from Stripe, and syncs the DB accordingly. Marks payments `completed` (appending a ledger entry) or `failed` as appropriate. Dry-run by default; pass `--commit` to apply. Run via `railway run node scripts/reconcile-payments.js`.
+- **`COOKIE_DOMAIN` env variable** — The refresh-token cookie's domain scope is now controlled by the `COOKIE_DOMAIN` environment variable instead of a hardcoded string. Set to `.lotlord.app` in production; leave unset in test/staging environments so cookies are scoped to the origin domain.
+
+### Changed
+- **`railway.toml` start command** — Removed `npm run seed` and the erroneous `npm create-admin` from the deploy start command. Start command is now `npm run migrate:up && npm start`. Seed and admin-creation scripts should be run on-demand via `railway run` rather than on every deploy.
+
+### Fixed
+- **Hardcoded `.lotlord.app` cookie domain** — `src/config/cookies.js` previously hardcoded `.lotlord.app` as the cookie domain when `NODE_ENV=production`. This would silently break auth in any production-mode environment not on the `lotlord.app` domain (e.g. staging). Replaced with `COOKIE_DOMAIN` env variable.
+
+### Security
+- **Cookie domain no longer tied to a hardcoded hostname** — Prevents accidental cross-environment cookie leakage when deploying to non-production domains with `NODE_ENV=production`.
+
+---
 ## [1.12.0] — 2026-05-18 — Sprint C: QA Fixes, UI Polish & Email Threading
 
 ### Added

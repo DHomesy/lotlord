@@ -4,7 +4,7 @@
  * module is the single source of truth for COOKIE_NAME and cookieOptions().
  */
 
-const { NODE_ENV } = require('./env');
+const { NODE_ENV, COOKIE_DOMAIN } = require('./env');
 
 const COOKIE_NAME = 'refreshToken';
 
@@ -14,7 +14,8 @@ const COOKIE_NAME = 'refreshToken';
  * - httpOnly: JS cannot read it — XSS protection
  * - secure:   HTTPS-only in production
  * - sameSite: 'lax' allows cross-subdomain requests (www → api on same registrable domain)
- * - domain:   scoped to .lotlord.app in production so both subdomains receive the cookie
+ * - domain:   set via COOKIE_DOMAIN env var (e.g. .lotlord.app) so www + api subdomains
+ *             share the cookie. Leave unset in test/staging environments.
  * - path:     scoped to /api/v1/auth — not sent with every API request
  */
 function cookieOptions() {
@@ -23,7 +24,7 @@ function cookieOptions() {
     httpOnly: true,
     secure:   isProd,
     sameSite: 'lax',
-    domain:   isProd ? '.lotlord.app' : undefined,
+    domain:   COOKIE_DOMAIN || undefined,
     path:     '/api/v1/auth',
     maxAge:   30 * 24 * 60 * 60 * 1000, // 30 days in ms
   };
