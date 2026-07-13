@@ -49,7 +49,7 @@ export default function PropertyForm({ onSubmit, defaultValues, loading, subscri
         placeholder="e.g. Maple Apartments, Downtown Duplex"
         {...register('name')}
         error={!!errors.name}
-        helperText={errors.name?.message || 'A short name to identify this property'}
+        helperText={errors.name?.message || 'Internal name for your records only — tenants will see your property address, not this name.'}
       />
       <TextField label="Address Line 1" {...register('addressLine1')} error={!!errors.addressLine1} helperText={errors.addressLine1?.message} />
       {isSingleFamily && (

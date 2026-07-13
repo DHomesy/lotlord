@@ -24,7 +24,12 @@ const PRIORITIES = ['low', 'medium', 'high', 'emergency']
 
 const columns = [
   { field: 'title', headerName: 'Title', flex: 1.5 },
-  { field: 'unit_display', headerName: 'Unit', flex: 1, valueGetter: (v, row) => row.property_address ? `${row.property_address} - Unit ${row.unit_number}` : `Unit ${row.unit_number}` },
+  { field: 'unit_display', headerName: 'Unit', flex: 1,
+    valueGetter: (v, row) => {
+      const unitPart = row.property_type === 'single' ? 'Main' : `Unit ${row.unit_number || '—'}`
+      return row.property_address ? `${row.property_address} · ${unitPart}` : unitPart
+    },
+  },
   { field: 'priority', headerName: 'Priority', width: 100 },
   { field: 'status', headerName: 'Status', width: 120, renderCell: ({ value }) => <StatusChip status={value} /> },
   { field: 'created_at', headerName: 'Submitted', width: 120, valueFormatter: (v) => v?.slice(0, 10) },

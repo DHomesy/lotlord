@@ -65,7 +65,7 @@ export default function TenantProfilePage() {
           size="small"
           startIcon={<AccountBalanceIcon />}
           onClick={() => setBankOpen(true)}
-          sx={{ ml: 2, flexShrink: 0 }}
+          sx={{ ml: { xs: 0, sm: 2 }, mt: { xs: 1.5, sm: 0 }, flexShrink: 0 }}
         >
           {paymentMethods.length > 0 ? 'Add Account' : 'Connect Bank'}
         </Button>

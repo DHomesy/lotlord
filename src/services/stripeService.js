@@ -259,6 +259,20 @@ async function createPaymentIntent({ leaseId, chargeId, paymentMethodId, amount,
     metadata:     { leaseId, chargeId, amountDollars, paymentIntentId: intent.id, status: intent.status },
   });
 
+  // Notify the landlord that a payment has been started (fire-and-forget)
+  if (lease?.owner_id) {
+    notificationService.sendByTriggerEvent({
+      triggerEvent: 'payment_initiated',
+      recipientId:  lease.owner_id,
+      variables: {
+        tenant_name: `${lease.first_name} ${lease.last_name}`,
+        amount:      `$${amountDollars.toFixed(2)}`,
+        unit:        lease.unit_number,
+        property:    lease.property_name,
+      },
+    }).catch((err) => console.error('[stripe] payment_initiated landlord notification failed:', err.message));
+  }
+
   return {
     clientSecret:      intent.client_secret,
     paymentIntentId:   intent.id,
@@ -408,24 +422,48 @@ async function onPaymentSucceeded(paymentIntent) {
     client.release();
   }
 
-  // Non-fatal: send payment receipt email
+  // Non-fatal: send payment receipt email to tenant + notification to landlord.
+  // Each notification is independent — a failure in one does not suppress the other.
+  const paymentDateLabel = payment.payment_date
+    ? new Date(payment.payment_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  let lease;
   try {
-    const lease = await leaseRepo.findById(payment.lease_id);
-    if (lease?.user_id) {
-      await notificationService.sendByTriggerEvent({
-        triggerEvent: 'payment_received',
-        recipientId:  lease.user_id,
-        variables: {
-          first_name:  lease.first_name,
-          tenant_name: `${lease.first_name} ${lease.last_name}`,
-          amount:      `$${amountPaid.toFixed(2)}`,
-          unit:        lease.unit_number,
-          property:    lease.property_name,
-        },
-      });
-    }
-  } catch (notifErr) {
-    console.error('[stripe] payment_received notification failed:', notifErr.message);
+    lease = await leaseRepo.findById(payment.lease_id);
+  } catch (dbErr) {
+    console.error('[stripe] Failed to fetch lease for payment notifications:', dbErr.message);
+  }
+
+  // Tenant receipt
+  if (lease?.user_id) {
+    notificationService.sendByTriggerEvent({
+      triggerEvent: 'payment_received',
+      recipientId:  lease.user_id,
+      variables: {
+        first_name:   lease.first_name,
+        tenant_name:  `${lease.first_name} ${lease.last_name}`,
+        amount:       `$${amountPaid.toFixed(2)}`,
+        unit:         lease.unit_number,
+        property:     lease.property_name,
+        payment_date: paymentDateLabel,
+      },
+    }).catch((err) => console.error('[stripe] payment_received (tenant) notification failed:', err.message));
+  }
+
+  // Landlord notification
+  if (lease?.owner_id) {
+    notificationService.sendByTriggerEvent({
+      triggerEvent: 'payment_received_landlord',
+      recipientId:  lease.owner_id,
+      variables: {
+        tenant_name:  `${lease.first_name} ${lease.last_name}`,
+        amount:       `$${amountPaid.toFixed(2)}`,
+        unit:         lease.unit_number,
+        property:     lease.property_name,
+        payment_date: paymentDateLabel,
+      },
+    }).catch((err) => console.error('[stripe] payment_received_landlord notification failed:', err.message));
   }
 
   // Audit log

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
+import { scheduleTokenRefresh, cancelTokenRefresh } from '../lib/auth'
 import * as api from '../api/auth'
 
 export function useRegister() {
@@ -31,6 +32,7 @@ export function useLogin() {
     mutationFn: api.login,
     onSuccess: (data) => {
       setAuth(data.user, data.token)
+      scheduleTokenRefresh(data.token)
       // Redirect based on role
       if (data.user.role === 'tenant') {
         navigate('/my/dashboard', { replace: true })
@@ -49,6 +51,7 @@ export function useLogout() {
   return useMutation({
     mutationFn: api.logout,
     onSettled: () => {
+      cancelTokenRefresh()
       clearAuth()
       qc.clear()
       navigate('/login', { replace: true })
@@ -78,7 +81,10 @@ export function useVerifyEmail() {
       if (data?.user && data?.token) {
         setAuth(data.user, data.token)
       }
-      navigate('/dashboard', { replace: true })
+      // Navigate to /login rather than directly to /dashboard to avoid a race where
+      // ProtectedRoute renders before the Zustand store flushes emailVerified:true,
+      // which would bounce the user back to /verify-email-pending.
+      navigate('/login?verified=1', { replace: true })
     },
   })
 }
