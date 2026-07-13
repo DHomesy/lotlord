@@ -80,8 +80,7 @@ function PendingLeaseState({ lease }) {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
         <HourglassEmptyIcon color="warning" />
         <Typography variant="h6">
-          {lease.property_name}
-          {lease.address_line1 ? ` \u2014 ${lease.address_line1}` : ''}
+          {lease.address_line1 || lease.property_name}
         </Typography>
         <Chip label="Pending" color="warning" size="small" />
       </Box>
@@ -143,13 +142,26 @@ export default function TenantDashboardPage() {
 
   return (
     <PageContainer title={`Welcome, ${displayName}`}>
+      {/* ── Bank account setup prompt — top CTA (most visible on mobile) ── */}
+      {!hasPaymentMethod && (
+        <Alert
+          severity="info"
+          sx={{ mb: 3 }}
+          action={
+            <Button size="small" variant="outlined" onClick={() => navigate('/my/profile')}>
+              Set up now
+            </Button>
+          }
+        >
+          Add a bank account to pay rent online directly from your dashboard.
+        </Alert>
+      )}
       {activeLease ? (
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
             <HomeIcon color="primary" />
             <Typography variant="h6">
-              {activeLease.property_name}
-              {activeLease.address_line1 ? ` — ${activeLease.address_line1}` : ''}
+              {activeLease.address_line1 || activeLease.property_name}
             </Typography>
             <StatusChip status={activeLease.status} />
           </Box>
@@ -201,7 +213,10 @@ export default function TenantDashboardPage() {
                     <Card variant="outlined">
                       <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Box>
-                          <Typography variant="body2">{l.property_name} — Unit {l.unit_number}</Typography>
+                          <Typography variant="body2">
+                          {l.address_line1 || l.property_name}
+                          {l.property_type !== 'single' && l.unit_number ? ` — Unit ${l.unit_number}` : ''}
+                        </Typography>
                           <Typography variant="caption" color="text.secondary">
                             {l.start_date?.slice(0, 10)} → {l.end_date?.slice(0, 10)}
                           </Typography>
@@ -254,21 +269,6 @@ export default function TenantDashboardPage() {
         <PendingLeaseState lease={pendingLease} />
       ) : (
         <NoLeaseEmptyState />
-      )}
-
-      {/* ── Bank account setup prompt ── */}
-      {!hasPaymentMethod && (
-        <Alert
-          severity="info"
-          sx={{ mt: 3 }}
-          action={
-            <Button size="small" variant="outlined" onClick={() => navigate('/my/profile')}>
-              Set up now
-            </Button>
-          }
-        >
-          Add a bank account to pay rent online directly from your dashboard.
-        </Alert>
       )}
 
       {/* ── Quick navigation cards ── */}

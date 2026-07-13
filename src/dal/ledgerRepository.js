@@ -44,6 +44,7 @@ async function getAmountDueNow(leaseId) {
            JOIN rent_charges rc ON rc.id = rp.charge_id
           WHERE rc.lease_id = $1
             AND rp.status = 'completed'
+            AND rc.due_date <= CURRENT_DATE
        ), 0)
      AS amount_due`,
     [leaseId],

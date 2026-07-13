@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
+import { scheduleTokenRefresh } from './auth'
 
 // Resolve the API base URL:
 // 1. Use the build-time VITE_API_URL if available (set in Railway frontend service vars)
@@ -65,6 +66,7 @@ http.interceptors.response.use(
           { withCredentials: true },
         )
         useAuthStore.getState().setAuth(data.user, data.token)
+        scheduleTokenRefresh(data.token)
         processQueue(null, data.token)
         original.headers.Authorization = `Bearer ${data.token}`
         return http(original)

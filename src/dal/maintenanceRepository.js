@@ -20,6 +20,7 @@ async function findAll({ unitId, status, assignedTo, submittedBy, ownerId, page 
             u.unit_number,
             p.name          AS property_name,
             p.id            AS property_id,
+            p.property_type,
             p.address_line1 AS property_address
        FROM maintenance_requests r
        JOIN units      u ON u.id = r.unit_id
@@ -45,6 +46,7 @@ async function findById(id) {
             u.unit_number,
             p.name          AS property_name,
             p.id            AS property_id,
+            p.property_type,
             p.address_line1 AS property_address,
             p.owner_id
        FROM maintenance_requests r

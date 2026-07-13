@@ -13,7 +13,7 @@ async function findAll({ tenantId, unitId, status, page = 1, limit = 20, ownerId
   const { rows } = await query(
     `SELECT l.*,
             u.unit_number, u.rent_amount AS unit_rent,
-            p.name AS property_name, p.owner_id,
+            p.name AS property_name, p.address_line1, p.property_type, p.owner_id,
             tn.id AS tenant_id,
             us.id AS user_id,
             us.first_name, us.last_name, us.email
@@ -33,7 +33,7 @@ async function findById(id) {
   const { rows } = await query(
     `SELECT l.*,
             u.unit_number, u.rent_amount AS unit_rent,
-            p.name AS property_name, p.address_line1, p.owner_id,
+            p.name AS property_name, p.address_line1, p.property_type, p.owner_id,
             tn.id AS tenant_record_id,
             us.id AS user_id,
             us.first_name, us.last_name, us.email, us.phone

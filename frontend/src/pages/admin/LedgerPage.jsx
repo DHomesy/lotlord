@@ -186,7 +186,7 @@ function LedgerTab() {
       )}
 
       {lease && (
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="flex-start" flexWrap="wrap">
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'flex-start' }} flexWrap="wrap">
           <Paper variant="outlined" sx={{ px: 2.5, py: 1.5, minWidth: 200 }}>
             <Typography variant="caption" color="text.secondary">Tenant</Typography>
             <Typography variant="body1" fontWeight={600}>
@@ -209,7 +209,7 @@ function LedgerTab() {
               fontWeight={600}
               color={amountDueNow > 0 ? 'error.main' : 'success.main'}
             >
-              {amountDueNow !== null ? fmtMoney(amountDueNow) : '—'}
+              {amountDueNow !== null ? fmtMoney(Math.max(0, amountDueNow)) : '—'}
             </Typography>
           </Paper>
           <Paper variant="outlined" sx={{ px: 2.5, py: 1.5, minWidth: 200 }}>

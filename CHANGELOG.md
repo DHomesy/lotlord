@@ -8,6 +8,34 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.12.5] — 2026-07-13 — Sprint D Chunk 4: UX Audits, Data & Auth
+
+### Fixed
+- **Single-family "Unit 0" / "Unit undefined" (D12)** — `property_type` is now returned by `maintenanceRepository.findAll` and `findById` (backend). Both admin and tenant `MaintenancePage` columns now render `Main` for single-family properties instead of `Unit 0`. The tenant maintenance form `lockedUnitLabel` no longer shows `Unit undefined` — single-family leases show just the address, multi-family show `Address — Unit X`. `MaintenanceDetailDrawer` header subtitle updated to the same logic.
+- **Property name hidden from tenants (D13)** — Tenant-facing `DashboardPage` now displays the street address (`address_line1`) as the primary property identifier, falling back to `property_name` only if address is unset. `property_type` and `address_line1` added to `leaseRepository.findAll` and `findById` so all lease-derived views have these fields. `PropertyForm` helper text updated to: "Internal name for your records only — tenants will see your property address, not this name."
+- **Ledger "Amount Due" shows negative (D14)** — Backend: `ledgerRepository.getAmountDueNow` payments subquery now includes `AND rc.due_date <= CURRENT_DATE`, preventing future-paid charges from reducing today's balance. Frontend: `LedgerPage` uses `Math.max(0, amountDueNow)` for display so over-paid tenants see $0.00, not a negative number.
+- **Frequent sign-in / proactive JWT refresh (D15)** — Added `scheduleTokenRefresh(token)` to `lib/auth.js`. After any successful auth event (boot, 401 refresh, login), a timer is set to silently refresh the access token 2 minutes before expiry. This eliminates the 15-minute idle window that was causing reactive 401 errors for active users. Also note: ensure `COOKIE_DOMAIN=.lotlord.app` is set in the production Railway backend service so the refresh cookie is shared across `www.` and `api.` subdomains.
+
+### Added
+- **Landlord notified when tenant starts a payment (D8)** — After a `PaymentIntent` is successfully created in `stripeService.createPaymentIntent`, a fire-and-forget `payment_initiated` email is sent to the landlord. Template seeded in migration 035: subject includes tenant name, property, unit; body explains ACH settlement timing.
+- **Landlord notified when payment completes (D9)** — `onPaymentSucceeded` (Stripe webhook handler) now sends a `payment_received_landlord` email to the landlord alongside the existing tenant receipt. Includes amount, tenant name, property, unit, and payment date. Template seeded in migration 035.
+- **`maintenance_cancelled` notification for tenant (D11 extension)** — When a landlord or admin cancels a maintenance request, the original submitter now receives a `maintenance_cancelled` email. Added `cancelled` to the `STATUS_TRIGGER` map in `maintenanceService.updateRequest`. Template seeded in migration 035.
+
+### Fixed
+- **Maintenance submitted notification missing property name (D10)** — The `maintenance_submitted` notification call was missing the `property` variable. Added `property: property.name` to the variables object in `maintenanceService.createRequest`.
+- **Maintenance notification templates improved (D10/D11)** — Migration 035 updates `maintenance_submitted`, `maintenance_in_progress`, and `maintenance_completed` templates to include a `{{portal_url}}` CTA link and cleaner formatting. Previously they were plain text with no actionable link.
+
+### Migration
+- `035_landlord_payment_notifications.sql` — expands `trigger_event` constraint, seeds `payment_initiated` and `payment_received_landlord` templates, seeds `maintenance_cancelled` template, updates three maintenance templates with portal links.
+- **Bank account banner moved to top (D4)** — The “Add a bank account” prompt now renders at the very top of the tenant Dashboard page, before lease details and info cards. On mobile this makes it the first thing a tenant sees, acting as a clear CTA. Removed the duplicate instance at the bottom.
+- **Connect Bank button mobile margin (D5)** — The button in the Profile Billing section had `ml: 2` applied unconditionally. On mobile (column layout) this created an orphaned left margin. Now uses `ml: { xs: 0, sm: 2 }` and `mt: { xs: 1.5, sm: 0 }` so spacing is correct on both screen sizes.
+- **Maintenance drawer mobile navigation (D6)** — On mobile the `MaintenanceDetailDrawer` opens full-screen (100% width) but covered the fixed bottom navigation bar, trapping the user with no visible exit. Added a `←` back button in the drawer header (visible on `xs` only, hidden on `sm+`). Added `pb: { xs: '56px', sm: 0 }` to the drawer’s Paper so content never scrolls under the bottom nav.
+- **Ledger summary cards mobile alignment (D7)** — The summary card row (Tenant, Property/Unit, Amount Due Today, Total Collected) had `alignItems: ‘flex-start’` which left-aligned narrow cards on mobile. Changed to `alignItems: { xs: ‘stretch’, sm: ‘flex-start’ }` so cards expand to full width on mobile and retain natural size on desktop.
+- **Payment received email `{{due_date}}` unresolved (D1)** — The `payment_received` notification template contained `{{due_date}}` which was never supplied by the Stripe webhook handler, causing it to render literally in the tenant’s inbox. Renamed the variable to `{{payment_date}}` and now pass it from `onPaymentSucceeded`. Added a branded HTML layout with a payment detail card and “View Payment History” CTA button linking to the tenant portal. Migration `034_payment_received_template.sql` updates the template (and inserts it if missing).
+- **Manual payment subtitle encoding (D2)** — `ChargeDetailDrawer.jsx` contained two garbled UTF-8 sequences: `â` (em dash) and `â¦` (ellipsis) in the Amount field label and Save button text. Replaced with the correct Unicode characters (`—`, `…`).
+- **Email verification redirect loop (D3)** — After clicking the verify link, `useVerifyEmail` previously navigated to `/dashboard`. In some cases `ProtectedRoute` rendered before the Zustand store flushed the new `emailVerified: true` state, bouncing the user back to `/verify-email-pending`. Now navigates to `/login?verified=1` (a public route with no auth guard) instead. `LoginPage` shows a “Email verified! You can now sign in.” success banner when the `?verified=1` query param is present.
+
+---
 ## [1.12.1] — 2026-07-09 — Environment Separation & Ops Fixes
 
 ### Added

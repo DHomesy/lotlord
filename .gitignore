@@ -29,6 +29,9 @@ coverage/
 # Migrations lock (keep migrations themselves, not lock files)
 .node-pg-migrate-lock
 
+# Local QA checklist — dev-only, not committed
+qa-checklist.txt
+
 # Local planning docs
 SPRINT-AI-COMMS.md
 SPRINT-B-QA.md

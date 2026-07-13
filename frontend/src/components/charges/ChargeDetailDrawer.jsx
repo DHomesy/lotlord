@@ -86,7 +86,7 @@ function RecordPaymentForm({ charge, onSuccess }) {
         </Alert>
       )}
       <TextField
-        label={`Amount paid ($) â€” max $${remaining.toLocaleString()}`}
+        label={`Amount paid ($) — max $${remaining.toLocaleString()}`}
         type="number"
         size="small"
         inputProps={{ step: '0.01', min: '0.01', max: String(remaining) }}
