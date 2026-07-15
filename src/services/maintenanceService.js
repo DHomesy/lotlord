@@ -134,6 +134,7 @@ async function createRequest({ unitId, category, priority, title, description },
       variables: {
         title:    request.title,
         unit:     unit.unit_number,
+        property: property.name || '',
         category: request.category || '',
         priority: request.priority || '',
       },
@@ -192,7 +193,11 @@ async function updateRequest(id, data, user) {
   // Notify the submitting tenant when a landlord/admin moves the request forward.
   // Only fires when status actually changes to a notable value, and only to the
   // person who submitted the request (never self-notifies the updater).
-  const STATUS_TRIGGER = { in_progress: 'maintenance_in_progress', completed: 'maintenance_completed' };
+  const STATUS_TRIGGER = {
+    in_progress: 'maintenance_in_progress',
+    completed:   'maintenance_completed',
+    cancelled:   'maintenance_cancelled',
+  };
   if (data.status
       && STATUS_TRIGGER[data.status]
       && data.status !== request.status

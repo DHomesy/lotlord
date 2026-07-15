@@ -11,7 +11,7 @@ import {
   Alert,
   Link,
 } from '@mui/material'
-import { Link as RouterLink } from 'react-router-dom'
+import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { useLogin } from '../../hooks/useAuth'
 
 const schema = z.object({
@@ -21,6 +21,8 @@ const schema = z.object({
 
 export default function LoginPage() {
   const { mutate: login, isPending, error } = useLogin()
+  const [searchParams] = useSearchParams()
+  const justVerified = searchParams.get('verified') === '1'
 
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
@@ -46,6 +48,12 @@ export default function LoginPage() {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Sign in to your account
           </Typography>
+
+          {justVerified && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              Email verified! You can now sign in.
+            </Alert>
+          )}
 
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>

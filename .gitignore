@@ -28,6 +28,10 @@ coverage/
 
 # Migrations lock (keep migrations themselves, not lock files)
 .node-pg-migrate-lock
+
+# Local QA checklist — dev-only, not committed
+qa-checklist.txt
+
 aws-sms-cutover-checklist.txt
 notification-gateway-design.txt
 # Local planning docs

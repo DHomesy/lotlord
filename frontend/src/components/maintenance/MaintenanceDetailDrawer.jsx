@@ -4,6 +4,7 @@ import {
   MenuItem, Stack, TextField, Tooltip, Typography,
 } from '@mui/material'
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import AttachFileIcon from '@mui/icons-material/AttachFile'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -101,18 +102,24 @@ export default function MaintenanceDetailDrawer({ request, onClose, readonly = f
       anchor="right"
       open={!!request}
       onClose={onClose}
-      PaperProps={{ sx: { width: { xs: '100%', sm: 520 }, p: 0 } }}
+      PaperProps={{ sx: { width: { xs: '100%', sm: 520 }, p: 0, pb: { xs: '56px', sm: 0 } } }}
     >
       {/* ── Header ── */}
       <Box sx={{ px: 3, pt: 3, pb: 2, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+        {/* Back button — visible on mobile only; mirrors the close button behaviour */}
+        <IconButton size="small" onClick={onClose} sx={{ display: { xs: 'inline-flex', sm: 'none' }, mt: -0.5, mr: 0.5 }}>
+          <ArrowBackIcon fontSize="small" />
+        </IconButton>
         <Box sx={{ flex: 1 }}>
           <Typography variant="h6" fontWeight={600} sx={{ mb: 0.5 }}>
             {request.title}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {[request.property_address, request.unit_number ? `Unit ${request.unit_number}` : null]
-              .filter(Boolean)
-              .join(' · ')}
+            {[request.property_address,
+              request.property_type === 'single'
+                ? 'Main Unit'
+                : request.unit_number ? `Unit ${request.unit_number}` : null,
+            ].filter(Boolean).join(' · ')}
           </Typography>
         </Box>
         <IconButton size="small" onClick={onClose} sx={{ mt: -0.5 }}>
