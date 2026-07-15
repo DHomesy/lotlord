@@ -8,6 +8,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.12.6] — 2026-07-15 — AWS SMS Webhook Hardening & Logging
+
+### Security
+- **AWS SMS webhook production guard** — `POST /api/v1/webhooks/aws/sms` now requires `AWS_SMS_WEBHOOK_SECRET` to be configured when `NODE_ENV=production`. If missing, the endpoint returns a server misconfiguration response and does not process inbound payloads.
+
+### Added
+- **AWS SMS webhook unit tests** — new suite validates production secret enforcement, invalid-secret rejection, SNS notification envelope parsing, external-id dedupe behavior, and STOP consent handling.
+
+### Changed
+- **SMS segment persistence in notification logs** — `notifications_log.sms_segments` is now populated for outbound template SMS and ad-hoc SMS sends via `estimateSmsSegments(...)` so per-message cost analysis is queryable from log data.
+
+### Tests
+- Unit test suite now includes `tests/unit/webhooksAwsSms.test.js` and passes with `10/10` suites and `174/174` tests.
+
+---
 ## [1.12.5] — 2026-07-13 — Sprint D Chunk 4: UX Audits, Data & Auth
 
 ### Fixed

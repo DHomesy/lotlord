@@ -4,16 +4,16 @@
  * Tests the three controller functions (getMySmsStatus, provisionMySms, deprovisionMySms)
  * and the updateMe controller (AI config PATCH /me).
  *
- * All service / repo calls are mocked — no DB or Twilio API required.
+ * All service / repo calls are mocked — no DB or provider API required.
  *
  * Run: npm run test:unit
  */
 
-jest.mock('../../src/services/twilioService');
+jest.mock('../../src/services/smsProvisioningService');
 jest.mock('../../src/dal/userRepository');
 
-const twilioService = require('../../src/services/twilioService');
-const userRepo      = require('../../src/dal/userRepository');
+const smsProvisioningService = require('../../src/services/smsProvisioningService');
+const userRepo              = require('../../src/dal/userRepository');
 
 const {
   getMySmsStatus,
@@ -46,20 +46,20 @@ function mockRes() {
 describe('getMySmsStatus', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('returns the provisioning status from twilioService', async () => {
+  it('returns the provisioning status from smsProvisioningService', async () => {
     const status = { provisioned: true, phoneNumber: '+15125550001', messagingServiceSid: 'MG123' };
-    twilioService.getProvisioningStatus.mockResolvedValue(status);
+    smsProvisioningService.getProvisioningStatus.mockResolvedValue(status);
 
     const req = mockReq();
     const res = mockRes();
     await getMySmsStatus(req, res, jest.fn());
 
-    expect(twilioService.getProvisioningStatus).toHaveBeenCalledWith('landlord-uuid');
+    expect(smsProvisioningService.getProvisioningStatus).toHaveBeenCalledWith('landlord-uuid');
     expect(res.json).toHaveBeenCalledWith(status);
   });
 
   it('returns unprovisioned status', async () => {
-    twilioService.getProvisioningStatus.mockResolvedValue({ provisioned: false, phoneNumber: null, messagingServiceSid: null });
+    smsProvisioningService.getProvisioningStatus.mockResolvedValue({ provisioned: false, phoneNumber: null, messagingServiceSid: null });
 
     const req = mockReq();
     const res = mockRes();
@@ -69,7 +69,7 @@ describe('getMySmsStatus', () => {
   });
 
   it('calls next(err) on unexpected error', async () => {
-    twilioService.getProvisioningStatus.mockRejectedValue(new Error('DB down'));
+    smsProvisioningService.getProvisioningStatus.mockRejectedValue(new Error('DB down'));
 
     const req  = mockReq();
     const res  = mockRes();
@@ -87,20 +87,20 @@ describe('provisionMySms', () => {
 
   it('returns 201 with phone number on success', async () => {
     const result = { phoneNumber: '+15125550001', messagingServiceSid: 'MG123' };
-    twilioService.provisionSmsNumber.mockResolvedValue(result);
+    smsProvisioningService.provisionSmsNumber.mockResolvedValue(result);
 
     const req = mockReq({ body: { areaCode: '512' } });
     const res = mockRes();
     await provisionMySms(req, res, jest.fn());
 
-    expect(twilioService.provisionSmsNumber).toHaveBeenCalledWith('landlord-uuid', '512');
+    expect(smsProvisioningService.provisionSmsNumber).toHaveBeenCalledWith('landlord-uuid', '512');
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith(result);
   });
 
   it('returns 409 when already provisioned', async () => {
     const err = Object.assign(new Error('Already provisioned'), { status: 409 });
-    twilioService.provisionSmsNumber.mockRejectedValue(err);
+    smsProvisioningService.provisionSmsNumber.mockRejectedValue(err);
 
     const req = mockReq({ body: { areaCode: '512' } });
     const res = mockRes();
@@ -112,7 +112,7 @@ describe('provisionMySms', () => {
 
   it('returns 422 with code when no numbers in area code', async () => {
     const err = Object.assign(new Error('No numbers available'), { status: 422, code: 'NO_NUMBERS_IN_AREA_CODE' });
-    twilioService.provisionSmsNumber.mockRejectedValue(err);
+    smsProvisioningService.provisionSmsNumber.mockRejectedValue(err);
 
     const req = mockReq({ body: { areaCode: '999' } });
     const res = mockRes();
@@ -123,7 +123,7 @@ describe('provisionMySms', () => {
   });
 
   it('calls next(err) on unexpected error (no .status property)', async () => {
-    twilioService.provisionSmsNumber.mockRejectedValue(new Error('Twilio network error'));
+    smsProvisioningService.provisionSmsNumber.mockRejectedValue(new Error('provider network error'));
 
     const req  = mockReq({ body: { areaCode: '512' } });
     const res  = mockRes();
@@ -140,20 +140,20 @@ describe('deprovisionMySms', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('returns 204 on successful deprovisioning', async () => {
-    twilioService.deprovisionSmsNumber.mockResolvedValue(undefined);
+    smsProvisioningService.deprovisionSmsNumber.mockResolvedValue(undefined);
 
     const req = mockReq();
     const res = mockRes();
     await deprovisionMySms(req, res, jest.fn());
 
-    expect(twilioService.deprovisionSmsNumber).toHaveBeenCalledWith('landlord-uuid');
+    expect(smsProvisioningService.deprovisionSmsNumber).toHaveBeenCalledWith('landlord-uuid');
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.send).toHaveBeenCalled();
   });
 
   it('returns 404 when landlord has no provisioned number', async () => {
     const err = Object.assign(new Error('No SMS number provisioned'), { status: 404 });
-    twilioService.deprovisionSmsNumber.mockRejectedValue(err);
+    smsProvisioningService.deprovisionSmsNumber.mockRejectedValue(err);
 
     const req = mockReq();
     const res = mockRes();
@@ -164,7 +164,7 @@ describe('deprovisionMySms', () => {
   });
 
   it('calls next(err) on unexpected error', async () => {
-    twilioService.deprovisionSmsNumber.mockRejectedValue(new Error('Twilio error'));
+    smsProvisioningService.deprovisionSmsNumber.mockRejectedValue(new Error('provider error'));
 
     const req  = mockReq();
     const res  = mockRes();

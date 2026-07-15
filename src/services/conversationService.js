@@ -359,6 +359,20 @@ async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, c
 
   // Auto-send if landlord has opted in
   if (landlord.ai_reply_mode === 'auto') {
+    const guardrail = await notificationService.canAutoSendSmsForOwner({
+      ownerId: resolvedLandlordId,
+      body: reply,
+    }).catch(() => ({ allowed: true, reason: null }));
+    if (guardrail?.allowed === false) {
+      // Switch to approval mode when guardrails are exceeded.
+      await userRepo.update(resolvedLandlordId, { ai_reply_mode: 'suggest' });
+      console.warn(
+        `[conversationService] Auto-send blocked for owner ${resolvedLandlordId}: ${guardrail.reason}. ` +
+        'Switched ai_reply_mode to suggest.',
+      );
+      return draft;
+    }
+
     await approveSuggestedReply(conv.id, resolvedLandlordId).catch((err) => {
       console.error(`[conversationService] Auto-send failed for conversation ${conv.id}:`, err.message);
     });
@@ -371,7 +385,7 @@ async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, c
 async function _buildContext(tenantId) {
   try {
     const leases = await leaseRepo.findAll({ tenantId, status: 'active', limit: 1 });
-    if (!leases.length) return '';
+    if (!Array.isArray(leases) || !leases.length) return '';
     const lease   = leases[0];
     const balance = await ledgerRepo.getCurrentBalance(lease.id);
     return [
@@ -393,9 +407,22 @@ async function _buildContext(tenantId) {
  */
 async function _deliverMessage({ content, channel, tenantUser, landlord, conversationId }) {
   if (channel === 'sms') {
+    let body = content;
+    try {
+      const tenant = await tenantRepo.findByUserId(tenantUser.id);
+      const leases = tenant
+        ? await leaseRepo.findAll({ tenantId: tenant.id, status: 'active', limit: 1 })
+        : [];
+      const lease = Array.isArray(leases) ? leases[0] : null;
+      const propertyName = lease?.property_name || 'Property Manager';
+      body = `${content}\n- ${propertyName} via LotLord`;
+    } catch (err) {
+      console.warn('[conversationService] Failed to append SMS signature:', err.message);
+    }
+
     await notificationService.sendSmsAdhoc({
       recipientId: tenantUser.id,
-      body:        content,
+      body,
       landlordId:  landlord?.id,
     });
   } else {

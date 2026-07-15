@@ -1,5 +1,5 @@
 const userRepo = require('../dal/userRepository');
-const twilioService = require('../services/twilioService');
+const smsProvisioningService = require('../services/smsProvisioningService');
 
 async function getMe(req, res, next) {
   try {
@@ -76,7 +76,7 @@ async function updateMe(req, res, next) {
  */
 async function getMySmsStatus(req, res, next) {
   try {
-    const status = await twilioService.getProvisioningStatus(req.user.sub);
+    const status = await smsProvisioningService.getProvisioningStatus(req.user.sub);
     res.json(status);
   } catch (err) { next(err); }
 }
@@ -88,7 +88,7 @@ async function getMySmsStatus(req, res, next) {
  */
 async function provisionMySms(req, res, next) {
   try {
-    const result = await twilioService.provisionSmsNumber(req.user.sub, req.body.areaCode);
+    const result = await smsProvisioningService.provisionSmsNumber(req.user.sub, req.body.areaCode);
     res.status(201).json(result);
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message, code: err.code });
@@ -102,7 +102,7 @@ async function provisionMySms(req, res, next) {
  */
 async function deprovisionMySms(req, res, next) {
   try {
-    await twilioService.deprovisionSmsNumber(req.user.sub);
+    await smsProvisioningService.deprovisionSmsNumber(req.user.sub);
     res.status(204).send();
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message, code: err.code });

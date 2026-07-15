@@ -335,7 +335,7 @@ const updateMeValidators = [
 // ── SMS provisioning ──────────────────────────────────────────────────────────
 const provisionSmsValidators = [
   body('areaCode')
-    .notEmpty().withMessage('areaCode is required')
+    .optional({ values: 'falsy' })
     .matches(/^\d{3}$/).withMessage('areaCode must be exactly 3 digits'),
 ];
 

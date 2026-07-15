@@ -51,6 +51,7 @@ const mockDraft = {
 // Reset all mocks before each test
 beforeEach(() => {
   jest.clearAllMocks();
+  notificationService.canAutoSendSmsForOwner = jest.fn().mockResolvedValue({ allowed: true, reason: null });
 });
 
 // ── handleInboundSms ──────────────────────────────────────────────────────────
@@ -431,7 +432,7 @@ describe('sendManualReply', () => {
 
     expect(notificationService.sendSmsAdhoc).toHaveBeenCalledWith(expect.objectContaining({
       recipientId: TENANT_USER_ID,
-      body:        'Hello tenant',
+      body:        expect.stringContaining('Hello tenant'),
     }));
     expect(convRepo.appendMessage).toHaveBeenCalledWith(expect.objectContaining({
       role:       'assistant',

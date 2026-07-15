@@ -7,6 +7,8 @@ const stripeService = require('../services/stripeService');
 const emailInboxService = require('../services/emailInboxService');
 const conversationService = require('../services/conversationService');
 const userRepo = require('../dal/userRepository');
+const tenantRepo = require('../dal/tenantRepository');
+const smsRepo = require('../dal/smsRepository');
 const notificationRepo = require('../dal/notificationRepository');
 const env = require('../config/env');
 
@@ -23,6 +25,142 @@ function safeCompare(a, b) {
   } catch {
     return false;
   }
+}
+
+function normalizePhone(value) {
+  return String(value || '').trim();
+}
+
+function isStopKeyword(text) {
+  const value = String(text || '').trim().toUpperCase();
+  return ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'].includes(value);
+}
+
+function isStartKeyword(text) {
+  const value = String(text || '').trim().toUpperCase();
+  return ['START', 'UNSTOP', 'YES'].includes(value);
+}
+
+function isHelpKeyword(text) {
+  return String(text || '').trim().toUpperCase() === 'HELP';
+}
+
+function parseAwsInboundBody(payload = {}) {
+  // Shape 1: direct payload (forwarder)
+  // Shape 2: EventBridge style payload.detail
+  // Shape 3: SNS HTTP envelope where Message is a JSON string
+  const detail = payload.detail || payload;
+
+  const snsMessage = (payload.Type === 'Notification' && typeof payload.Message === 'string')
+    ? (() => {
+      try { return JSON.parse(payload.Message); } catch { return null; }
+    })()
+    : null;
+
+  const source = snsMessage || detail;
+
+  const from = source?.originationNumber || source?.from || source?.sourcePhoneNumber || '';
+  const to = source?.destinationNumber || source?.to || source?.destinationPhoneNumber || '';
+  const body = source?.messageBody || source?.body || source?.message || '';
+  const messageId = source?.messageId || source?.inboundMessageId || source?.id || payload.id || '';
+
+  return { from, to, body, messageId };
+}
+
+async function processInboundSms({ provider, from, to, body, externalId }) {
+  const senderPhone = normalizePhone(from);
+  const destinationPhone = normalizePhone(to);
+
+  if (!senderPhone || !destinationPhone) {
+    console.warn(`[${provider} inbound] Missing sender/destination phone — ignoring`);
+    return;
+  }
+
+  if (externalId) {
+    const existing = await notificationRepo.findLogByExternalId(externalId);
+    if (existing) {
+      console.info(`[${provider} inbound] Duplicate externalId=${externalId} ignored`);
+      return;
+    }
+  }
+
+  const [sender, landlord] = await Promise.all([
+    userRepo.findByPhone(senderPhone),
+    String(env.SMS_PROVIDER || 'twilio').toLowerCase() === 'aws'
+      ? userRepo.findByAwsSmsNumber(destinationPhone)
+      : userRepo.findByTwilioSmsNumber(destinationPhone),
+  ]);
+
+  if (!sender) {
+    console.warn(`[${provider} inbound] Unknown sender: ${senderPhone} — message not persisted`);
+    return;
+  }
+
+  if (!landlord) {
+    console.warn(`[${provider} inbound] No landlord found for destination ${destinationPhone}`);
+  }
+
+  const logEntry = await notificationRepo.createLogEntry({
+    id: uuidv4(),
+    templateId: null,
+    recipientId: sender.id,
+    channel: 'sms',
+    status: 'received',
+    subject: null,
+    body,
+    externalId: externalId || null,
+  });
+
+  // Compliance keyword handling (landlord-scoped preferences)
+  if (landlord?.id) {
+    try {
+      const tenantRecord = await tenantRepo.findByUserId(sender.id);
+      const tenantId = tenantRecord?.id || null;
+      if (isStopKeyword(body)) {
+        if (tenantId) {
+          await smsRepo.upsertTenantOwnerPreference({ tenantId, ownerId: landlord.id, smsOptIn: false });
+        }
+        await smsRepo.logConsentEvent({
+          tenantId,
+          ownerId: landlord.id,
+          eventType: 'opt_out',
+          messageId: externalId || null,
+          metadata: { provider, from: senderPhone, to: destinationPhone },
+        });
+        return;
+      }
+      if (isStartKeyword(body)) {
+        if (tenantId) {
+          await smsRepo.upsertTenantOwnerPreference({ tenantId, ownerId: landlord.id, smsOptIn: true });
+        }
+        await smsRepo.logConsentEvent({
+          tenantId,
+          ownerId: landlord.id,
+          eventType: 'start',
+          messageId: externalId || null,
+          metadata: { provider, from: senderPhone, to: destinationPhone },
+        });
+      } else if (isHelpKeyword(body)) {
+        await smsRepo.logConsentEvent({
+          tenantId,
+          ownerId: landlord.id,
+          eventType: 'help',
+          messageId: externalId || null,
+          metadata: { provider, from: senderPhone, to: destinationPhone },
+        });
+      }
+    } catch (err) {
+      console.error(`[${provider} inbound] Failed compliance event handling:`, err.message);
+    }
+  }
+
+  conversationService.handleInboundSms({
+    tenantUserId: sender.id,
+    landlordId: landlord?.id ?? null,
+    content: body,
+    logEntryId: logEntry.id,
+    channel: 'sms',
+  }).catch((err) => console.error(`[${provider}] AI handling failed:`, err.message));
 }
 
 // POST /api/v1/webhooks/stripe
@@ -69,52 +207,16 @@ router.post('/twilio/sms', async (req, res) => {
   }
 
   // ── 2. Parse the inbound message ────────────────────────────────────────────
-  const from       = req.body.From || '';       // E.164 sender (tenant), e.g. +14155551234
-  const to         = req.body.To   || '';       // E.164 destination (landlord's number or platform number)
+  const from       = req.body.From || '';
+  const to         = req.body.To   || '';
   const body       = req.body.Body || '';
   const messageSid = req.body.MessageSid || '';
 
   // Body is intentionally omitted from the log line — it may contain PII / sensitive content.
   console.info(`[twilio inbound] MessageSid=${messageSid} From=${from} To=${to} bodyLength=${body.length}`);
 
-  // ── 3. Identify sender + landlord context ────────────────────────────────────
-  // sender  = the tenant who texted in (matched by their phone number)
-  // landlord = resolved from the destination number (each landlord has a unique Twilio number)
-  // Both lookups are best-effort — unknown parties are logged and the message is still acknowledged.
   try {
-    const [sender, landlord] = await Promise.all([
-      userRepo.findByPhone(from),
-      userRepo.findByTwilioSmsNumber(to),
-    ]);
-
-    if (!sender) {
-      console.warn(`[twilio inbound] Unknown sender: ${from} — message not persisted`);
-    } else {
-      if (!landlord) {
-        // Message arrived at an unrecognised number (e.g. platform number or stale provisioning)
-        console.warn(`[twilio inbound] No landlord found for destination ${to} — logging without landlord context`);
-      }
-
-      const logEntry = await notificationRepo.createLogEntry({
-        id:          uuidv4(),
-        templateId:  null,
-        recipientId: sender.id,
-        channel:     'sms',
-        status:      'received',
-        subject:     null,
-        body,
-      });
-      console.info(`[twilio inbound] Matched sender=${sender.id} landlord=${landlord?.id ?? 'none'}`);
-
-      // ── AI agent hook ─────────────────────────────────────────────────────────
-      conversationService.handleInboundSms({
-        tenantUserId: sender.id,
-        landlordId:   landlord?.id ?? null,
-        content:      body,
-        logEntryId:   logEntry.id,
-        channel:      'sms',
-      }).catch((err) => console.error('[twilio] AI handling failed:', err.message));
-    }
+    await processInboundSms({ provider: 'twilio', from, to, body, externalId: messageSid });
   } catch (err) {
     // Non-fatal — still acknowledge Twilio so they don't retry
     console.error('[twilio inbound] Error processing message:', err.message);
@@ -123,6 +225,52 @@ router.post('/twilio/sms', async (req, res) => {
   // ── 4. Reply with empty TwiML ────────────────────────────────────────────────
   // No auto-reply for now; the AI agent will handle conversational replies.
   res.type('text/xml').send('<Response></Response>');
+});
+
+// POST /api/v1/webhooks/aws/sms
+// Supports:
+// - AWS SNS HTTP envelope (Type=Notification, Message=<JSON string>)
+// - AWS EventBridge/Lambda forwarder JSON payloads
+router.post('/aws/sms', async (req, res) => {
+  if (env.NODE_ENV === 'production' && !env.AWS_SMS_WEBHOOK_SECRET) {
+    console.error('[aws sms webhook] AWS_SMS_WEBHOOK_SECRET must be configured in production');
+    return res.status(500).json({ error: 'AWS SMS webhook is not configured' });
+  }
+
+  if (env.AWS_SMS_WEBHOOK_SECRET) {
+    const secret = req.headers['x-webhook-secret'] || req.query.secret || '';
+    if (!safeCompare(secret, env.AWS_SMS_WEBHOOK_SECRET)) {
+      console.warn('[aws sms webhook] Invalid webhook secret — rejecting request');
+      return res.status(401).json({ error: 'Invalid webhook secret' });
+    }
+  }
+
+  const payload = req.body || {};
+
+  // Handle SNS subscription handshake when endpoint is subscribed directly.
+  if (payload.Type === 'SubscriptionConfirmation' && payload.SubscribeURL) {
+    try {
+      const subscribeHost = new URL(payload.SubscribeURL).hostname;
+      if (!subscribeHost.endsWith('.amazonaws.com') && !subscribeHost.endsWith('.amazonaws.com.cn')) {
+        console.warn(`[aws sms webhook] SubscribeURL host '${subscribeHost}' is not an AWS endpoint — refusing to confirm`);
+        return res.sendStatus(200);
+      }
+
+      await fetch(payload.SubscribeURL);
+      console.info('[aws sms webhook] SNS subscription confirmed');
+    } catch (err) {
+      console.error('[aws sms webhook] Failed to confirm SNS subscription:', err.message);
+    }
+    return res.sendStatus(200);
+  }
+
+  const { from, to, body, messageId } = parseAwsInboundBody(payload);
+
+  // Always ACK quickly to avoid upstream retries on transient processing issues.
+  res.sendStatus(200);
+
+  processInboundSms({ provider: 'aws', from, to, body, externalId: messageId })
+    .catch((err) => console.error('[aws sms webhook] Error processing message:', err.message));
 });
 
 // POST /api/v1/webhooks/ses

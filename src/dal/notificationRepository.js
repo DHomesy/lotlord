@@ -138,18 +138,44 @@ async function findLogById(id) {
   return rows[0] || null;
 }
 
+async function findLogByExternalId(externalId) {
+  if (!externalId) return null;
+  const { rows } = await query(
+    `SELECT l.*,
+            u.email      AS recipient_email,
+            u.first_name AS recipient_first_name,
+            u.last_name  AS recipient_last_name
+       FROM notifications_log l
+       JOIN users u ON u.id = l.recipient_id
+      WHERE l.external_id = $1 LIMIT 1`,
+    [externalId],
+  );
+  return rows[0] || null;
+}
+
 /**
  * Insert a new log entry and return it.
  * externalId  — provider message ID (e.g. Gmail messageId) for dedup
  * threadId    — provider thread/conversation ID (e.g. Gmail threadId) for in-thread replies
  */
-async function createLogEntry({ id, templateId, recipientId, channel, status, subject, body, externalId, threadId }) {
+async function createLogEntry({ id, templateId, recipientId, channel, status, subject, body, externalId, threadId, smsSegments }) {
   const { rows } = await query(
     `INSERT INTO notifications_log
-       (id, template_id, recipient_id, channel, status, subject, body, external_id, thread_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (id, template_id, recipient_id, channel, status, subject, body, external_id, thread_id, sms_segments)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
-    [id, templateId || null, recipientId, channel, status, subject || null, body || null, externalId || null, threadId || null],
+    [
+      id,
+      templateId || null,
+      recipientId,
+      channel,
+      status,
+      subject || null,
+      body || null,
+      externalId || null,
+      threadId || null,
+      Number.isInteger(smsSegments) ? smsSegments : null,
+    ],
   );
   return rows[0];
 }
@@ -277,6 +303,7 @@ module.exports = {
   deleteTemplate,
   findLog,
   findLogById,
+  findLogByExternalId,
   createLogEntry,
   updateLogEntry,
   findConversations,

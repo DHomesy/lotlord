@@ -34,11 +34,14 @@ jest.mock('twilio', () => {
 jest.mock('../../src/dal/notificationRepository');
 jest.mock('../../src/dal/userRepository');
 jest.mock('../../src/dal/tenantRepository');
+jest.mock('../../src/dal/smsRepository');
 jest.mock('../../src/integrations/email');
 
 const twilio           = require('twilio');
 const notificationRepo = require('../../src/dal/notificationRepository');
 const userRepo         = require('../../src/dal/userRepository');
+const tenantRepo       = require('../../src/dal/tenantRepository');
+const smsRepo          = require('../../src/dal/smsRepository');
 
 // Fresh require after mocks are in place
 const { sendSms }                  = require('../../src/integrations/twilio');
@@ -112,6 +115,9 @@ describe('sendByTriggerEvent with landlordId', () => {
     notificationRepo.createLogEntry.mockResolvedValue({ id: 'log-uuid' });
     notificationRepo.updateLogEntry.mockResolvedValue(undefined);
     notificationRepo.findLogById.mockResolvedValue({ id: 'log-uuid', status: 'sent' });
+    tenantRepo.findByUserId.mockResolvedValue({ id: 'tenant-record-uuid' });
+    smsRepo.getTenantOwnerPreference.mockResolvedValue(null);
+    smsRepo.incrementMonthlyUsage.mockResolvedValue({});
 
     userRepo.findById.mockImplementation((id) => {
       if (id === 'landlord-uuid') return Promise.resolve(landlord);
@@ -184,6 +190,9 @@ describe('sendSmsAdhoc with landlordId', () => {
     notificationRepo.createLogEntry.mockResolvedValue({ id: 'log-uuid' });
     notificationRepo.updateLogEntry.mockResolvedValue(undefined);
     notificationRepo.findLogById.mockResolvedValue({ id: 'log-uuid', status: 'sent' });
+    tenantRepo.findByUserId.mockResolvedValue({ id: 'tenant-record-uuid' });
+    smsRepo.getTenantOwnerPreference.mockResolvedValue(null);
+    smsRepo.incrementMonthlyUsage.mockResolvedValue({});
 
     userRepo.findById.mockImplementation((id) => {
       if (id === 'landlord-uuid') return Promise.resolve(landlord);

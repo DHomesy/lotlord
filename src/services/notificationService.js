@@ -2,15 +2,64 @@ const { v4: uuidv4 } = require('uuid');
 const notificationRepo = require('../dal/notificationRepository');
 const userRepo   = require('../dal/userRepository');
 const tenantRepo = require('../dal/tenantRepository');
+const smsRepo = require('../dal/smsRepository');
 const email = require('../integrations/email');
-const { sendSms } = require('../integrations/twilio');
+const { sendSms } = require('../integrations/sms');
 const env = require('../config/env');
+const { estimateSmsSegments } = require('../lib/smsSegments');
 const { escapeHtml, renderTemplate } = require('../lib/templateUtils');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function notFound(msg) {
   return Object.assign(new Error(msg), { status: 404 });
+}
+
+function resolveLandlordSmsIdentity(landlord) {
+  if (!landlord) return undefined;
+  if (String(env.SMS_PROVIDER || 'twilio').toLowerCase() === 'aws') {
+    return landlord.aws_sms_phone_number_id || landlord.aws_sms_phone_number || undefined;
+  }
+  return landlord.twilio_sms_number || undefined;
+}
+
+function getPlanSegmentCap(user) {
+  const plan = user?.subscription_plan || 'free';
+  const status = user?.subscription_status;
+
+  if (!['active', 'trialing'].includes(status || '')) return 0;
+
+  const starter = Number(env.SMS_CAP_STARTER || 250);
+  const enterprise = Number(env.SMS_CAP_ENTERPRISE || 1000);
+  const commercial = Number(env.SMS_CAP_COMMERCIAL || 2500);
+
+  if (plan === 'commercial') return commercial;
+  if (plan === 'enterprise') return enterprise;
+  if (plan === 'starter') return starter;
+  return 0;
+}
+
+async function alertSmsFailure({ error, to, from, attempts }) {
+  if (!env.ALERT_EMAIL) return;
+  const subject = '[LotLord] SMS delivery failed after retries';
+  const text = [
+    `Provider: ${env.SMS_PROVIDER || 'twilio'}`,
+    `Attempts: ${attempts}`,
+    `To: ${to || 'unknown'}`,
+    `From: ${from || 'default'}`,
+    `Error: ${error?.message || 'Unknown error'}`,
+  ].join('\n');
+
+  try {
+    await email.sendEmail({
+      to: env.ALERT_EMAIL,
+      subject,
+      html: `<pre>${escapeHtml(text)}</pre>`,
+      text,
+    });
+  } catch (notifyErr) {
+    console.error('[notification] Failed to send SMS failure alert email:', notifyErr.message);
+  }
 }
 
 /**
@@ -65,26 +114,38 @@ async function executeSend({ logId, recipientEmail, subject, html, text, message
 }
 
 /**
- * Internal: send an SMS via Twilio and update the log entry status.
+ * Internal: send an SMS via the configured provider and update the log entry status.
  * @param {string} [fromNumber] - E.164 sender override (landlord's number). Defaults to platform number.
  */
 async function executeSendSms({ logId, to, body, fromNumber }) {
-  try {
-    await sendSms({ to, body, from: fromNumber });
-    await notificationRepo.updateLogEntry(logId, {
-      status: 'sent',
-      sentAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    await notificationRepo.updateLogEntry(logId, {
-      status: 'failed',
-      errorMessage: err.message,
-    });
-    throw Object.assign(
-      new Error(`SMS send failed: ${err.message}`),
-      { status: 502 },
-    );
+  const attempts = Number(env.SMS_SEND_MAX_ATTEMPTS || 3);
+  let lastErr;
+
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const providerMessageId = await sendSms({ to, body, from: fromNumber });
+      await notificationRepo.updateLogEntry(logId, {
+        status: 'sent',
+        sentAt: new Date().toISOString(),
+      });
+      return providerMessageId;
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts) {
+        console.warn(`[notification] SMS attempt ${i}/${attempts} failed (${err.message}). Retrying...`);
+      }
+    }
   }
+
+  await notificationRepo.updateLogEntry(logId, {
+    status: 'failed',
+    errorMessage: lastErr?.message || 'Unknown SMS failure',
+  });
+  await alertSmsFailure({ error: lastErr, to, from: fromNumber, attempts });
+  throw Object.assign(
+    new Error(`SMS send failed: ${lastErr?.message || 'Unknown error'}`),
+    { status: 502 },
+  );
 }
 
 // ── Public service methods ────────────────────────────────────────────────────
@@ -126,7 +187,7 @@ async function sendAdhoc({ recipientId, subject, html, text, messageId }) {
  * @param {object}  [opts.variables]  - Key/value pairs for {{placeholder}} substitution
  * @returns {Promise<object>}         - The notifications_log row
  */
-async function sendFromTemplate({ templateId, recipientId, variables = {}, fromNumber }) {
+async function sendFromTemplate({ templateId, recipientId, variables = {}, fromNumber, landlordId }) {
   if (!templateId) throw Object.assign(new Error('templateId is required'), { status: 400 });
 
   const template = await notificationRepo.findTemplateById(templateId);
@@ -134,8 +195,19 @@ async function sendFromTemplate({ templateId, recipientId, variables = {}, fromN
 
   // ── SMS channel ───────────────────────────────────────────────────────────
   if (template.channel === 'sms') {
+    if (landlordId) {
+      const tenant = await tenantRepo.findByUserId(recipientId);
+      if (tenant) {
+        const pref = await smsRepo.getTenantOwnerPreference(tenant.id, landlordId);
+        if (pref && pref.sms_opt_in === false) {
+          throw Object.assign(new Error('Recipient has opted out of SMS for this landlord'), { status: 409, code: 'SMS_OPTED_OUT' });
+        }
+      }
+    }
+
     const recipient = await resolveRecipientPhone(recipientId);
     const renderedBody = renderTemplate(template.body_template, variables, 'sms');
+    const smsSegments = estimateSmsSegments(renderedBody);
 
     const logEntry = await notificationRepo.createLogEntry({
       id: uuidv4(),
@@ -145,9 +217,13 @@ async function sendFromTemplate({ templateId, recipientId, variables = {}, fromN
       status: 'queued',
       subject: null,
       body: renderedBody,
+      smsSegments,
     });
 
     await executeSendSms({ logId: logEntry.id, to: recipient.phone, body: renderedBody, fromNumber });
+    if (landlordId) {
+      await smsRepo.incrementMonthlyUsage({ ownerId: landlordId, segments: estimateSmsSegments(renderedBody) });
+    }
     return notificationRepo.findLogById(logEntry.id);
   }
 
@@ -206,10 +282,10 @@ async function sendByTriggerEvent({ triggerEvent, recipientId, variables = {}, c
   let fromNumber;
   if (channel === 'sms' && landlordId) {
     const landlord = await userRepo.findById(landlordId);
-    fromNumber = landlord?.twilio_sms_number || undefined;
+    fromNumber = resolveLandlordSmsIdentity(landlord);
   }
 
-  return sendFromTemplate({ templateId: template.id, recipientId, variables: mergedVariables, fromNumber });
+  return sendFromTemplate({ templateId: template.id, recipientId, variables: mergedVariables, fromNumber, landlordId });
 }
 
 /**
@@ -222,13 +298,24 @@ async function sendByTriggerEvent({ triggerEvent, recipientId, variables = {}, c
  * @returns {Promise<object>}        The notifications_log row
  */
 async function sendSmsAdhoc({ recipientId, body, landlordId }) {
+  if (landlordId) {
+    const tenant = await tenantRepo.findByUserId(recipientId);
+    if (tenant) {
+      const pref = await smsRepo.getTenantOwnerPreference(tenant.id, landlordId);
+      if (pref && pref.sms_opt_in === false) {
+        throw Object.assign(new Error('Recipient has opted out of SMS for this landlord'), { status: 409, code: 'SMS_OPTED_OUT' });
+      }
+    }
+  }
+
   const recipient = await resolveRecipientPhone(recipientId);
+  const smsSegments = estimateSmsSegments(body);
 
   // Resolve the landlord's provisioned number so the message arrives from their personal line.
   let fromNumber;
   if (landlordId) {
     const landlord = await userRepo.findById(landlordId);
-    fromNumber = landlord?.twilio_sms_number || undefined;
+    fromNumber = resolveLandlordSmsIdentity(landlord);
   }
 
   const logEntry = await notificationRepo.createLogEntry({
@@ -239,10 +326,45 @@ async function sendSmsAdhoc({ recipientId, body, landlordId }) {
     status: 'queued',
     subject: null,
     body,
+    smsSegments,
   });
 
   await executeSendSms({ logId: logEntry.id, to: recipient.phone, body, fromNumber });
+  if (landlordId) {
+    await smsRepo.incrementMonthlyUsage({ ownerId: landlordId, segments: estimateSmsSegments(body) });
+  }
   return notificationRepo.findLogById(logEntry.id);
+}
+
+/**
+ * Guardrail check for AI auto-send SMS behavior.
+ * Over-cap should switch to approval-only mode (auto-send blocked).
+ */
+async function canAutoSendSmsForOwner({ ownerId, body }) {
+  if (!ownerId) return { allowed: true, reason: null };
+
+  const owner = await userRepo.findById(ownerId);
+  const cap = getPlanSegmentCap(owner);
+  const segments = estimateSmsSegments(body);
+
+  if (cap <= 0) {
+    return { allowed: false, reason: 'plan_not_eligible', segments, cap, used: null };
+  }
+
+  const warnThreshold = Number(env.SMS_AI_WARN_SEGMENTS || 3);
+  const hardThreshold = Number(env.SMS_AI_BLOCK_SEGMENTS || 6);
+  if (segments > hardThreshold) {
+    return { allowed: false, reason: 'length_limit_exceeded', segments, cap, used: null, warnThreshold, hardThreshold };
+  }
+
+  const usage = await smsRepo.getMonthlyUsage(ownerId);
+  const used = Number(usage?.segments_used || 0);
+
+  if (cap > 0 && (used + segments) > cap) {
+    return { allowed: false, reason: 'plan_cap_reached', segments, cap, used, warnThreshold, hardThreshold };
+  }
+
+  return { allowed: true, reason: null, segments, cap, used, warnThreshold, hardThreshold };
 }
 
 /**
@@ -448,4 +570,5 @@ module.exports = {
   sendMessage,
   getLog,
   getLogEntry,
+  canAutoSendSmsForOwner,
 };
