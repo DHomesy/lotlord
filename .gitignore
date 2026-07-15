@@ -28,7 +28,8 @@ coverage/
 
 # Migrations lock (keep migrations themselves, not lock files)
 .node-pg-migrate-lock
-
+aws-sms-cutover-checklist.txt
+notification-gateway-design.txt
 # Local planning docs
 SPRINT-AI-COMMS.md
 SPRINT-B-QA.md
