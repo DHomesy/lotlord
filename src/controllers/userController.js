@@ -1,5 +1,14 @@
 const userRepo = require('../dal/userRepository');
 const smsProvisioningService = require('../services/smsProvisioningService');
+const { resolveOwnerId } = require('../lib/authHelpers');
+
+const ACTIVE_STATUSES = ['active', 'trialing'];
+
+function normalizePlan(plan) {
+  if (plan === 'enterprise') return 'autopilot';
+  if (plan === 'commercial') return 'portfolio';
+  return plan;
+}
 
 async function getMe(req, res, next) {
   try {
@@ -53,6 +62,30 @@ async function updateMe(req, res, next) {
   try {
     const { firstName, lastName, phone, avatarUrl,
             aiEnabled, aiReplyMode, aiNotifyOnSend, aiNotifyChannels } = req.body;
+
+    const aiFieldsTouched = [aiEnabled, aiReplyMode, aiNotifyOnSend, aiNotifyChannels]
+      .some((value) => value !== undefined);
+
+    if (aiFieldsTouched) {
+      if (req.user.role !== 'admin' && req.user.role !== 'landlord' && req.user.role !== 'employee') {
+        return res.status(403).json({ error: 'Insufficient permissions' });
+      }
+
+      if (req.user.role !== 'admin') {
+        const billing = await userRepo.findBillingStatus(resolveOwnerId(req.user));
+        const plan = normalizePlan(billing?.subscription_plan);
+        const isPaid = ACTIVE_STATUSES.includes(billing?.subscription_status) &&
+          (plan === 'autopilot' || plan === 'portfolio');
+
+        if (!isPaid) {
+          return res.status(402).json({
+            error: 'This feature requires an Autopilot or Portfolio plan. Upgrade to continue.',
+            code: 'SUBSCRIPTION_REQUIRED',
+          });
+        }
+      }
+    }
+
     const updated = await userRepo.update(req.user.sub, {
       first_name:         firstName,
       last_name:          lastName,

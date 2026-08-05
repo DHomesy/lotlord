@@ -25,7 +25,7 @@ import { useUpdateMe, useChangePassword, useMe, useSmsStatus, useProvisionSms, u
 import { useConnectStatus, useConnectOnboard, useConnectLogin } from '../../hooks/useStripeSetup'
 import { useMySubscription, useCreateCheckoutSession, useCreateBillingPortalSession } from '../../hooks/useBilling'
 import { useProperties } from '../../hooks/useProperties'
-import { PLANS, hasStarter, hasCommercial, planTier } from '../../lib/plans'
+import { PLANS, getPlanLabel, hasStarter, hasPortfolio, planTier } from '../../lib/plans'
 
 const profileSchema = z.object({
   name:  z.string().min(1, 'Name is required'),
@@ -52,9 +52,11 @@ export default function AdminProfilePage() {
   const { data: subscription, isLoading: loadingSubscription }               = useMySubscription()
   const { mutate: startCheckout,  isPending: startingCheckout, isError: checkoutFailed  } = useCreateCheckoutSession()
   const { mutate: openPortal,     isPending: openingPortal     }             = useCreateBillingPortalSession()
+  const isPaidPlan = hasStarter(subscription)
+  const canUsePaidComms = isAdmin || isPaidPlan
 
   // SMS provisioning
-  const { data: smsStatus, isLoading: loadingSms } = useSmsStatus(isLandlord)
+  const { data: smsStatus, isLoading: loadingSms } = useSmsStatus(isLandlord && canUsePaidComms)
   const { mutate: provisionSms, isPending: provisioning, error: provisionError } = useProvisionSms()
   const { mutate: deprovisionSms, isPending: deprovisioning } = useDeprovisionSms()
 
@@ -183,8 +185,8 @@ export default function AdminProfilePage() {
             </Button>
           }
         >
-          You&apos;re on the <strong>Free plan</strong>. Upgrade to Starter to unlock more
-          properties, team members, and portfolio analytics.
+          You&apos;re on the <strong>Starter free plan</strong>. Upgrade to Autopilot to unlock more
+          units, automation, and communication features with Autopilot.
         </Alert>
       )}
 
@@ -373,13 +375,13 @@ export default function AdminProfilePage() {
         <Box>
           <Typography variant="h6">Subscription</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Choose a plan to unlock additional features. Manage your payment method or
+            Choose Autopilot or Portfolio to unlock additional features. Manage your payment method or
             download invoices at any time.
           </Typography>
         </Box>
         <Chip
           icon={<CardMembershipIcon />}
-          label={subscription?.plan ? subscription.plan : (subscription?.status ?? 'free')}
+          label={subscription?.plan ? getPlanLabel(subscription.plan) : (subscription?.status ?? 'Starter (Free)')}
           color={
             subscription?.status === 'active'   ? 'success' :
             subscription?.status === 'trialing' ? 'info' :
@@ -483,11 +485,11 @@ export default function AdminProfilePage() {
       {hasStarter(subscription) && (
         <Box sx={{ mt: 2 }}>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            Current plan: <strong style={{ textTransform: 'capitalize' }}>{subscription?.plan ?? 'active'}</strong>
+            Current plan: <strong>{getPlanLabel(subscription?.plan) || 'Active'}</strong>
           </Typography>
-          {hasCommercial(subscription) && (
+          {hasPortfolio(subscription) && (
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              Your Commercial plan includes an automatic $2/unit/mo add-on for each commercial unit across all your properties. The add-on quantity is updated in real-time as you add or remove units.
+              Portfolio includes expanded unit and communication allowances, employee permissions, and priority support.
             </Typography>
           )}
           <Button
@@ -554,7 +556,7 @@ export default function AdminProfilePage() {
       </>)}
 
       {/* ── SMS Setup (landlord only) ── */}
-      {isLandlord && (<>
+      {isLandlord && canUsePaidComms && (<>
       <Divider sx={{ my: 4 }} />
       <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
         <SmsIcon color="primary" />
@@ -631,7 +633,7 @@ export default function AdminProfilePage() {
       </>)}
 
       {/* ── AI Settings (landlord only) ── */}
-      {isLandlord && (<>
+      {isLandlord && canUsePaidComms && (<>
       <Divider sx={{ my: 4 }} />
       <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 0.5 }}>
         <SmartToyIcon color="primary" />

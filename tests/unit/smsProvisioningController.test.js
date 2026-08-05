@@ -190,6 +190,7 @@ describe('updateMe', () => {
     const req = mockReq({
       body: { aiEnabled: false, aiReplyMode: 'auto', aiNotifyOnSend: false, aiNotifyChannels: ['email'] },
     });
+    userRepo.findBillingStatus.mockResolvedValue({ subscription_status: 'active', subscription_plan: 'autopilot' });
     const res = mockRes();
     await updateMe(req, res, jest.fn());
 
@@ -200,6 +201,18 @@ describe('updateMe', () => {
       ai_notify_channels: ['email'],
     }));
     expect(res.json).toHaveBeenCalledWith(updated);
+  });
+
+  it('returns 402 when AI config is changed without paid plan', async () => {
+    userRepo.findBillingStatus.mockResolvedValue({ subscription_status: 'canceled', subscription_plan: 'autopilot' });
+
+    const req = mockReq({ body: { aiEnabled: true } });
+    const res = mockRes();
+    await updateMe(req, res, jest.fn());
+
+    expect(userRepo.update).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(402);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'SUBSCRIPTION_REQUIRED' }));
   });
 
   it('updates basic profile fields', async () => {
@@ -218,6 +231,7 @@ describe('updateMe', () => {
   });
 
   it('returns 404 if user not found', async () => {
+    userRepo.findBillingStatus.mockResolvedValue({ subscription_status: 'active', subscription_plan: 'autopilot' });
     userRepo.update.mockResolvedValue(null);
 
     const req = mockReq({ body: { aiEnabled: true } });
@@ -229,6 +243,7 @@ describe('updateMe', () => {
   });
 
   it('calls next(err) on unexpected error', async () => {
+    userRepo.findBillingStatus.mockResolvedValue({ subscription_status: 'active', subscription_plan: 'autopilot' });
     userRepo.update.mockRejectedValue(new Error('DB error'));
 
     const req  = mockReq({ body: { aiEnabled: true } });

@@ -75,11 +75,11 @@ const FAQ = [
   },
   {
     q: 'Can I manage commercial properties?',
-    a: 'Yes — the Commercial plan ($79/mo + $2/unit/mo) supports office, retail, industrial, and mixed-use properties with no unit cap. You only pay for the commercial units you have. Residential multi-family properties are included on all paid plans (up to 4 units each).',
+    a: 'Yes — Portfolio ($79/mo) supports commercial properties and larger operations. Autopilot is focused on smaller portfolios and includes up to 20 total units.',
   },
   {
     q: "What's included in the free plan?",
-    a: '1 property · up to 4 units · up to 4 active tenants · online ACH rent collection · tenant portal access · lease management · maintenance request tracking · document storage. Portfolio analytics require a Growth or higher plan.',
+    a: '1 property · up to 4 units · up to 4 active tenants · online ACH rent collection · tenant portal access · lease management · maintenance request tracking · document storage. Portfolio analytics require Autopilot or Portfolio.',
   },
   {
     q: 'How does online rent collection work?',
@@ -109,10 +109,10 @@ const FAQ = [
 
 const PLANS = [
   {
-    name: 'Free',
+    name: 'Starter',
     price: '$0',
     period: '/ mo',
-    description: 'Perfect for brand-new landlords with a single property.',
+    description: 'Your long-term acquisition funnel for first-time landlords.',
     features: ['1 property · up to 4 units', 'Up to 4 active tenants', 'Online ACH rent collection', 'Tenant portal access', 'Maintenance tracking', 'Lease & document storage', 'Email notifications'],
     cta: 'Get Started Free',
     ctaVariant: 'outlined',
@@ -120,37 +120,26 @@ const PLANS = [
     badge: null,
   },
   {
-    name: 'Growth',
-    price: '$15',
+    name: 'Autopilot',
+    price: '$49',
     period: '/ mo',
-    description: 'Ideal for growing landlords managing multiple properties.',
-    features: ['Up to 25 properties', 'Unlimited units & tenants', 'Dashboard analytics', 'Portfolio income summary', 'Automated rent reminders', 'Everything in Free'],
-    cta: 'Start Free Trial',
+    description: 'Relief from day-to-day operations for growing landlords.',
+    features: ['Up to 20 total units', 'Dedicated SMS number', 'AI inbox + suggested replies', 'Maintenance creation from conversations', 'Preferred-vendor routing', 'Operational briefing', 'Approximately 500 included SMS segments', 'Everything in Starter'],
+    cta: 'Start Autopilot',
     ctaVariant: 'contained',
     highlight: true,
     badge: 'Most Popular',
   },
   {
-    name: 'Enterprise',
-    price: '$49',
+    name: 'Portfolio',
+    price: '$79',
     period: '/ mo',
-    description: 'For serious landlords with large or growing residential portfolios.',
-    features: ['Unlimited properties', 'Single & multi-family (up to 4 units each)', 'Team members — add staff & property managers', 'AI features (coming soon)', 'Document signing (coming soon)', 'Everything in Growth'],
+    description: 'For landlords running larger portfolios and teams.',
+    features: ['More units', 'Higher communication allowance', 'Employee permissions', 'Multiple approval policies', 'Vendor workflows', 'Priority support', 'Everything in Autopilot'],
     cta: 'Get Started',
     ctaVariant: 'outlined',
     highlight: false,
     badge: null,
-  },
-  {
-    name: 'Commercial',
-    price: '$79',
-    period: '/ mo + $2 / unit',
-    description: 'For commercial landlords — office, retail, industrial. Unlimited units, pay only for what you use.',
-    features: ['Unlimited commercial properties', 'Unlimited units per property', 'Per-unit billing ($2/unit/mo)', 'Team members — add staff & property managers', 'Multi-family properties included', 'Everything in Enterprise'],
-    cta: 'Get Started',
-    ctaVariant: 'outlined',
-    highlight: false,
-    badge: 'Commercial',
   },
 ]
 

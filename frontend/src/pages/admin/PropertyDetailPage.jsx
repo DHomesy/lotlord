@@ -294,12 +294,12 @@ export default function PropertyDetailPage() {
                   <Chip size="small" color="warning" label={`${maintenanceCount} maintenance`} />
                 )}
                 {prop?.property_type === 'commercial' && (
-                  <Tooltip title={`$2/unit/mo add-on · billed through your Commercial subscription`}>
+                  <Tooltip title={'Commercial property · available on Portfolio'}>
                     <Chip
                       size="small"
                       color="primary"
                       variant="outlined"
-                      label={`${units.length} commercial unit${units.length !== 1 ? 's' : ''} · ~$${units.length * 2}/mo add-on`}
+                      label={`${units.length} commercial unit${units.length !== 1 ? 's' : ''}`}
                     />
                   </Tooltip>
                 )}

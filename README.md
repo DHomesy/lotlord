@@ -319,7 +319,7 @@ properties
   -- property_type notes:
   --   'single'     one unit, auto-created on property creation
   --   'multi'      2–4 units (small multi-family — traditional cap)
-  --   'commercial' unlimited units; requires Enterprise or Commercial plan
+  --   'commercial' unlimited units; requires Portfolio plan
 
 units
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
@@ -676,7 +676,7 @@ Base URL: `/api/v1`
 The app uses **two completely separate Stripe payment flows** that must never be confused:
 
 #### 1 — SaaS Subscription Billing (Landlord → LotLord platform)
-- Landlord pays for their platform tier (Free / Starter $15 / Enterprise $49)
+- Landlord pays for their platform tier (Starter Free / Autopilot $49 / Portfolio $79)
 - Handled by: `billingController.js`, `stripeService.createCheckoutSession()`, `stripeService.handleWebhookEvent()` subscription events
 - Stripe entity: landlord's **billing** customer (`users.stripe_billing_customer_id`)
 - Money destination: **your** Stripe platform account
@@ -690,13 +690,13 @@ The app uses **two completely separate Stripe payment flows** that must never be
 - Money destination: **landlord's connected bank account** — funds never touch your platform account. Your `STRIPE_SECRET_KEY` facilitates the transfer but you only collect the Stripe platform fee (0.8%, capped at $5 per ACH transaction).
 - Webhook events: `payment_intent.succeeded`, `payment_intent.payment_failed`
 - Payment state stored in: `rent_payments` + `ledger_entries`
-- **ACH is available on all tiers** (Free, Starter, Enterprise) — the only prerequisite is that the landlord completes Stripe Connect onboarding (`requiresConnectOnboarded` middleware)
+- **ACH is available on all tiers** (Starter Free, Autopilot, Portfolio) — the only prerequisite is that the landlord completes Stripe Connect onboarding (`requiresConnectOnboarded` middleware)
 
 #### Rules
 - Never store raw card numbers — Stripe handles all cardholder data
 - Prefer **Stripe ACH** (`us_bank_account`) for rent (0.8%, capped at $5) over card (2.9% + $0.30)
 - All Stripe events come through `/webhooks/stripe` and must update both `rent_payments` and `ledger_entries`
-- Stripe price nicknames in the Dashboard **must** be set to `starter`, `enterprise`, or `commercial` exactly — the webhook stores `price.nickname` as `subscription_plan` in the DB
+- Stripe price nicknames in the Dashboard **must** be set to `autopilot` or `portfolio` — the webhook stores `price.nickname` as `subscription_plan` in the DB
 
 ### Soft Deletes
 - Add `deleted_at` to: `users`, `tenants`, `leases`, `units`
@@ -1080,8 +1080,12 @@ APP_BASE_URL=https://your-app.railway.app
 # Stripe
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=          # required — from Stripe Dashboard → Webhooks → signing secret
-STRIPE_PRICE_ID_STARTER=price_...   # Starter plan — $15/mo — price nickname must be 'starter'
-STRIPE_PRICE_ID_ENTERPRISE=price_... # Enterprise plan — $49/mo — price nickname must be 'enterprise'
+STRIPE_PRICE_ID_STARTER=price_...    # optional legacy tier (starter is now free)
+STRIPE_PRICE_ID_AUTOPILOT=price_...  # Autopilot plan — $49/mo — nickname 'autopilot'
+STRIPE_PRICE_ID_PORTFOLIO=price_...  # Portfolio plan — $79/mo — nickname 'portfolio'
+# Legacy aliases (optional during rollout):
+# STRIPE_PRICE_ID_ENTERPRISE=price_...
+# STRIPE_PRICE_ID_COMMERCIAL=price_...
 # Stripe webhook events to enable in the Dashboard:
 #   customer.subscription.created, customer.subscription.updated,
 #   customer.subscription.deleted, customer.subscription.trial_will_end,

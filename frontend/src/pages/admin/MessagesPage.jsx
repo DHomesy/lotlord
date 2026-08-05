@@ -437,7 +437,7 @@ function AutomationTab({ navigate, isPaid }) {
             </Button>
           }
         >
-          Automated notifications are delivered to tenants on the <strong>Growth plan ($15/mo)</strong> and above.
+          Automated notifications are delivered to tenants on <strong>Autopilot ($49/mo)</strong> and above.
           On the free plan the jobs still run but no messages are delivered.
         </Alert>
       )}
@@ -1019,6 +1019,7 @@ export default function MessagesPage() {
   const user = useAuthStore((s) => s.user)
 
   const isPaid  = hasStarter(subscription) || user?.role === 'admin'
+  const showAiInbox = isPaid
   const logRows = Array.isArray(logData) ? logData : (logData?.log ?? [])
 
   if (loadingConvs && tab === 0) return <LoadingOverlay />
@@ -1045,7 +1046,9 @@ export default function MessagesPage() {
         <Tab label="Conversations" />
         <Tab label="Notification Log" />
         <Tab label="Automation" />
-        <Tab label="AI Inbox" icon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
+        {showAiInbox && (
+          <Tab label="AI Inbox" icon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
+        )}
       </Tabs>
 
       {/* ── Conversations ─────────────────────────────────────────────────── */}
@@ -1115,7 +1118,7 @@ export default function MessagesPage() {
       )}
 
       {/* ── AI Inbox ──────────────────────────────────────────────────────── */}
-      {tab === 3 && <AiInboxTab />}
+      {showAiInbox && tab === 3 && <AiInboxTab />}
     </PageContainer>
   )
 }

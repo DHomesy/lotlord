@@ -174,7 +174,7 @@ export default function DashboardPage() {
 
   const isStarter = hasStarter(subscription)
 
-  // Analytics is Starter-gated — show upgrade prompt for free-tier users.
+  // Analytics is paid-tier gated — show upgrade prompt for free-tier users.
   // This check must come BEFORE the !data guard so free-tier landlords see the
   // upgrade prompt instead of an infinite loading spinner (402 → isError=true, data=undefined).
   if (isError) {
@@ -187,7 +187,7 @@ export default function DashboardPage() {
             <Alert severity="info" sx={{ mb: 3 }}>
               {isEmployee
                 ? 'Portfolio analytics require an active subscription. Contact your employer to upgrade.'
-                : "You're on the Free plan. Upgrade to Starter to unlock full dashboard analytics and more."}
+                : "You're on the Starter free plan. Upgrade to Autopilot to unlock full dashboard analytics and more."}
               {!isEmployee && (
                 <Button size="small" variant="contained" sx={{ ml: 2 }} onClick={() => navigate('/profile#subscription')}>
                   Upgrade Now
@@ -199,7 +199,7 @@ export default function DashboardPage() {
             {!isEmployee && (
               <Box>
                 <Typography variant="h6" fontWeight={600} mb={1}>
-                  What you unlock with Starter ($15/mo)
+                  What you unlock with Autopilot ($49/mo)
                 </Typography>
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Everything below is available the moment you upgrade — no setup required.
@@ -213,13 +213,13 @@ export default function DashboardPage() {
                     },
                     {
                       Icon: HomeWorkIcon,
-                      title: 'Up to 25 Properties',
-                      desc: 'Free plan is limited to 1 property and 4 units. Starter gives you 25 properties with unlimited units.',
+                      title: 'Up to 20 Units',
+                      desc: 'Starter free includes 1 property and 4 units. Autopilot expands you to 20 units with automation features.',
                     },
                     {
                       Icon: GroupIcon,
-                      title: 'Team Members (Enterprise)',
-                      desc: 'Add property managers and staff who can manage leases and maintenance on your behalf. Available on Enterprise.',
+                      title: 'Team Permissions (Portfolio)',
+                      desc: 'Add staff and property managers with role-based permissions on Portfolio.',
                     },
                   ].map(({ Icon, title, desc }) => (
                     <Grid item xs={12} sm={4} key={title}>
@@ -239,7 +239,7 @@ export default function DashboardPage() {
                 <Divider sx={{ my: 3 }} />
                 <Stack direction="row" justifyContent="center">
                   <Button variant="contained" size="large" onClick={() => navigate('/profile#subscription')}>
-                    Upgrade to Starter — $15/mo
+                    Upgrade to Autopilot — $49/mo
                   </Button>
                 </Stack>
               </Box>

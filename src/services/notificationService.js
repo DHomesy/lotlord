@@ -24,17 +24,22 @@ function resolveLandlordSmsIdentity(landlord) {
 }
 
 function getPlanSegmentCap(user) {
-  const plan = user?.subscription_plan || 'free';
+  const rawPlan = user?.subscription_plan || 'free';
+  const plan = rawPlan === 'enterprise'
+    ? 'autopilot'
+    : rawPlan === 'commercial'
+      ? 'portfolio'
+      : rawPlan;
   const status = user?.subscription_status;
 
   if (!['active', 'trialing'].includes(status || '')) return 0;
 
   const starter = Number(env.SMS_CAP_STARTER || 250);
-  const enterprise = Number(env.SMS_CAP_ENTERPRISE || 1000);
-  const commercial = Number(env.SMS_CAP_COMMERCIAL || 2500);
+  const autopilot = Number(env.SMS_CAP_AUTOPILOT || env.SMS_CAP_ENTERPRISE || 1000);
+  const portfolio = Number(env.SMS_CAP_PORTFOLIO || env.SMS_CAP_COMMERCIAL || 2500);
 
-  if (plan === 'commercial') return commercial;
-  if (plan === 'enterprise') return enterprise;
+  if (plan === 'portfolio') return portfolio;
+  if (plan === 'autopilot') return autopilot;
   if (plan === 'starter') return starter;
   return 0;
 }

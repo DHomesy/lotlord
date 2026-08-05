@@ -2,7 +2,7 @@ import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { TextField, Stack, Button, MenuItem, Tooltip } from '@mui/material'
-import { hasCommercial } from '../../lib/plans'
+import { hasPortfolio } from '../../lib/plans'
 
 const schema = z.object({
   name: z.string().min(1, 'Property nickname is required'),
@@ -23,7 +23,7 @@ export default function PropertyForm({ onSubmit, defaultValues, loading, subscri
 
   const propertyType = useWatch({ control, name: 'propertyType', defaultValue: defaultValues?.propertyType || 'single' })
   const isSingleFamily = propertyType === 'single'
-  const canUseCommercial = hasCommercial(subscription) || userRole === 'admin'
+  const canUseCommercial = hasPortfolio(subscription) || userRole === 'admin'
 
   return (
     <Stack component="form" onSubmit={handleSubmit(onSubmit)} spacing={2} sx={{ pt: 1 }}>
@@ -31,7 +31,7 @@ export default function PropertyForm({ onSubmit, defaultValues, loading, subscri
         <MenuItem value="single">Single-family</MenuItem>
         <MenuItem value="multi">Multi-family</MenuItem>
         <Tooltip
-          title={canUseCommercial ? '' : 'Requires the Commercial plan ($79/mo)'}
+          title={canUseCommercial ? '' : 'Requires the Portfolio plan ($79/mo)'}
           placement="right"
           disableHoverListener={canUseCommercial}
           disableFocusListener={canUseCommercial}
@@ -39,7 +39,7 @@ export default function PropertyForm({ onSubmit, defaultValues, loading, subscri
         >
           <span>
             <MenuItem value="commercial" disabled={!canUseCommercial}>
-              Commercial{!canUseCommercial ? ' (Commercial plan required)' : ''}
+              Commercial{!canUseCommercial ? ' (Portfolio plan required)' : ''}
             </MenuItem>
           </span>
         </Tooltip>

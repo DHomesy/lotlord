@@ -1,11 +1,11 @@
 const router     = require('express').Router();
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, requiresStarter } = require('../middleware/auth');
 const controller = require('../controllers/inboxController');
 
 // All inbox routes require authentication.
 // Landlords, employees, and admins are all permitted — ownership scoping is
 // enforced per-handler so employees only see their employer's conversations.
-router.use(authenticate, authorize('landlord', 'employee', 'admin'));
+router.use(authenticate, authorize('landlord', 'employee', 'admin'), requiresStarter);
 
 // ── Conversation list + detail ────────────────────────────────────────────────
 router.get('/',    controller.listConversations);

@@ -67,6 +67,9 @@ module.exports = {
   SMS_START_CONFIRMATION: optional('SMS_START_CONFIRMATION'),
   SMS_SEND_MAX_ATTEMPTS: optional('SMS_SEND_MAX_ATTEMPTS', '3'),
   SMS_CAP_STARTER: optional('SMS_CAP_STARTER', '250'),
+  SMS_CAP_AUTOPILOT: optional('SMS_CAP_AUTOPILOT'),
+  SMS_CAP_PORTFOLIO: optional('SMS_CAP_PORTFOLIO'),
+  // Legacy aliases retained for backwards compatibility during rollout.
   SMS_CAP_ENTERPRISE: optional('SMS_CAP_ENTERPRISE', '1000'),
   SMS_CAP_COMMERCIAL: optional('SMS_CAP_COMMERCIAL', '2500'),
   SMS_AI_WARN_SEGMENTS: optional('SMS_AI_WARN_SEGMENTS', '3'),
@@ -78,14 +81,15 @@ module.exports = {
   // Stripe
   STRIPE_SECRET_KEY:     optional('STRIPE_SECRET_KEY'),
   STRIPE_WEBHOOK_SECRET: optional('STRIPE_WEBHOOK_SECRET'),
-  // Stripe SaaS — one Price ID per plan tier (create in Stripe Dashboard → Products)
-  // Set the price nickname to 'starter' / 'enterprise' / 'commercial' so the webhook handler stores the right label.
+  // Stripe SaaS — one Price ID per paid plan tier (create in Stripe Dashboard → Products)
+  // Use nickname 'autopilot' for Autopilot and 'portfolio' for Portfolio.
+  // 'starter' is free and should not require a Stripe price.
   STRIPE_PRICE_ID_STARTER:         optional('STRIPE_PRICE_ID_STARTER'),
+  STRIPE_PRICE_ID_AUTOPILOT:       optional('STRIPE_PRICE_ID_AUTOPILOT'),
+  STRIPE_PRICE_ID_PORTFOLIO:       optional('STRIPE_PRICE_ID_PORTFOLIO'),
+  // Legacy aliases retained for backwards compatibility during rollout.
   STRIPE_PRICE_ID_ENTERPRISE:      optional('STRIPE_PRICE_ID_ENTERPRISE'),
-  // Commercial plan: two price IDs — flat base ($79/mo) and per-unit add-on ($2/unit/mo).
-  // Nickname for base must be 'commercial'; unit add-on nickname: 'commercial_unit'.
   STRIPE_PRICE_ID_COMMERCIAL:      optional('STRIPE_PRICE_ID_COMMERCIAL'),
-  STRIPE_PRICE_ID_COMMERCIAL_UNIT: optional('STRIPE_PRICE_ID_COMMERCIAL_UNIT'),
 
   // OpenAI
   OPENAI_API_KEY: optional('OPENAI_API_KEY'),

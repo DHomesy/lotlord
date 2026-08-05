@@ -37,8 +37,14 @@ function authorize(...roles) {
 
 const ACTIVE_STATUSES = ['active', 'trialing'];
 
+function normalizePlan(plan) {
+  if (plan === 'enterprise') return 'autopilot';
+  if (plan === 'commercial') return 'portfolio';
+  return plan;
+}
+
 /**
- * Requires the requesting landlord to have any active paid subscription (Starter or Enterprise).
+ * Requires the requesting landlord to have any active paid subscription (Autopilot or Portfolio).
  * Grants access to analytics and portfolio reporting features.
  * Admin users bypass this check.
  * Returns 402 Payment Required if the gate is not met.
@@ -51,7 +57,7 @@ async function requiresStarter(req, res, next) {
     const billing = await userRepo.findBillingStatus(resolveOwnerId(req.user));
     if (!billing || !ACTIVE_STATUSES.includes(billing.subscription_status)) {
       return res.status(402).json({
-        error: 'This feature requires a Starter or Enterprise plan. Upgrade to continue.',
+        error: 'This feature requires an Autopilot or Portfolio plan. Upgrade to continue.',
         code: 'SUBSCRIPTION_REQUIRED',
       });
     }
@@ -60,7 +66,7 @@ async function requiresStarter(req, res, next) {
 }
 
 /**
- * Requires the requesting landlord to have an active Enterprise subscription.
+ * Requires the requesting landlord to have an active Portfolio subscription.
  * Reserved for future premium features (AI, document signing, etc.).
  * Admin users bypass this check.
  * Returns 402 Payment Required if the gate is not met.
@@ -71,9 +77,10 @@ async function requiresEnterprise(req, res, next) {
     if (req.user.role === 'admin') return next();
 
     const billing = await userRepo.findBillingStatus(resolveOwnerId(req.user));
-    if (!billing || !ACTIVE_STATUSES.includes(billing.subscription_status) || billing.subscription_plan !== 'enterprise') {
+    const plan = normalizePlan(billing?.subscription_plan);
+    if (!billing || !ACTIVE_STATUSES.includes(billing.subscription_status) || plan !== 'portfolio') {
       return res.status(402).json({
-        error: 'This feature requires an Enterprise plan. Upgrade to continue.',
+        error: 'This feature requires a Portfolio plan. Upgrade to continue.',
         code: 'ENTERPRISE_REQUIRED',
       });
     }
@@ -109,9 +116,9 @@ async function requiresConnectOnboarded(req, res, next) {
 /**
  * Per-plan resource limits.
  *   free       — no active subscription
- *   starter    — any active subscription (price nickname = 'starter')
- *   enterprise — active subscription with price nickname = 'enterprise'
- *   commercial — active subscription with price nickname = 'commercial'
+ *   starter    — legacy paid tier (grandfathered)
+ *   autopilot  — Autopilot tier (price nickname = 'autopilot')
+ *   portfolio  — Portfolio tier (price nickname = 'portfolio')
  *
  * Infinity = no hard cap.
  *
@@ -119,10 +126,10 @@ async function requiresConnectOnboarded(req, res, next) {
  * in checkPlanLimit('units') and in unitService.assertMultiFamilyCap().
  */
 const PLAN_LIMITS = {
-  properties: { free: 1,  starter: 25, enterprise: Infinity, commercial: Infinity },
-  units:      { free: 4,  starter: Infinity, enterprise: Infinity, commercial: Infinity },
-  tenants:    { free: 4,  starter: Infinity, enterprise: Infinity, commercial: Infinity },
-  employees:  { free: 0,  starter: 0, enterprise: Infinity, commercial: Infinity },
+  properties: { free: 1,  starter: Infinity, autopilot: Infinity, portfolio: Infinity },
+  units:      { free: 4,  starter: 20, autopilot: 20, portfolio: Infinity },
+  tenants:    { free: 4,  starter: Infinity, autopilot: Infinity, portfolio: Infinity },
+  employees:  { free: 0,  starter: 0, autopilot: 0, portfolio: Infinity },
 };
 
 /**
@@ -143,9 +150,10 @@ async function requiresCommercialPlan(req, res, next) {
 
     const billing = await userRepo.findBillingStatus(resolveOwnerId(req.user));
     const isActive = ACTIVE_STATUSES.includes(billing?.subscription_status);
-    if (!isActive || billing?.subscription_plan !== 'commercial') {
+    const plan = normalizePlan(billing?.subscription_plan);
+    if (!isActive || plan !== 'portfolio') {
       return res.status(402).json({
-        error: 'Commercial properties require a Commercial plan ($79/mo + $2/unit). Upgrade to continue.',
+        error: 'Commercial properties require the Portfolio plan ($79/mo). Upgrade to continue.',
         code:  'COMMERCIAL_REQUIRED',
       });
     }
@@ -157,9 +165,9 @@ async function requiresCommercialPlan(req, res, next) {
  * Tier-aware resource count guard. Blocks creation once the user has reached
  * their plan's limit for the given resource.
  *
- *   Free       → properties: 1,  units: 4,  tenants: 4
- *   Starter    → properties: 25, units: ∞,  tenants: ∞
- *   Enterprise → unlimited
+ *   Free       → properties: 1, units: 4, tenants: 4
+ *   Autopilot  → units: 20, employees: 0
+ *   Portfolio  → unlimited + employee access
  *
  * @param {'properties'|'units'|'tenants'} resource
  *
@@ -180,9 +188,8 @@ function checkPlanLimit(resource) {
 
       const billing      = await userRepo.findBillingStatus(resolveOwnerId(req.user));
       const isActive     = ['active', 'trialing'].includes(billing?.subscription_status);
-      const plan         = isActive ? (billing?.subscription_plan ?? 'starter') : 'free';
-      // enterprise and commercial both get unlimited properties/tenants/units globally
-      if (plan === 'enterprise' || plan === 'commercial') return next();
+      const plan         = isActive ? (normalizePlan(billing?.subscription_plan) ?? 'autopilot') : 'free';
+      if (plan === 'portfolio') return next();
 
       const limits = PLAN_LIMITS[resource];
       const max    = limits[plan] ?? limits.free;
@@ -225,12 +232,18 @@ function checkPlanLimit(resource) {
       const { rows } = await query(countQuery, countParams);
       const count = rows[0]?.cnt ?? 0;
       if (count >= max) {
-        const planLabel   = plan === 'starter' ? 'Starter' : 'Free';
-        const upgradeHint = plan === 'starter'
-          ? 'Upgrade to Enterprise or Commercial for unlimited access.'
+        const planLabel = plan === 'free'
+          ? 'Starter (Free)'
+          : plan === 'autopilot'
+            ? 'Autopilot'
+            : plan === 'portfolio'
+              ? 'Portfolio'
+              : 'Autopilot';
+        const upgradeHint = plan === 'autopilot' || plan === 'starter'
+          ? 'Upgrade to Portfolio for unlimited access and employee permissions.'
           : resource === 'employees'
-            ? 'Upgrade to Enterprise or Commercial for unlimited team members.'
-            : `Upgrade to Starter (up to 25 ${resource}) or Enterprise/Commercial (unlimited) to add more.`;
+            ? 'Upgrade to Portfolio for team member permissions.'
+            : `Upgrade to Autopilot (up to 20 units) or Portfolio (higher limits) to add more.`;
         return res.status(402).json({
           error:   `${planLabel} plan is limited to ${max} ${resource}. ${upgradeHint}`,
           code:    'PLAN_LIMIT',

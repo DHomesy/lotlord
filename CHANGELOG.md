@@ -8,6 +8,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.13.0] — 2026-08-05 — Pricing Model Shift + Canonical Plan Nicknames
+
+### Changed
+- **Business model rollout across app + website** — Plan presentation now reflects the new model: `Starter` (free), `Autopilot` ($49), and `Portfolio` ($79). Pricing cards, upgrade prompts, profile subscription UI, analytics gates, team gating copy, and landing-page FAQ/pricing language were updated to match.
+- **Canonical plan keys switched to `autopilot` / `portfolio`** — Billing and subscription flows now treat `autopilot` and `portfolio` as first-class plan names.
+
+### Added
+- **Compatibility normalization for legacy plan names** — Backend and frontend normalize legacy values (`enterprise` → `autopilot`, `commercial` → `portfolio`) so existing records and older Stripe nickname/config states continue functioning during rollout.
+- **Config alias support for phased migration** — New preferred env vars are supported with legacy fallbacks:
+  - Stripe price IDs: `STRIPE_PRICE_ID_AUTOPILOT`, `STRIPE_PRICE_ID_PORTFOLIO` (legacy fallbacks: `STRIPE_PRICE_ID_ENTERPRISE`, `STRIPE_PRICE_ID_COMMERCIAL`)
+  - SMS segment caps: `SMS_CAP_AUTOPILOT`, `SMS_CAP_PORTFOLIO` (legacy fallbacks: `SMS_CAP_ENTERPRISE`, `SMS_CAP_COMMERCIAL`)
+
+### Documentation
+- `.env.example`, `README.md`, and inline env comments now document the new canonical Stripe nickname model (`autopilot`, `portfolio`) and the migration-safe fallback behavior.
+
+### Migration Notes
+- **Recommended DB update** — Normalize existing `users.subscription_plan` values:
+  - `enterprise` → `autopilot`
+  - `commercial` → `portfolio`
+- **Recommended Stripe update** — Use price nicknames `autopilot` and `portfolio` for active paid-tier prices.
+
+---
 ## [1.12.6] — 2026-07-15 — AWS SMS Webhook Hardening & Logging
 
 ### Security

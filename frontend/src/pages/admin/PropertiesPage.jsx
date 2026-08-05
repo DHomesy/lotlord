@@ -82,7 +82,7 @@ export default function PropertiesPage() {
         const code = err.response.data?.code
         const msg = err.response.data?.error
         if (code === 'COMMERCIAL_REQUIRED') {
-          setUpgradeMessage(msg || 'Commercial properties require the Commercial plan ($79/mo).')
+          setUpgradeMessage(msg || 'Commercial properties require the Portfolio plan ($79/mo).')
         } else {
           setUpgradeMessage(msg || 'You have reached the free plan property limit.')
         }

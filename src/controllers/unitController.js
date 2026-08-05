@@ -1,6 +1,5 @@
 const unitService = require('../services/unitService');
 const propertyRepo = require('../dal/propertyRepository');
-const stripeService = require('../services/stripeService');
 const { resolveOwnerId } = require('../lib/authHelpers');
 
 async function listUnits(req, res, next) {
@@ -28,12 +27,6 @@ async function createUnit(req, res, next) {
   try {
     const { propertyId, unitNumber, floor, bedrooms, bathrooms, sqFt, rentAmount, depositAmount, status } = req.body;
     const unit = await unitService.createUnit({ propertyId, unitNumber, floor, bedrooms, bathrooms, sqFt, rentAmount, depositAmount, status }, req.user);
-    // unit.property_type is returned by the service — no second DB query needed
-    if (unit.property_type === 'commercial' && req.user?.sub) {
-      stripeService.syncCommercialUnitQuantity(req.user.sub).catch((err) =>
-        console.warn('[unitController] syncCommercialUnitQuantity failed after create:', err.message),
-      );
-    }
     // Strip the internal property_type field before responding — it's not part of the unit schema
     const { property_type: _pt, ...unitData } = unit;
     res.status(201).json(unitData);
@@ -49,14 +42,7 @@ async function updateUnit(req, res, next) {
 
 async function deleteUnit(req, res, next) {
   try {
-    // deleteUnit service now returns the unit augmented with property_type
-    const unit = await unitService.deleteUnit(req.params.id, req.user);
-    // Sync Stripe commercial unit quantity if applicable (fire-and-forget)
-    if (unit?.property_type === 'commercial' && req.user?.sub) {
-      stripeService.syncCommercialUnitQuantity(req.user.sub).catch((err) =>
-        console.warn('[unitController] syncCommercialUnitQuantity failed after delete:', err.message),
-      );
-    }
+    await unitService.deleteUnit(req.params.id, req.user);
     res.status(204).end();
   } catch (err) { next(err); }
 }
