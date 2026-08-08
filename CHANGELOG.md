@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.14.1] — 2026-08-08 — Stripe Upgrade Flow Bug Fix
+
+### Fixed
+- **Plan-specific upgrade routing** — Active landlords now start Stripe Checkout directly for the selected target plan from the Profile upgrade cards, instead of opening a generic billing portal flow that could keep legacy Starter-track behavior.
+- **Legacy free-tier label fallback** — Profile subscription chip fallback now displays `Free` instead of `Starter (Free)`.
+
+### Added
+- **Checkout price guardrail** — Backend checkout now verifies that configured Stripe price IDs map to expected canonical nicknames (`autopilot`, `portfolio`) before creating a session. Misconfigured test/live price env vars now fail fast with a clear configuration error.
+
+---
 ## [1.14.0] — 2026-08-08 — Legacy Removal Finalization + Audit Hardening
 
 ### Changed

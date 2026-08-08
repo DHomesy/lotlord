@@ -669,6 +669,20 @@ function normalizePlanNickname(plan) {
   return plan;
 }
 
+async function assertCheckoutPriceMatchesPlan(priceId, expectedPlan) {
+  const price = await getStripe().prices.retrieve(priceId);
+  const actualNickname = price?.nickname || null;
+  if (actualNickname !== expectedPlan) {
+    throw Object.assign(
+      new Error(
+        `Stripe price misconfigured: ${priceId} has nickname "${actualNickname || 'null'}" but expected "${expectedPlan}". ` +
+        `Update your ${expectedPlan === 'portfolio' ? 'STRIPE_PRICE_ID_PORTFOLIO' : 'STRIPE_PRICE_ID_AUTOPILOT'} env var to the correct test/live price.`,
+      ),
+      { status: 500 },
+    );
+  }
+}
+
 async function createCheckoutSession(userId, plan = 'autopilot') {
   const normalizedPlan = normalizePlanNickname(plan);
 
@@ -689,6 +703,9 @@ async function createCheckoutSession(userId, plan = 'autopilot') {
       { status: 500 },
     );
   }
+
+  await assertCheckoutPriceMatchesPlan(priceId, normalizedPlan);
+
   const customer = await getOrCreateBillingCustomer(userId);
   const session  = await getStripe().checkout.sessions.create({
     mode:       'subscription',

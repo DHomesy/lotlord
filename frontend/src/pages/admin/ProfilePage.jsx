@@ -381,7 +381,7 @@ export default function AdminProfilePage() {
         </Box>
         <Chip
           icon={<CardMembershipIcon />}
-          label={subscription?.plan ? getPlanLabel(subscription.plan) : (subscription?.status ?? 'Starter (Free)')}
+          label={subscription?.plan ? getPlanLabel(subscription.plan) : (subscription?.status ?? 'Free')}
           color={
             subscription?.status === 'active'   ? 'success' :
             subscription?.status === 'trialing' ? 'info' :
@@ -506,7 +506,7 @@ export default function AdminProfilePage() {
             <>
               <Typography variant="subtitle2" sx={{ mt: 3, mb: 0.5 }}>Upgrade your plan</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Plan upgrades are handled through the billing portal — click any card below to get started.
+                Choose your target plan below to continue in Stripe Checkout.
               </Typography>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ maxWidth: 720 }}>
                 {Object.values(PLANS)
@@ -535,15 +535,14 @@ export default function AdminProfilePage() {
                           </Typography>
                         ))}
                         <Button
-                          variant="outlined"
+                          variant="contained"
                           size="small"
                           fullWidth
                           sx={{ mt: 2 }}
-                          endIcon={<OpenInNewIcon fontSize="small" />}
-                          disabled={openingPortal}
-                          onClick={() => openPortal()}
+                          disabled={startingCheckout}
+                          onClick={() => startCheckout(key)}
                         >
-                          {openingPortal ? 'Loading…' : `Upgrade to ${label}`}
+                          {startingCheckout ? 'Redirecting…' : `Upgrade to ${label}`}
                         </Button>
                       </CardContent>
                     </Card>
