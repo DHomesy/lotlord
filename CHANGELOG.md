@@ -8,6 +8,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.14.0] — 2026-08-08 — Legacy Removal Finalization + Audit Hardening
+
+### Changed
+- Removed legacy subscription compatibility aliases for `starter`, `enterprise`, and `commercial`. Canonical plans are now only `autopilot` and `portfolio`.
+- Stripe checkout and webhook plan parsing now accept only `autopilot` and `portfolio` nicknames.
+- Updated pricing and upgrade copy across the landing page and admin surfaces to consistently use `Free`, `Autopilot`, and `Portfolio` terminology.
+- Updated package metadata and lockfiles for release alignment.
+
+### Removed
+- Removed Twilio compatibility paths from runtime SMS and provisioning flows.
+- Removed `POST /api/v1/webhooks/twilio/sms`; inbound SMS is now AWS-only at `POST /api/v1/webhooks/aws/sms`.
+- Removed Twilio dependency from backend package dependencies.
+
+### Security
+- Backend production dependency audit now resolves with zero vulnerabilities after dependency updates and overrides.
+- Frontend dependency audit improved via Axios/router patch updates; residual React Router advisories remain tracked for follow-up.
+
+### Performance
+- Added frontend vendor chunk split rules in Vite config to improve caching behavior and reduce large monolithic bundles.
+
+### Documentation
+- Added `UPGRADE-LEGACY-REMOVAL.md` with breaking changes and infrastructure env migration checklist.
+
+---
 ## [1.13.0] — 2026-08-05 — Pricing Model Shift + Canonical Plan Nicknames
 
 ### Changed

@@ -44,7 +44,7 @@ const AI_RATE_LIMIT_PER_DAY = 5;
 
 /**
  * Handle an inbound SMS from a tenant.
- * Called fire-and-forget from the Twilio webhook handler.
+ * Called fire-and-forget from the inbound SMS webhook handler.
  */
 async function handleInboundSms({ tenantUserId, landlordId, content, logEntryId, channel = 'sms' }) {
   return _handleInbound({ tenantUserId, landlordId, content, logEntryId, channel });

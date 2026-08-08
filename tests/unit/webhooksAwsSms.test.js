@@ -27,10 +27,8 @@ function setup({ envOverrides = {}, repoOverrides = {} } = {}) {
 
   const defaults = {
     NODE_ENV: 'test',
-    SMS_PROVIDER: 'aws',
     AWS_SMS_WEBHOOK_SECRET: 'test-secret',
     APP_BASE_URL: 'http://localhost:3000',
-    TWILIO_AUTH_TOKEN: '',
     SES_WEBHOOK_SECRET: '',
   };
 
@@ -38,7 +36,6 @@ function setup({ envOverrides = {}, repoOverrides = {} } = {}) {
     handleInboundSms: jest.fn().mockResolvedValue(),
     findByPhone: jest.fn().mockResolvedValue({ id: 'tenant-user-1' }),
     findByAwsSmsNumber: jest.fn().mockResolvedValue({ id: 'owner-1' }),
-    findByTwilioSmsNumber: jest.fn().mockResolvedValue(null),
     findByUserId: jest.fn().mockResolvedValue({ id: 'tenant-record-1' }),
     findLogByExternalId: jest.fn().mockResolvedValue(null),
     createLogEntry: jest.fn().mockResolvedValue({ id: 'log-1' }),
@@ -51,10 +48,6 @@ function setup({ envOverrides = {}, repoOverrides = {} } = {}) {
   jest.doMock('../../src/config/env', () => ({
     ...defaults,
     ...envOverrides,
-  }));
-
-  jest.doMock('twilio', () => ({
-    validateRequest: jest.fn(() => true),
   }));
 
   jest.doMock('../../src/services/stripeService', () => ({
@@ -72,7 +65,6 @@ function setup({ envOverrides = {}, repoOverrides = {} } = {}) {
   jest.doMock('../../src/dal/userRepository', () => ({
     findByPhone: mocks.findByPhone,
     findByAwsSmsNumber: mocks.findByAwsSmsNumber,
-    findByTwilioSmsNumber: mocks.findByTwilioSmsNumber,
     markEmailBounced: jest.fn(),
   }));
 

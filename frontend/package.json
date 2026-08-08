@@ -1,7 +1,7 @@
 {
   "name": "property-manager-frontend",
   "private": true,
-  "version": "1.12.5",
+  "version": "1.14.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,7 +19,7 @@
     "@stripe/stripe-js": "^8.9.0",
     "@tanstack/react-query": "^5.59.0",
     "@tanstack/react-query-devtools": "^5.59.0",
-    "axios": "^1.7.7",
+    "axios": "^1.19.0",
     "dayjs": "^1.11.13",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -27,6 +27,9 @@
     "react-router-dom": "^6.27.0",
     "zod": "^3.23.8",
     "zustand": "^5.0.0"
+  },
+  "overrides": {
+    "@remix-run/router": "1.23.3"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.1",

@@ -666,29 +666,24 @@ async function getOrCreateBillingCustomer(userId) {
 
 function normalizePlanNickname(plan) {
   if (!plan) return null;
-  if (plan === 'enterprise') return 'autopilot';
-  if (plan === 'commercial') return 'portfolio';
   return plan;
 }
 
 async function createCheckoutSession(userId, plan = 'autopilot') {
   const normalizedPlan = normalizePlanNickname(plan);
 
-  if (normalizedPlan === 'starter') {
-    throw Object.assign(
-      new Error('Starter is free and does not require checkout. Choose Autopilot or Portfolio.'),
-      { status: 400 },
-    );
+  if (normalizedPlan !== 'autopilot' && normalizedPlan !== 'portfolio') {
+    throw Object.assign(new Error('Invalid plan. Allowed values: autopilot, portfolio.'), { status: 400 });
   }
 
   const priceId = normalizedPlan === 'portfolio'
-    ? (env.STRIPE_PRICE_ID_PORTFOLIO || env.STRIPE_PRICE_ID_COMMERCIAL)
-    : (env.STRIPE_PRICE_ID_AUTOPILOT || env.STRIPE_PRICE_ID_ENTERPRISE);
+    ? env.STRIPE_PRICE_ID_PORTFOLIO
+    : env.STRIPE_PRICE_ID_AUTOPILOT;
 
   if (!priceId) {
     const expectedVar = normalizedPlan === 'portfolio'
-      ? 'STRIPE_PRICE_ID_PORTFOLIO (or legacy STRIPE_PRICE_ID_COMMERCIAL)'
-      : 'STRIPE_PRICE_ID_AUTOPILOT (or legacy STRIPE_PRICE_ID_ENTERPRISE)';
+      ? 'STRIPE_PRICE_ID_PORTFOLIO'
+      : 'STRIPE_PRICE_ID_AUTOPILOT';
     throw Object.assign(
       new Error(`${expectedVar} is not configured. Create a Product + Price in the Stripe Dashboard, then add the env var to your deployment.`),
       { status: 500 },
@@ -738,7 +733,7 @@ async function onSubscriptionUpdated(subscription) {
     console.warn(`[stripe billing] subscription event — no user for customer ${subscription.customer}`);
     return;
   }
-  const KNOWN_PLAN_NICKNAMES = ['starter', 'autopilot', 'portfolio', 'enterprise', 'commercial'];
+  const KNOWN_PLAN_NICKNAMES = ['autopilot', 'portfolio'];
   // Resolve plan from the first matching price nickname. Fall back to null — never
   // write a raw Stripe price ID (e.g. 'price_1AbcXYZ') as that would break all
   // plan-check middleware which only recognises the known string values.

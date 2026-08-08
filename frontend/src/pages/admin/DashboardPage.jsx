@@ -187,7 +187,7 @@ export default function DashboardPage() {
             <Alert severity="info" sx={{ mb: 3 }}>
               {isEmployee
                 ? 'Portfolio analytics require an active subscription. Contact your employer to upgrade.'
-                : "You're on the Starter free plan. Upgrade to Autopilot to unlock full dashboard analytics and more."}
+                : "You're on the Free plan. Upgrade to Autopilot to unlock full dashboard analytics and more."}
               {!isEmployee && (
                 <Button size="small" variant="contained" sx={{ ml: 2 }} onClick={() => navigate('/profile#subscription')}>
                   Upgrade Now
@@ -214,7 +214,7 @@ export default function DashboardPage() {
                     {
                       Icon: HomeWorkIcon,
                       title: 'Up to 20 Units',
-                      desc: 'Starter free includes 1 property and 4 units. Autopilot expands you to 20 units with automation features.',
+                      desc: 'The Free plan includes 1 property and 4 units. Autopilot expands you to 20 units with automation features.',
                     },
                     {
                       Icon: GroupIcon,

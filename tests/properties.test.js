@@ -47,16 +47,16 @@ describe('Commercial property plan gate', () => {
     expect(res.body.code).toBe('PLAN_LIMIT');
   });
 
-  it('rejects commercial property creation for a Starter-plan landlord (402 COMMERCIAL_REQUIRED)', async () => {
+  it('rejects commercial property creation for an autopilot landlord (402 COMMERCIAL_REQUIRED)', async () => {
     await fx.pool.query(
-      `UPDATE users SET subscription_status = 'active', subscription_plan = 'starter' WHERE id = $1`,
+      `UPDATE users SET subscription_status = 'active', subscription_plan = 'autopilot' WHERE id = $1`,
       [fx.landlordA.id],
     );
     try {
       const res = await request(app)
         .post('/api/v1/properties')
         .set('Authorization', `Bearer ${fx.landlordA.token}`)
-        .send({ name: 'Shop Starter', addressLine1: '3 Starter St', city: 'Testville', state: 'TX', zip: '00001', propertyType: 'commercial' });
+        .send({ name: 'Shop Autopilot', addressLine1: '3 Autopilot St', city: 'Testville', state: 'TX', zip: '00001', propertyType: 'commercial' });
       expect(res.status).toBe(402);
       expect(res.body.code).toBe('COMMERCIAL_REQUIRED');
     } finally {
@@ -64,42 +64,20 @@ describe('Commercial property plan gate', () => {
     }
   });
 
-  it('rejects commercial property creation for an Enterprise-plan landlord (402 COMMERCIAL_REQUIRED)', async () => {
+  it('allows commercial property creation when landlord has an active portfolio subscription', async () => {
     await fx.pool.query(
-      `UPDATE users SET subscription_status = 'active', subscription_plan = 'enterprise' WHERE id = $1`,
+      `UPDATE users SET subscription_status = 'active', subscription_plan = 'portfolio' WHERE id = $1`,
       [fx.landlordA.id],
     );
     try {
       const res = await request(app)
         .post('/api/v1/properties')
         .set('Authorization', `Bearer ${fx.landlordA.token}`)
-        .send({ name: 'Shop Enterprise', addressLine1: '4 Enterprise St', city: 'Testville', state: 'TX', zip: '00001', propertyType: 'commercial' });
-      expect(res.status).toBe(402);
-      expect(res.body.code).toBe('COMMERCIAL_REQUIRED');
-    } finally {
-      await fx.pool.query(`UPDATE users SET subscription_status = 'none', subscription_plan = NULL WHERE id = $1`, [fx.landlordA.id]);
-    }
-  });
-
-  it('allows commercial property creation when landlord has an active commercial subscription', async () => {
-    // Grant landlordA a commercial plan for this test, then restore afterward
-    await fx.pool.query(
-      `UPDATE users SET subscription_status = 'active', subscription_plan = 'commercial' WHERE id = $1`,
-      [fx.landlordA.id],
-    );
-    try {
-      const res = await request(app)
-        .post('/api/v1/properties')
-        .set('Authorization', `Bearer ${fx.landlordA.token}`)
-        .send({ name: 'Corp Tower', addressLine1: '2 Commerce Ave', city: 'Testville', state: 'TX', zip: '00001', propertyType: 'commercial' });
+        .send({ name: 'Portfolio Tower', addressLine1: '4 Portfolio St', city: 'Testville', state: 'TX', zip: '00001', propertyType: 'commercial' });
       expect(res.status).toBe(201);
       expect(res.body.property_type).toBe('commercial');
     } finally {
-      // Restore to free plan so other tests are not affected
-      await fx.pool.query(
-        `UPDATE users SET subscription_status = 'none', subscription_plan = NULL WHERE id = $1`,
-        [fx.landlordA.id],
-      );
+      await fx.pool.query(`UPDATE users SET subscription_status = 'none', subscription_plan = NULL WHERE id = $1`, [fx.landlordA.id]);
     }
   });
 });
@@ -108,9 +86,9 @@ describe('Commercial property PATCH type-promotion gate', () => {
   let multiPropId;
 
   beforeAll(async () => {
-    // Temporarily upgrade to starter so landlordA can bypass the 1-property free-plan limit
+    // Temporarily upgrade to autopilot so landlordA can bypass the 1-property free-plan limit
     await fx.pool.query(
-      `UPDATE users SET subscription_status = 'active', subscription_plan = 'starter' WHERE id = $1`,
+      `UPDATE users SET subscription_status = 'active', subscription_plan = 'autopilot' WHERE id = $1`,
       [fx.landlordA.id],
     );
     const propRes = await request(app)
@@ -133,9 +111,9 @@ describe('Commercial property PATCH type-promotion gate', () => {
 
   it('allows PATCH name/address on an existing commercial property without re-checking the plan', async () => {
     // Create a commercial property as admin, then edit its name as landlordA
-    // First give landlordA commercial plan so they can own it
+    // First give landlordA portfolio plan so they can own it
     await fx.pool.query(
-      `UPDATE users SET subscription_status = 'active', subscription_plan = 'commercial' WHERE id = $1`,
+      `UPDATE users SET subscription_status = 'active', subscription_plan = 'portfolio' WHERE id = $1`,
       [fx.landlordA.id],
     );
     let commPropId;

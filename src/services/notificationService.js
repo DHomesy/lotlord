@@ -17,30 +17,20 @@ function notFound(msg) {
 
 function resolveLandlordSmsIdentity(landlord) {
   if (!landlord) return undefined;
-  if (String(env.SMS_PROVIDER || 'twilio').toLowerCase() === 'aws') {
-    return landlord.aws_sms_phone_number_id || landlord.aws_sms_phone_number || undefined;
-  }
-  return landlord.twilio_sms_number || undefined;
+  return landlord.aws_sms_phone_number_id || landlord.aws_sms_phone_number || undefined;
 }
 
 function getPlanSegmentCap(user) {
-  const rawPlan = user?.subscription_plan || 'free';
-  const plan = rawPlan === 'enterprise'
-    ? 'autopilot'
-    : rawPlan === 'commercial'
-      ? 'portfolio'
-      : rawPlan;
+  const plan = user?.subscription_plan || 'free';
   const status = user?.subscription_status;
 
   if (!['active', 'trialing'].includes(status || '')) return 0;
 
-  const starter = Number(env.SMS_CAP_STARTER || 250);
-  const autopilot = Number(env.SMS_CAP_AUTOPILOT || env.SMS_CAP_ENTERPRISE || 1000);
-  const portfolio = Number(env.SMS_CAP_PORTFOLIO || env.SMS_CAP_COMMERCIAL || 2500);
+  const autopilot = Number(env.SMS_CAP_AUTOPILOT || 1000);
+  const portfolio = Number(env.SMS_CAP_PORTFOLIO || 2500);
 
   if (plan === 'portfolio') return portfolio;
   if (plan === 'autopilot') return autopilot;
-  if (plan === 'starter') return starter;
   return 0;
 }
 
@@ -48,7 +38,7 @@ async function alertSmsFailure({ error, to, from, attempts }) {
   if (!env.ALERT_EMAIL) return;
   const subject = '[LotLord] SMS delivery failed after retries';
   const text = [
-    `Provider: ${env.SMS_PROVIDER || 'twilio'}`,
+    'Provider: aws',
     `Attempts: ${attempts}`,
     `To: ${to || 'unknown'}`,
     `From: ${from || 'default'}`,

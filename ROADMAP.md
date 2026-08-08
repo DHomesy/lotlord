@@ -20,7 +20,7 @@ Items are ordered by strategic priority. **Tiers 1 and 2 are complete** — safe
   - [SaaS Multi-Tenancy](#saas-multi-tenancy)
   - [AI Agent for Communications](#ai-agent-for-communications)
   ~~[Role-Based Access Control (RBAC)]~~ ✅ Shipped in v1.6.0–v1.6.1
-  - [Per-Property Twilio Number Management](#per-property-twilio-number-management)
+  - [Per-Property Dedicated SMS Number Management](#per-property-dedicated-sms-number-management)
 - [Tier 4 — Developer Health](#tier-4--developer-health)
   - [Test Coverage Audit](#test-coverage-audit)
   - [Per-Record Change Tracking](#per-record-change-tracking)
@@ -45,7 +45,7 @@ All subscription lifecycle events are handled in `src/services/stripeService.js`
 | `invoice.payment_failed` | Set status `past_due`, email landlord |
 | `customer.subscription.trial_will_end` | Email landlord 3 days before trial ends |
 
-Access enforcement via `requiresStarter` / `requiresEnterprise` middleware blocks `past_due` and `cancelled` landlords from all write operations.
+Access enforcement via paid-plan gates (`requiresStarter`) and per-resource limits (`checkPlanLimit`) blocks `past_due` and `cancelled` landlords from paid/limited operations.
 
 ---
 
@@ -135,29 +135,29 @@ All repository queries become `WHERE organization_id = $1` in addition to (or in
 
 ---
 
-### Per-Property Twilio Number Management
+### Per-Property Dedicated SMS Number Management
 
-**Goal:** Allow admins to assign different Twilio phone numbers per property so tenants always see the number associated with their building.
+**Goal:** Allow admins to assign different dedicated SMS identities per property so tenants always see the number associated with their building.
 
 **Schema:**
 ```sql
-CREATE TABLE twilio_numbers (
+CREATE TABLE sms_sender_identities (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   property_id  UUID REFERENCES properties(id),  -- nullable = global fallback
   phone_number TEXT UNIQUE NOT NULL,             -- E.164 format: +15551234567
-  twilio_sid   TEXT NOT NULL,
+  provider_identity_id TEXT NOT NULL,
   status       TEXT DEFAULT 'active' CHECK (status IN ('active', 'released')),
   created_at   TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
 **Routing logic:**
-- Outbound SMS: resolve number from `lease → unit → property → twilio_numbers`; fall back to `TWILIO_PHONE_NUMBER` env var
-- Inbound SMS: match `To` header to `twilio_numbers.property_id` for scoped AI agent context
+- Outbound SMS: resolve sender from `lease → unit → property → sms_sender_identities`; fall back to `AWS_SMS_ORIGINATION_IDENTITY`
+- Inbound SMS: match destination to `sms_sender_identities.property_id` for scoped AI agent context
 
 **Implementation Steps:**
 
-1. **Backend** — add `purchaseNumber()` and `releaseNumber()` to `src/integrations/twilio.js`
+1. **Backend** — extend AWS SMS provisioning service with per-property assignment operations
 2. **Backend** — update `notificationService.sendSms()` to resolve the number from property context
 3. **Frontend** — Admin page `/admin/phone-numbers`: list assigned numbers, purchase new, release old
 

@@ -48,15 +48,7 @@ module.exports = {
   // AWS S3 — file storage (documents, maintenance attachments)
   S3_BUCKET_NAME: optional('S3_BUCKET_NAME', 'lotlord-files'),
 
-  // Twilio
-  TWILIO_ACCOUNT_SID: optional('TWILIO_ACCOUNT_SID'),
-  TWILIO_AUTH_TOKEN: optional('TWILIO_AUTH_TOKEN'),
-  TWILIO_PHONE_NUMBER: optional('TWILIO_PHONE_NUMBER'),
-
-  // SMS provider selection
-  // 'aws' = AWS End User Messaging SMS (Pinpoint SMS Voice V2 API)
-  // any other value falls back to Twilio during migration
-  SMS_PROVIDER: optional('SMS_PROVIDER', 'twilio'),
+  // AWS SMS
   AWS_SMS_ORIGINATION_IDENTITY: optional('AWS_SMS_ORIGINATION_IDENTITY'),
   AWS_SMS_MESSAGE_TYPE: optional('AWS_SMS_MESSAGE_TYPE', 'TRANSACTIONAL'),
   AWS_SMS_CONFIGURATION_SET_NAME: optional('AWS_SMS_CONFIGURATION_SET_NAME'),
@@ -66,12 +58,8 @@ module.exports = {
   SMS_STOP_CONFIRMATION: optional('SMS_STOP_CONFIRMATION'),
   SMS_START_CONFIRMATION: optional('SMS_START_CONFIRMATION'),
   SMS_SEND_MAX_ATTEMPTS: optional('SMS_SEND_MAX_ATTEMPTS', '3'),
-  SMS_CAP_STARTER: optional('SMS_CAP_STARTER', '250'),
-  SMS_CAP_AUTOPILOT: optional('SMS_CAP_AUTOPILOT'),
-  SMS_CAP_PORTFOLIO: optional('SMS_CAP_PORTFOLIO'),
-  // Legacy aliases retained for backwards compatibility during rollout.
-  SMS_CAP_ENTERPRISE: optional('SMS_CAP_ENTERPRISE', '1000'),
-  SMS_CAP_COMMERCIAL: optional('SMS_CAP_COMMERCIAL', '2500'),
+  SMS_CAP_AUTOPILOT: optional('SMS_CAP_AUTOPILOT', '1000'),
+  SMS_CAP_PORTFOLIO: optional('SMS_CAP_PORTFOLIO', '2500'),
   SMS_AI_WARN_SEGMENTS: optional('SMS_AI_WARN_SEGMENTS', '3'),
   SMS_AI_BLOCK_SEGMENTS: optional('SMS_AI_BLOCK_SEGMENTS', '6'),
 
@@ -83,13 +71,8 @@ module.exports = {
   STRIPE_WEBHOOK_SECRET: optional('STRIPE_WEBHOOK_SECRET'),
   // Stripe SaaS — one Price ID per paid plan tier (create in Stripe Dashboard → Products)
   // Use nickname 'autopilot' for Autopilot and 'portfolio' for Portfolio.
-  // 'starter' is free and should not require a Stripe price.
-  STRIPE_PRICE_ID_STARTER:         optional('STRIPE_PRICE_ID_STARTER'),
   STRIPE_PRICE_ID_AUTOPILOT:       optional('STRIPE_PRICE_ID_AUTOPILOT'),
   STRIPE_PRICE_ID_PORTFOLIO:       optional('STRIPE_PRICE_ID_PORTFOLIO'),
-  // Legacy aliases retained for backwards compatibility during rollout.
-  STRIPE_PRICE_ID_ENTERPRISE:      optional('STRIPE_PRICE_ID_ENTERPRISE'),
-  STRIPE_PRICE_ID_COMMERCIAL:      optional('STRIPE_PRICE_ID_COMMERCIAL'),
 
   // OpenAI
   OPENAI_API_KEY: optional('OPENAI_API_KEY'),

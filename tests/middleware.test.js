@@ -428,8 +428,8 @@ describe('checkPlanLimit() — free tier at capacity returns 402', () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 
-  it('starter landlord at property limit (25) is blocked', async () => {
-    userRepo.findBillingStatus.mockResolvedValue({ subscription_status: 'active', subscription_plan: 'starter' });
+  it('autopilot landlord at property limit (25) is blocked', async () => {
+    userRepo.findBillingStatus.mockResolvedValue({ subscription_status: 'active', subscription_plan: 'autopilot' });
     db.query.mockResolvedValue({ rows: [{ cnt: 25 }] });
 
     const req  = { user: { role: 'landlord', sub: 'landlord-id' } };
@@ -460,8 +460,8 @@ describe('checkPlanLimit() — free tier at capacity returns 402', () => {
     expect(res._body.code).toBe('PLAN_LIMIT');
   });
 
-  it('enterprise landlord bypasses plan limit entirely', async () => {
-    userRepo.findBillingStatus.mockResolvedValue({ subscription_status: 'active', subscription_plan: 'enterprise' });
+  it('portfolio landlord bypasses plan limit entirely', async () => {
+    userRepo.findBillingStatus.mockResolvedValue({ subscription_status: 'active', subscription_plan: 'portfolio' });
 
     const req  = { user: { role: 'landlord', sub: 'landlord-id' } };
     const res  = mockRes();
@@ -469,7 +469,7 @@ describe('checkPlanLimit() — free tier at capacity returns 402', () => {
 
     await checkPlanLimit('employees')(req, res, next);
 
-    // No DB query for count needed — enterprise passes immediately
+    // No DB query for count needed — portfolio passes immediately
     expect(next).toHaveBeenCalledTimes(1);
     expect(res._status).toBeNull();
   });

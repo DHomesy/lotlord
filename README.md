@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.11.0 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.14.0 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -137,7 +137,7 @@ Scheduler (node-cron)
   └── Weekly Mon: Check lease expiration dates → send expiry warnings
 ```
 
-> **Current implementation:** Cron jobs call `notificationService.sendAllChannels()` directly — no queue. Each send is synchronous via AWS SES (email) or Twilio (SMS). A future outbound SQS queue can be added for rate-pacing at SaaS scale without changing the service interface.
+> **Current implementation:** Cron jobs call `notificationService.sendAllChannels()` directly — no queue. Each send is synchronous via AWS SES (email) or AWS End User Messaging SMS. A future outbound SQS queue can be added for rate-pacing at SaaS scale without changing the service interface.
 
 ### Data Flow Examples
 
@@ -156,7 +156,7 @@ React → POST /api/payments → Controller → PaymentService
 node-cron (daily 8am) → RentReminderJob
   → Query rent_charges where due_date = tomorrow
   → For each lease → notificationService.sendAllChannels('rent_due', userId)
-  → ses.js → AWS SES (email) + Twilio (SMS)
+  → ses.js → AWS SES (email) + AWS SMS
   → notifications_log INSERT
 ```
 
@@ -191,7 +191,7 @@ Tenant replies to reply@lotlord.app
 | Auth | **JWT (implemented)** | Access token in memory (15 min) + httpOnly refresh cookie (30 days) |
 | Payments | **Stripe** (ACH + Subscriptions + Connect) | ACH rent 0.8% capped $5; SaaS subs via Checkout; landlord payouts via Connect Express |
 | Email | **AWS SES** | $0.10/1,000 emails; custom domain `@lotlord.app` |
-| SMS | Twilio | ~$0.008/SMS + $1/mo per number |
+| SMS | AWS End User Messaging SMS | Provider pricing varies by origination type/region |
 | Documents | **AWS S3** | Pre-signed URLs; CDK stack in `infra/` provisions bucket |
 | Scheduler | node-cron | Runs inside the API server process |
 | AI Agent | OpenAI (GPT-4o-mini) | Cost-efficient for SMS/email replies |
@@ -232,7 +232,7 @@ Tenant replies to reply@lotlord.app
 └──┬──────────┬───────────┬──────────┬─────────┘
    │          │           │          │
    ▼          ▼           ▼          ▼
-PostgreSQL  AWS SES    Twilio      Stripe
+PostgreSQL  AWS SES   AWS SMS      Stripe
 (Railway)  (email)    (SMS)       (ACH)
 
               ┌──────────┐  ┌─────────────────┐
@@ -542,7 +542,7 @@ notifications_log
   subject         TEXT
   body            TEXT   -- rendered body (after variable substitution)
   thread_id       UUID   -- groups messages in the same conversation thread (migration 013)
-  external_id     TEXT UNIQUE  -- dedup key: SES Message-ID or Twilio SID (migration 013)
+  external_id     TEXT UNIQUE  -- dedup key: SES Message-ID or SMS provider message ID (migration 013)
   sent_at         TIMESTAMPTZ
   error_message   TEXT
   created_at      TIMESTAMPTZ DEFAULT NOW()
@@ -558,7 +558,7 @@ ai_conversations
   tenant_id       UUID REFERENCES tenants(id)
   owner_id        UUID REFERENCES users(id)   -- landlord who owns this conversation (migration 032)
   channel         TEXT CHECK (channel IN ('sms', 'email'))
-  thread_id       TEXT   -- external thread ref (e.g. Twilio conversation SID)
+  thread_id       TEXT   -- external thread ref
   status          TEXT DEFAULT 'open' CHECK (status IN ('open', 'resolved', 'escalated'))
   last_message_at TIMESTAMPTZ                  -- updated on every inbound/outbound message (migration 032)
   unread_count    INT NOT NULL DEFAULT 0       -- increments on inbound; reset to 0 on markRead (migration 032)
@@ -646,7 +646,7 @@ Base URL: `/api/v1`
 | Notification Templates | `GET /notifications/templates`, `POST /notifications/templates`, `GET /notifications/templates/:id`, `PATCH /notifications/templates/:id`, `DELETE /notifications/templates/:id` |
 | Notifications | `POST /notifications/send` (email, ad-hoc or template), `POST /notifications/send-sms` (ad-hoc SMS), `GET /notifications/log`, `GET /notifications/log/:id` |
 | Messages | `GET /notifications/messages` (conversation list), `POST /notifications/messages` (send message to tenant), `GET /notifications/messages/:tenantId` (conversation thread) |
-| Webhooks | `POST /webhooks/stripe`, `POST /webhooks/twilio/sms`, `POST /webhooks/ses` (inbound email from Lambda), `POST /webhooks/ses/bounce` (SNS bounce/complaint) |
+| Webhooks | `POST /webhooks/stripe`, `POST /webhooks/aws/sms`, `POST /webhooks/ses` (inbound email from Lambda), `POST /webhooks/ses/bounce` (SNS bounce/complaint) |
 | AI Inbox | `GET /inbox`, `GET /inbox/:id`, `PATCH /inbox/:id` (resolve/escalate), `POST /inbox/:id/reply`, `POST /inbox/:id/messages/:msgId/approve`, `DELETE /inbox/:id/messages/:msgId` |
 | AI Supervisor | `GET /supervisor/conversations`, `POST /supervisor/conversations/:id/override`, `PATCH /supervisor/conversations/:id` (admin only) |
 | AI | `GET /ai/conversations`, `GET /ai/conversations/:id/messages` |
@@ -676,7 +676,7 @@ Base URL: `/api/v1`
 The app uses **two completely separate Stripe payment flows** that must never be confused:
 
 #### 1 — SaaS Subscription Billing (Landlord → LotLord platform)
-- Landlord pays for their platform tier (Starter Free / Autopilot $49 / Portfolio $79)
+- Landlord pays for their platform tier (Free / Autopilot $49 / Portfolio $79)
 - Handled by: `billingController.js`, `stripeService.createCheckoutSession()`, `stripeService.handleWebhookEvent()` subscription events
 - Stripe entity: landlord's **billing** customer (`users.stripe_billing_customer_id`)
 - Money destination: **your** Stripe platform account
@@ -690,7 +690,7 @@ The app uses **two completely separate Stripe payment flows** that must never be
 - Money destination: **landlord's connected bank account** — funds never touch your platform account. Your `STRIPE_SECRET_KEY` facilitates the transfer but you only collect the Stripe platform fee (0.8%, capped at $5 per ACH transaction).
 - Webhook events: `payment_intent.succeeded`, `payment_intent.payment_failed`
 - Payment state stored in: `rent_payments` + `ledger_entries`
-- **ACH is available on all tiers** (Starter Free, Autopilot, Portfolio) — the only prerequisite is that the landlord completes Stripe Connect onboarding (`requiresConnectOnboarded` middleware)
+- **ACH is available on all tiers** (Free, Autopilot, Portfolio) — the only prerequisite is that the landlord completes Stripe Connect onboarding (`requiresConnectOnboarded` middleware)
 
 #### Rules
 - Never store raw card numbers — Stripe handles all cardholder data
@@ -722,7 +722,7 @@ See **[CHANGELOG.md](CHANGELOG.md)** for the full versioned release history.
 - [x] **1. Project scaffold** — Node.js + Express, folder structure, middleware, route stubs
 - [x] **2. DB migrations** — 8 migration files covering all tables; run with `npm run migrate:up`
 - [x] **3. Config layer** — `src/config/env.js` (env validation), `src/config/db.js` (pg Pool + helpers)
-- [x] **4. Integration stubs** — AWS SES, S3, Twilio, Stripe, OpenAI all stubbed under `src/integrations/`
+- [x] **4. Integration stubs** — AWS SES, S3, AWS SMS, Stripe, OpenAI under `src/integrations/`
 - [x] **5. Scheduled jobs skeleton** — `src/jobs/index.js` with node-cron placeholders for rent reminders, late fees, lease expiry
 - [x] **6. Dev seed** — `seeds/dev_seed.js` — run `npm run seed` to populate test data
 - [x] **7. Auth** — `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh` (JWT + bcrypt)
@@ -733,7 +733,7 @@ See **[CHANGELOG.md](CHANGELOG.md)** for the full versioned release history.
 - [x] **12. Email notifications** — NotificationService, template rendering, Gmail send
 - [x] **13. Scheduled jobs** — wire up cron jobs to real service calls
 - [x] **14. Stripe ACH** — SetupIntent (bank account onboarding), PaymentIntent creation, webhook handler with ledger reconciliation, migration 009 for `stripe_customer_id`
-- [x] **15. SMS via Twilio** — outbound alerts (`sendSmsAdhoc`, `sendAllChannels` on all cron jobs), inbound webhook with signature verification, `migration 012` adds `received` log status
+- [x] **15. SMS via AWS End User Messaging** — outbound alerts (`sendSmsAdhoc`, `sendAllChannels` on all cron jobs), inbound webhook, `migration 012` adds `received` log status
 - [x] **16. React frontend** — Full SPA scaffolded in `frontend/`. React 19 + Vite 7 + MUI v6 + React Router v6 + TanStack Query v5 + Zustand + React Hook Form + Zod + Axios. Login, role-based routing, `<Bootstrap>` silent-refresh gate, all admin pages (properties, tenants, leases, ledger, charges, payments, maintenance, documents, notifications, users), all tenant portal pages (dashboard, payments, maintenance, documents, profile). See [frontend/README.md](frontend/README.md) for architecture detail.
 - [x] **Email via AWS SES** — Replaced Gmail OAuth2 with AWS SES on `@lotlord.app`. Outbound: `@aws-sdk/client-ses` `SendEmailCommand` / `SendRawEmailCommand` (in-thread replies). Inbound: SES \u2192 S3 \u2192 SQS \u2192 Lambda parses .eml (`mailparser`) \u2192 `POST /webhooks/ses`; `emailInboxService` deduplicates and logs. Bounce/complaint: SNS \u2192 `POST /webhooks/ses/bounce` \u2192 marks `email_bounced` on users row; `notificationService` guards against sending to bounced addresses. Full AWS infrastructure in `infra/` (CDK JavaScript).
 - [x] **17. Tenant portal** — Fully wired tenant portal: `GET /tenants/me` endpoint resolves the logged-in user's tenant record; `useMyLease` hook chains tenant → active lease for all portal pages; Dashboard shows property name, address, unit, rent, dates, deposit, and late fee with a lease-expiry countdown; Payments page auto-resolves `leaseId` (no more 400 errors); Maintenance submission form auto-fills and locks the tenant's unit; `MaintenanceForm` gains a `lockedUnitId` prop; `leaseController.listLeases` auto-scopes to the tenant's own leases (security fix)
@@ -759,16 +759,16 @@ See **[CHANGELOG.md](CHANGELOG.md)** for the full versioned release history.
 - [x] **34. Frontend role-gating audit** — Employee role UI completion: ChargesPage void guard, Sidebar Subscriptions for landlords, UsersPage `'employee'` role fix, ProfilePage employee info card, PaymentsPage connect banner gating, DashboardPage employee upgrade CTA, LedgerPage Property/Unit meta card, TenantsPage Team Members tab + employee invite dialog. `createEmployeeInvitation` API + hook. See CHANGELOG 1.6.1.
 - [x] **35. UX polish sprint (v1.7.0)** — Team Members page at `/team` (own sidebar item; landlord/admin only); sidebar nav restructured into Core/Finance/Communication/Settings groups with active-state bug fix; MessagesPage rebuilt with Conversations/Notification Log/Automation tabs (notification log folded in, automation schedule cards, paygate for free tier); TenantsPage stripped to tenants-only; ledger `effective_date` (charge `due_date` / payment `payment_date` via JOIN), `fmtMoney` shared formatter; tenant Payments `payment_date` column; `GET /notifications/log` opened to all staff roles. See CHANGELOG 1.7.0.
 - [x] **36. Payments tab consolidated into Profile (v1.7.1)** — Removed standalone Payments page from Finance sidebar group. Finance now contains only Ledger and Charges. ACH bank account management (tenant picker, bank accounts list, Connect Bank dialog) embedded in `ProfilePage` as a new "Tenant Bank Accounts" section (landlord-only). `/payments` route redirects to `/profile`. See CHANGELOG 1.7.1.
-- [ ] **37. AI agent** — wire up OpenAI integration to Twilio inbound SMS handler, conversation management
+- [ ] **37. AI agent** — wire up OpenAI integration to inbound SMS/email handlers, conversation management
 
 ---
 
 ## Planned Features
 
 See **[ROADMAP.md](ROADMAP.md)** for architecture and implementation plans for:
-- AI agent for tenant communications (OpenAI + Twilio/SES)
+- AI agent for tenant communications (OpenAI + AWS SMS/SES)
 - Per-table change tracking (`created_by` / `updated_by` on all entities)
-- Per-property Twilio number management
+- Per-property dedicated SMS number management
 
 ---
 
@@ -1027,7 +1027,7 @@ Estimated monthly cost at MVP/small scale (1–3 properties, ~20–50 tenants):
 | Railway (Hobby) | ~$5 | API + PostgreSQL |
 | AWS SES | ~$0.10/1k emails | Practically free at this scale |
 | AWS S3 | ~$0.50 | Storage + data transfer at small scale |
-| Twilio SMS | ~$3–10 | $1/mo per number + $0.008/SMS |
+| AWS SMS | Varies | Depends on origination type, destination, and monthly usage |
 | OpenAI (GPT-4o-mini) | ~$5–30 | Biggest variable — depends on AI use |
 | Stripe | 0.8% per ACH txn | No monthly fee; cap $5 per transaction |
 | **Total** | **~$14–50/mo** | **~$168–600/yr** |
@@ -1071,21 +1071,27 @@ SES_WEBHOOK_SECRET=             # shared secret for Lambda→API auth
 # AWS S3
 S3_BUCKET_NAME=lotlord-files
 
-# Twilio
-TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=
-TWILIO_PHONE_NUMBER=
+# AWS SMS
+AWS_SMS_ORIGINATION_IDENTITY=
+AWS_SMS_MESSAGE_TYPE=TRANSACTIONAL
+AWS_SMS_CONFIGURATION_SET_NAME=
+AWS_SMS_NUMBER_TYPE=TOLL_FREE
+AWS_SMS_WEBHOOK_SECRET=
+SMS_HELP_RESPONSE=
+SMS_STOP_CONFIRMATION=
+SMS_START_CONFIRMATION=
+SMS_SEND_MAX_ATTEMPTS=3
+SMS_CAP_AUTOPILOT=1000
+SMS_CAP_PORTFOLIO=2500
+SMS_AI_WARN_SEGMENTS=3
+SMS_AI_BLOCK_SEGMENTS=6
 APP_BASE_URL=https://your-app.railway.app
 
 # Stripe
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=          # required — from Stripe Dashboard → Webhooks → signing secret
-STRIPE_PRICE_ID_STARTER=price_...    # optional legacy tier (starter is now free)
 STRIPE_PRICE_ID_AUTOPILOT=price_...  # Autopilot plan — $49/mo — nickname 'autopilot'
 STRIPE_PRICE_ID_PORTFOLIO=price_...  # Portfolio plan — $79/mo — nickname 'portfolio'
-# Legacy aliases (optional during rollout):
-# STRIPE_PRICE_ID_ENTERPRISE=price_...
-# STRIPE_PRICE_ID_COMMERCIAL=price_...
 # Stripe webhook events to enable in the Dashboard:
 #   customer.subscription.created, customer.subscription.updated,
 #   customer.subscription.deleted, customer.subscription.trial_will_end,
@@ -1117,7 +1123,7 @@ property-manager/
 │   ├── queues/          # BullMQ queue definitions and workers
 │   ├── jobs/            # node-cron scheduled job definitions
 │   ├── middleware/      # auth, error handling, validation
-│   ├── integrations/    # AWS SES, S3, Twilio, Stripe, OpenAI wrappers
+│   ├── integrations/    # AWS SES, S3, AWS SMS, Stripe, OpenAI wrappers
 │   └── utils/           # shared helpers (date formatting, template rendering, etc.)
 ├── migrations/          # SQL migration files
 ├── seeds/               # Dev seed data

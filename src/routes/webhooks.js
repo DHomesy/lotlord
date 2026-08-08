@@ -1,7 +1,6 @@
 const router = require('express').Router();
 const express = require('express');
 const crypto = require('crypto');
-const twilio = require('twilio');
 const { v4: uuidv4 } = require('uuid');
 const stripeService = require('../services/stripeService');
 const emailInboxService = require('../services/emailInboxService');
@@ -86,9 +85,7 @@ async function processInboundSms({ provider, from, to, body, externalId }) {
 
   const [sender, landlord] = await Promise.all([
     userRepo.findByPhone(senderPhone),
-    String(env.SMS_PROVIDER || 'twilio').toLowerCase() === 'aws'
-      ? userRepo.findByAwsSmsNumber(destinationPhone)
-      : userRepo.findByTwilioSmsNumber(destinationPhone),
+    userRepo.findByAwsSmsNumber(destinationPhone),
   ]);
 
   if (!sender) {
@@ -184,47 +181,6 @@ router.post('/stripe', async (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
   res.json({ received: true, type: event.type });
-});
-
-// POST /api/v1/webhooks/twilio/sms
-// Twilio posts inbound SMS here (form-encoded body, not JSON)
-// express.urlencoded() is already applied globally in app.js
-router.post('/twilio/sms', async (req, res) => {
-  // ── 1. Validate Twilio signature ────────────────────────────────────────────
-  // Only enforced when TWILIO_AUTH_TOKEN is configured (skipped in local dev)
-  if (env.TWILIO_AUTH_TOKEN) {
-    const authToken  = env.TWILIO_AUTH_TOKEN;
-    const signature  = req.headers['x-twilio-signature'] || '';
-    const webhookUrl = `${env.APP_BASE_URL}/api/v1/webhooks/twilio/sms`;
-
-    const valid = twilio.validateRequest(authToken, signature, webhookUrl, req.body);
-    if (!valid) {
-      console.warn('[twilio webhook] Invalid signature — rejecting request');
-      // Reply with empty TwiML rather than JSON (Twilio expects XML or 40x)
-      res.type('text/xml').status(403).send('<Response></Response>');
-      return;
-    }
-  }
-
-  // ── 2. Parse the inbound message ────────────────────────────────────────────
-  const from       = req.body.From || '';
-  const to         = req.body.To   || '';
-  const body       = req.body.Body || '';
-  const messageSid = req.body.MessageSid || '';
-
-  // Body is intentionally omitted from the log line — it may contain PII / sensitive content.
-  console.info(`[twilio inbound] MessageSid=${messageSid} From=${from} To=${to} bodyLength=${body.length}`);
-
-  try {
-    await processInboundSms({ provider: 'twilio', from, to, body, externalId: messageSid });
-  } catch (err) {
-    // Non-fatal — still acknowledge Twilio so they don't retry
-    console.error('[twilio inbound] Error processing message:', err.message);
-  }
-
-  // ── 4. Reply with empty TwiML ────────────────────────────────────────────────
-  // No auto-reply for now; the AI agent will handle conversational replies.
-  res.type('text/xml').send('<Response></Response>');
 });
 
 // POST /api/v1/webhooks/aws/sms

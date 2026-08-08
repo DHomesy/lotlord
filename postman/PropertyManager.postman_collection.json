@@ -1457,7 +1457,7 @@
               "raw": "{\n  \"recipientId\": \"{{userId}}\",\n  \"body\": \"Hi {{first_name}}, this is a message from your property manager. Please call us at your earliest convenience.\"}\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Admin only. Send a direct SMS to a user — no template required. The user must have a `phone` number on file. Sends via Twilio and logs to notifications_log with channel='sms'."
+            "description": "Admin only. Send a direct SMS to a user — no template required. The user must have a `phone` number on file. Sends via AWS SMS and logs to notifications_log with channel='sms'."
           },
           "event": [
             {
@@ -1599,26 +1599,25 @@
           }
         },
         {
-          "name": "Twilio Inbound SMS Webhook",
+          "name": "AWS Inbound SMS Webhook",
           "request": {
             "auth": { "type": "noauth" },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-webhook-secret", "value": "{{awsSmsWebhookSecret}}", "description": "Must match AWS_SMS_WEBHOOK_SECRET" }
+            ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/webhooks/twilio/sms",
+              "raw": "{{baseUrl}}/api/v1/webhooks/aws/sms",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "webhooks", "twilio", "sms"]
+              "path": ["api", "v1", "webhooks", "aws", "sms"]
             },
             "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                { "key": "From", "value": "+15550000002" },
-                { "key": "To", "value": "+15550000001" },
-                { "key": "Body", "value": "Hi, when is my rent due?" },
-                { "key": "MessageSid", "value": "SMxxxxxxxxxxxx" }
-              ]
+              "mode": "raw",
+              "raw": "{\n  \"originationNumber\": \"+15550000002\",\n  \"destinationNumber\": \"+15550000001\",\n  \"messageBody\": \"Hi, when is my rent due?\",\n  \"inboundMessageId\": \"aws-msg-123\"\n}",
+              "options": { "raw": { "language": "json" } }
             },
-            "description": "Called by Twilio when a tenant sends an inbound SMS. Validates the Twilio signature (when TWILIO_AUTH_TOKEN is set) and logs incoming messages from known users."
+            "description": "Called by AWS SMS webhook source when a tenant sends an inbound SMS. Validates `x-webhook-secret` against `AWS_SMS_WEBHOOK_SECRET` and logs incoming messages from known users."
           }
         },
         {

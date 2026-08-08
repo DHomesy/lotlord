@@ -5,8 +5,6 @@ const { resolveOwnerId } = require('../lib/authHelpers');
 const ACTIVE_STATUSES = ['active', 'trialing'];
 
 function normalizePlan(plan) {
-  if (plan === 'enterprise') return 'autopilot';
-  if (plan === 'commercial') return 'portfolio';
   return plan;
 }
 
@@ -116,8 +114,8 @@ async function getMySmsStatus(req, res, next) {
 
 /**
  * POST /api/v1/users/me/sms/provision
- * Purchase a Twilio number in the requested area code and assign it to this landlord.
- * Body: { areaCode: "512" }
+ * Provision a dedicated SMS number for this landlord.
+ * Body: { areaCode: "512" } (currently ignored by AWS provisioning)
  */
 async function provisionMySms(req, res, next) {
   try {

@@ -1,7 +1,6 @@
 # Payment Gates
 
 Canonical paid plans: `autopilot`, `portfolio`.
-Legacy aliases accepted in code: `enterprise` -> `autopilot`, `commercial` -> `portfolio`.
 
 ## Feature Gates
 

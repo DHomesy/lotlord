@@ -39,18 +39,15 @@ These must be set before the app can function at all.
 | `FRONTEND_URL` | ✅ | Your Vercel URL, **no trailing slash** — used for Stripe redirect URLs |
 | `STRIPE_SECRET_KEY` | ✅ | `sk_live_…` from Stripe Dashboard → Developers → API keys |
 | `STRIPE_WEBHOOK_SECRET` | ✅ | `whsec_…` — from Stripe webhook endpoint after creation |
-| `STRIPE_PRICE_ID_STARTER` | ✅ | `price_…` — copy from Stripe after creating the Starter product |
-| `STRIPE_PRICE_ID_ENTERPRISE` | ✅ | `price_…` — copy from Stripe after creating the Enterprise product |
-| `STRIPE_PRICE_ID_COMMERCIAL` | ✅ | `price_…` — flat base price, nickname must be `commercial` |
-| `STRIPE_PRICE_ID_COMMERCIAL_UNIT` | ✅ | `price_…` — per-unit add-on, nickname must be `commercial_unit` |
+| `STRIPE_PRICE_ID_AUTOPILOT` | ✅ | `price_…` — nickname must be `autopilot` |
+| `STRIPE_PRICE_ID_PORTFOLIO` | ✅ | `price_…` — nickname must be `portfolio` |
 | `AWS_REGION` | ✅ | e.g. `us-east-1` |
 | `AWS_ACCESS_KEY_ID` | ✅ | IAM user with SES + S3 permissions |
 | `AWS_SECRET_ACCESS_KEY` | ✅ | Matching IAM secret |
 | `SES_FROM_ADDRESS` | ✅ | Verified SES sending identity |
 | `S3_BUCKET_NAME` | ✅ | Bucket for document uploads |
-| `TWILIO_ACCOUNT_SID` | Optional | SMS notifications |
-| `TWILIO_AUTH_TOKEN` | Optional | SMS notifications |
-| `TWILIO_PHONE_NUMBER` | Optional | E.164 format |
+| `AWS_SMS_ORIGINATION_IDENTITY` | Optional | Origination identity for outbound SMS |
+| `AWS_SMS_WEBHOOK_SECRET` | ✅ | Shared secret for `/api/v1/webhooks/aws/sms` |
 | `APP_BASE_URL` | ✅ | Same as FRONTEND_URL or Railway API URL depending on context |
 
 ### Stripe Dashboard setup

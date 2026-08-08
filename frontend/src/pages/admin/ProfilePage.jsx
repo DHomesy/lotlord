@@ -185,7 +185,7 @@ export default function AdminProfilePage() {
             </Button>
           }
         >
-          You&apos;re on the <strong>Starter free plan</strong>. Upgrade to Autopilot to unlock more
+          You&apos;re on the <strong>Free plan</strong>. Upgrade to Autopilot to unlock more
           units, automation, and communication features with Autopilot.
         </Alert>
       )}

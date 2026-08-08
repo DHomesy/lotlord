@@ -17,11 +17,11 @@ afterAll(async () => { if (fx) await fx.teardown(); });
 // ── POST /invitations/employee ────────────────────────────────────────────────
 
 describe('POST /api/v1/invitations/employee', () => {
-  // v1.8.0: employees are enterprise-only (starter=0, free=0).
-  // Temporarily grant enterprise plan so the invitation can be created.
+  // Employee seats require portfolio plan (free/autopilot=0).
+  // Temporarily grant portfolio so the invitation can be created.
   beforeEach(async () => {
     await fx.pool.query(
-      `UPDATE users SET subscription_status = 'active', subscription_plan = 'enterprise' WHERE id = $1`,
+      `UPDATE users SET subscription_status = 'active', subscription_plan = 'portfolio' WHERE id = $1`,
       [fx.landlordA.id],
     );
   });

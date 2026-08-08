@@ -38,8 +38,6 @@ function authorize(...roles) {
 const ACTIVE_STATUSES = ['active', 'trialing'];
 
 function normalizePlan(plan) {
-  if (plan === 'enterprise') return 'autopilot';
-  if (plan === 'commercial') return 'portfolio';
   return plan;
 }
 
@@ -66,32 +64,6 @@ async function requiresStarter(req, res, next) {
 }
 
 /**
- * Requires the requesting landlord to have an active Portfolio subscription.
- * Reserved for future premium features (AI, document signing, etc.).
- * Admin users bypass this check.
- * Returns 402 Payment Required if the gate is not met.
- */
-async function requiresEnterprise(req, res, next) {
-  try {
-    if (!req.user) return res.status(401).json({ error: 'Authentication required' });
-    if (req.user.role === 'admin') return next();
-
-    const billing = await userRepo.findBillingStatus(resolveOwnerId(req.user));
-    const plan = normalizePlan(billing?.subscription_plan);
-    if (!billing || !ACTIVE_STATUSES.includes(billing.subscription_status) || plan !== 'portfolio') {
-      return res.status(402).json({
-        error: 'This feature requires a Portfolio plan. Upgrade to continue.',
-        code: 'ENTERPRISE_REQUIRED',
-      });
-    }
-    next();
-  } catch (err) { next(err); }
-}
-
-// Backward-compat alias
-const requiresPro = requiresStarter;
-
-/**
  * Requires the requesting landlord to have completed Stripe Connect onboarding.
  * Only applies to landlord-role users — admins and tenants pass through.
  * Returns 422 if the landlord's Connect account is not yet set up.
@@ -116,7 +88,6 @@ async function requiresConnectOnboarded(req, res, next) {
 /**
  * Per-plan resource limits.
  *   free       — no active subscription
- *   starter    — legacy paid tier (grandfathered)
  *   autopilot  — Autopilot tier (price nickname = 'autopilot')
  *   portfolio  — Portfolio tier (price nickname = 'portfolio')
  *
@@ -126,40 +97,11 @@ async function requiresConnectOnboarded(req, res, next) {
  * in checkPlanLimit('units') and in unitService.assertMultiFamilyCap().
  */
 const PLAN_LIMITS = {
-  properties: { free: 1,  starter: Infinity, autopilot: Infinity, portfolio: Infinity },
-  units:      { free: 4,  starter: 20, autopilot: 20, portfolio: Infinity },
-  tenants:    { free: 4,  starter: Infinity, autopilot: Infinity, portfolio: Infinity },
-  employees:  { free: 0,  starter: 0, autopilot: 0, portfolio: Infinity },
+  properties: { free: 1,  autopilot: Infinity, portfolio: Infinity },
+  units:      { free: 4,  autopilot: 20, portfolio: Infinity },
+  tenants:    { free: 4,  autopilot: Infinity, portfolio: Infinity },
+  employees:  { free: 0,  autopilot: 0, portfolio: Infinity },
 };
-
-/**
- * Requires the requesting landlord to have an active Commercial subscription.
- * Gates commercial property creation. Admin users bypass this check.
- * Returns 402 with code 'COMMERCIAL_REQUIRED' if the gate is not met.
- *
- * NOTE: This middleware is available for future route-level gating of an entire
- * endpoint. Currently the commercial plan check is done inside the service layer
- * (propertyService.assertCommercialPlan) so it fires only when propertyType === 'commercial',
- * avoiding a DB round-trip for single/multi-family property changes. Only mount this
- * middleware on a route if the *entire* route should require the commercial plan.
- */
-async function requiresCommercialPlan(req, res, next) {
-  try {
-    if (!req.user) return res.status(401).json({ error: 'Authentication required' });
-    if (req.user.role === 'admin') return next();
-
-    const billing = await userRepo.findBillingStatus(resolveOwnerId(req.user));
-    const isActive = ACTIVE_STATUSES.includes(billing?.subscription_status);
-    const plan = normalizePlan(billing?.subscription_plan);
-    if (!isActive || plan !== 'portfolio') {
-      return res.status(402).json({
-        error: 'Commercial properties require the Portfolio plan ($79/mo). Upgrade to continue.',
-        code:  'COMMERCIAL_REQUIRED',
-      });
-    }
-    next();
-  } catch (err) { next(err); }
-}
 
 /**
  * Tier-aware resource count guard. Blocks creation once the user has reached
@@ -202,7 +144,7 @@ function checkPlanLimit(resource) {
         countQuery  = 'SELECT COUNT(*)::int AS cnt FROM properties WHERE owner_id = $1 AND deleted_at IS NULL';
         countParams = [effectiveOwnerId];
       } else if (resource === 'units') {
-        // Global unit cap applies on Free only. On Starter the global limit is Infinity,
+        // Global unit cap applies on Free only.
         // but multi-family per-property cap (4 units) is enforced in unitService.
         countQuery = `
           SELECT COUNT(*)::int AS cnt
@@ -233,13 +175,13 @@ function checkPlanLimit(resource) {
       const count = rows[0]?.cnt ?? 0;
       if (count >= max) {
         const planLabel = plan === 'free'
-          ? 'Starter (Free)'
+          ? 'Free'
           : plan === 'autopilot'
             ? 'Autopilot'
             : plan === 'portfolio'
               ? 'Portfolio'
               : 'Autopilot';
-        const upgradeHint = plan === 'autopilot' || plan === 'starter'
+        const upgradeHint = plan === 'autopilot'
           ? 'Upgrade to Portfolio for unlimited access and employee permissions.'
           : resource === 'employees'
             ? 'Upgrade to Portfolio for team member permissions.'
@@ -256,9 +198,6 @@ function checkPlanLimit(resource) {
     } catch (err) { next(err); }
   };
 }
-
-// Backward-compat alias (routes may still use the old name)
-const checkFreeTierLimit = checkPlanLimit;
 
 /**
  * Blocks landlords whose email address has not yet been verified.
@@ -286,11 +225,7 @@ module.exports = {
   authenticate,
   authorize,
   requiresStarter,
-  requiresEnterprise,
-  requiresCommercialPlan,
-  requiresPro,          // backward-compat alias for requiresStarter
   requiresConnectOnboarded,
   checkPlanLimit,
-  checkFreeTierLimit,   // backward-compat alias for checkPlanLimit
   requiresVerified,
 };

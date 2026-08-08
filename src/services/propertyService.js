@@ -6,8 +6,6 @@ const { resolveOwnerId } = require('../lib/authHelpers');
 const ACTIVE_STATUSES = ['active', 'trialing'];
 
 function normalizePlan(plan) {
-  if (plan === 'enterprise') return 'autopilot';
-  if (plan === 'commercial') return 'portfolio';
   return plan;
 }
 

@@ -15,7 +15,6 @@ async function findById(id) {
             email_bounced, email_bounced_at, email_verified_at, token_version,
             employer_id, created_at,
             subscription_status, subscription_plan,
-            twilio_sms_number, twilio_messaging_service_sid,
             aws_sms_phone_number, aws_sms_phone_number_id,
             ai_enabled, ai_reply_mode, ai_notify_on_send, ai_notify_channels
      FROM users WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
@@ -75,7 +74,7 @@ async function update(id, fields) {
     `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${idx} AND deleted_at IS NULL
      RETURNING id, email, role, first_name, last_name, phone, avatar_url,
                ai_enabled, ai_reply_mode, ai_notify_on_send, ai_notify_channels,
-               twilio_sms_number`,
+               aws_sms_phone_number, aws_sms_phone_number_id`,
     values,
   );
   return rows[0] || null;
@@ -99,21 +98,6 @@ async function findByPhone(phone) {
   const { rows } = await query(
     'SELECT id, email, role, first_name, last_name, phone FROM users WHERE phone = $1 AND deleted_at IS NULL LIMIT 1',
     [phone],
-  );
-  return rows[0] || null;
-}
-
-/**
- * Find the landlord who owns a given provisioned Twilio SMS number.
- * Used by the inbound SMS webhook to route messages to the right landlord context.
- */
-async function findByTwilioSmsNumber(number) {
-  const { rows } = await query(
-    `SELECT id, email, role, first_name, last_name,
-            ai_enabled, ai_reply_mode, ai_notify_on_send, ai_notify_channels
-     FROM users
-     WHERE twilio_sms_number = $1 AND deleted_at IS NULL LIMIT 1`,
-    [number],
   );
   return rows[0] || null;
 }
@@ -230,21 +214,6 @@ async function markEmailBounced(email) {
 }
 
 /**
- * Persist Twilio provisioning results for a landlord.
- * Called by twilioService after purchasing/releasing a number.
- */
-async function updateTwilioProvisioning(landlordId, { twilioSmsNumber, twilioMessagingServiceSid }) {
-  const { rows } = await query(
-    `UPDATE users
-     SET twilio_sms_number = $1, twilio_messaging_service_sid = $2, updated_at = NOW()
-     WHERE id = $3 AND deleted_at IS NULL
-     RETURNING id, twilio_sms_number, twilio_messaging_service_sid`,
-    [twilioSmsNumber || null, twilioMessagingServiceSid || null, landlordId],
-  );
-  return rows[0] || null;
-}
-
-/**
  * Persist AWS SMS provisioning results for a landlord.
  */
 async function updateAwsSmsProvisioning(landlordId, { awsSmsPhoneNumber, awsSmsPhoneNumberId }) {
@@ -259,9 +228,9 @@ async function updateAwsSmsProvisioning(landlordId, { awsSmsPhoneNumber, awsSmsP
 }
 
 module.exports = {
-  findByEmail, findById, findByPhone, findByTwilioSmsNumber, findByAwsSmsNumber, create, update, findAll,
+  findByEmail, findById, findByPhone, findByAwsSmsNumber, create, update, findAll,
   updatePassword, incrementTokenVersion,
   findConnectStatus, findByStripeAccountId, updateStripeConnect,
   findBillingStatus, findByStripeBillingCustomerId, updateBillingStatus, findAllLandlords,
-  markEmailBounced, updateTwilioProvisioning, updateAwsSmsProvisioning,
+  markEmailBounced, updateAwsSmsProvisioning,
 };

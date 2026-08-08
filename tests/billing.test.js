@@ -44,7 +44,7 @@ describe('POST /api/v1/billing/checkout', () => {
   it('returns 401 with no auth', async () => {
     const res = await request(app)
       .post('/api/v1/billing/checkout')
-      .send({ plan: 'starter' });
+      .send({ plan: 'autopilot' });
     expect(res.status).toBe(401);
   });
 
@@ -52,7 +52,7 @@ describe('POST /api/v1/billing/checkout', () => {
     const res = await request(app)
       .post('/api/v1/billing/checkout')
       .set('Authorization', `Bearer ${fx.tenantA.token}`)
-      .send({ plan: 'starter' });
+      .send({ plan: 'autopilot' });
     expect(res.status).toBe(403);
   });
 
@@ -60,7 +60,7 @@ describe('POST /api/v1/billing/checkout', () => {
     const res = await request(app)
       .post('/api/v1/billing/checkout')
       .set('Authorization', `Bearer ${fx.admin.token}`)
-      .send({ plan: 'starter' });
+      .send({ plan: 'autopilot' });
     expect(res.status).toBe(403);
   });
 });
@@ -177,7 +177,7 @@ describe('requiresStarter gate — GET /api/v1/analytics/dashboard', () => {
 
   it('returns 402 for a past_due landlord (payment failed — access suspended)', async () => {
     await fx.pool.query(
-      `UPDATE users SET subscription_status = 'past_due', subscription_plan = 'starter' WHERE id = $1`,
+      `UPDATE users SET subscription_status = 'past_due', subscription_plan = 'autopilot' WHERE id = $1`,
       [fx.landlordA.id],
     );
     try {
@@ -196,7 +196,7 @@ describe('requiresStarter gate — GET /api/v1/analytics/dashboard', () => {
 
   it('returns 402 for a canceled landlord', async () => {
     await fx.pool.query(
-      `UPDATE users SET subscription_status = 'canceled', subscription_plan = 'starter' WHERE id = $1`,
+      `UPDATE users SET subscription_status = 'canceled', subscription_plan = 'autopilot' WHERE id = $1`,
       [fx.landlordA.id],
     );
     try {
@@ -213,9 +213,9 @@ describe('requiresStarter gate — GET /api/v1/analytics/dashboard', () => {
     }
   });
 
-  it('returns 200 for an active starter landlord', async () => {
+  it('returns 200 for an active autopilot landlord', async () => {
     await fx.pool.query(
-      `UPDATE users SET subscription_status = 'active', subscription_plan = 'starter' WHERE id = $1`,
+      `UPDATE users SET subscription_status = 'active', subscription_plan = 'autopilot' WHERE id = $1`,
       [fx.landlordA.id],
     );
     try {
@@ -233,7 +233,7 @@ describe('requiresStarter gate — GET /api/v1/analytics/dashboard', () => {
 
   it('returns 200 for a trialing landlord', async () => {
     await fx.pool.query(
-      `UPDATE users SET subscription_status = 'trialing', subscription_plan = 'starter' WHERE id = $1`,
+      `UPDATE users SET subscription_status = 'trialing', subscription_plan = 'autopilot' WHERE id = $1`,
       [fx.landlordA.id],
     );
     try {

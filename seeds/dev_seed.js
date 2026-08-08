@@ -1,5 +1,5 @@
 ﻿/**
- * Development grant script â€” upgrades a landlord account to enterprise plan.
+ * Development grant script â€” upgrades a landlord account to autopilot plan.
  * Run: npm run seed
  *
  * This script does NOT delete any data. All existing properties, tenants,
@@ -30,12 +30,12 @@ async function seed() {
   try {
     await client.query('BEGIN');
 
-    console.log(`[seed] Granting enterprise plan to ${LANDLORD_EMAIL}...`);
+    console.log(`[seed] Granting autopilot plan to ${LANDLORD_EMAIL}...`);
 
     const result = await client.query(
       `UPDATE users
           SET subscription_status  = 'active',
-              subscription_plan    = 'enterprise',
+              subscription_plan    = 'autopilot',
               ai_enabled           = true,
               ai_reply_mode        = 'approval',
               ai_notify_on_send    = true,
@@ -64,7 +64,7 @@ async function seed() {
     await client.query('COMMIT');
     console.log('\n[seed] Done âœ“');
     console.log('');
-    console.log(`  ${user.email}  â†’  enterprise plan, AI inbox enabled (approval mode)`);
+    console.log(`  ${user.email}  ->  autopilot plan, AI inbox enabled (approval mode)`);
     console.log('');
     console.log('  No data was deleted. All existing properties, tenants, and leases are intact.');
   } catch (err) {

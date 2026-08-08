@@ -109,10 +109,10 @@ const FAQ = [
 
 const PLANS = [
   {
-    name: 'Starter',
+    name: 'Free',
     price: '$0',
     period: '/ mo',
-    description: 'Your long-term acquisition funnel for first-time landlords.',
+    description: 'Core tools for self-managing landlords getting started.',
     features: ['1 property · up to 4 units', 'Up to 4 active tenants', 'Online ACH rent collection', 'Tenant portal access', 'Maintenance tracking', 'Lease & document storage', 'Email notifications'],
     cta: 'Get Started Free',
     ctaVariant: 'outlined',
@@ -124,7 +124,7 @@ const PLANS = [
     price: '$49',
     period: '/ mo',
     description: 'Relief from day-to-day operations for growing landlords.',
-    features: ['Up to 20 total units', 'Dedicated SMS number', 'AI inbox + suggested replies', 'Maintenance creation from conversations', 'Preferred-vendor routing', 'Operational briefing', 'Approximately 500 included SMS segments', 'Everything in Starter'],
+    features: ['Up to 20 total units', 'Dedicated SMS number', 'AI inbox + suggested replies', 'Maintenance creation from conversations', 'Preferred-vendor routing', 'Operational briefing', 'Approximately 1,000 included SMS segments', 'Everything in Free'],
     cta: 'Start Autopilot',
     ctaVariant: 'contained',
     highlight: true,
@@ -135,7 +135,7 @@ const PLANS = [
     price: '$79',
     period: '/ mo',
     description: 'For landlords running larger portfolios and teams.',
-    features: ['More units', 'Higher communication allowance', 'Employee permissions', 'Multiple approval policies', 'Vendor workflows', 'Priority support', 'Everything in Autopilot'],
+    features: ['Unlimited units', 'Approximately 2,500 included SMS segments', 'Employee permissions', 'Multiple approval policies', 'Vendor workflows', 'Priority support', 'Everything in Autopilot'],
     cta: 'Get Started',
     ctaVariant: 'outlined',
     highlight: false,
