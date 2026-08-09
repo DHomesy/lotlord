@@ -103,6 +103,7 @@ function OptInChips({ emailOptIn, smsOptIn }) {
 // ─── New conversation dialog ─────────────────────────────────────────────────
 function NewConversationDialog({ open, onClose, onCreated }) {
   const { mutate: send, isPending, error, reset: resetMutation } = useSendMessage()
+  const [deliveryWarning, setDeliveryWarning] = useState('')
   const { control, register, handleSubmit, reset: resetForm, formState: { errors } } = useForm({
     resolver: zodResolver(newConvSchema),
     defaultValues: { tenantId: null, subject: '', body: '' },
@@ -111,12 +112,19 @@ function NewConversationDialog({ open, onClose, onCreated }) {
   const handleClose = () => {
     resetForm()
     resetMutation()
+    setDeliveryWarning('')
     onClose()
   }
 
   const onSubmit = ({ tenantId, subject, body }) => {
     send({ tenantId, subject, body }, {
-      onSuccess: () => {
+      onSuccess: (result) => {
+        const failures = Array.isArray(result) ? result.filter((r) => r.status === 'failed') : []
+        if (failures.length) {
+          const channels = [...new Set(failures.map((r) => r.channel))].join(', ')
+          setDeliveryWarning(`Message was created but failed to deliver on: ${channels}. Check Notification Log for details.`)
+          return
+        }
         handleClose()
         onCreated(tenantId)
       },
@@ -133,6 +141,7 @@ function NewConversationDialog({ open, onClose, onCreated }) {
               {error?.response?.data?.error || 'Failed to send message.'}
             </Alert>
           )}
+          {deliveryWarning && <Alert severity="warning">{deliveryWarning}</Alert>}
           <Controller
             name="tenantId"
             control={control}
@@ -240,6 +249,7 @@ function ThreadView({ tenantId, onBack }) {
   const theme   = useTheme()
   const { data, isLoading, isError } = useConversation(tenantId)
   const { mutate: send, isPending, error: sendError, reset } = useSendMessage()
+  const [deliveryWarning, setDeliveryWarning] = useState('')
   const { register, handleSubmit, reset: resetForm, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
   })
@@ -250,8 +260,17 @@ function ThreadView({ tenantId, onBack }) {
   const { tenant, messages } = data
 
   const onSubmit = (values) => {
+    setDeliveryWarning('')
     send({ tenantId, ...values }, {
-      onSuccess: () => { resetForm(); reset() },
+      onSuccess: (result) => {
+        const failures = Array.isArray(result) ? result.filter((r) => r.status === 'failed') : []
+        if (failures.length) {
+          const channels = [...new Set(failures.map((r) => r.channel))].join(', ')
+          setDeliveryWarning(`Delivery failed on: ${channels}. Check Notification Log for details.`)
+        }
+        resetForm()
+        reset()
+      },
     })
   }
 
@@ -352,6 +371,11 @@ function ThreadView({ tenantId, onBack }) {
         {sendError && (
           <Alert severity="error" sx={{ mb: 1.5 }}>
             {sendError?.response?.data?.error || 'Failed to send message.'}
+          </Alert>
+        )}
+        {deliveryWarning && (
+          <Alert severity="warning" sx={{ mb: 1.5 }}>
+            {deliveryWarning}
           </Alert>
         )}
         <Stack spacing={1}>

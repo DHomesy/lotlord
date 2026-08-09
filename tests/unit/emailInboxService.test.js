@@ -110,6 +110,19 @@ describe('unknown sender', () => {
     expect(userRepo.findByEmailInsensitive).toHaveBeenCalledWith('tenant@example.com');
     expect(unmatchedInboundRepo.createEmailEntry).not.toHaveBeenCalled();
   });
+
+  test('matches sender when reply uses plus alias fallback', async () => {
+    userRepo.findByEmailInsensitive
+      .mockResolvedValueOnce(null) // tenant+lease@example.com
+      .mockResolvedValueOnce(mockSender); // tenant@example.com
+
+    const result = await processInboundEmail(makeMsg({ fromEmail: 'tenant+lease@example.com' }));
+
+    expect(result).toEqual(mockLogEntry);
+    expect(userRepo.findByEmailInsensitive).toHaveBeenNthCalledWith(1, 'tenant+lease@example.com');
+    expect(userRepo.findByEmailInsensitive).toHaveBeenNthCalledWith(2, 'tenant@example.com');
+    expect(unmatchedInboundRepo.createEmailEntry).not.toHaveBeenCalled();
+  });
 });
 
 // ── Happy path ────────────────────────────────────────────────────────────────

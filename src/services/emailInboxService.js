@@ -51,6 +51,42 @@ function stripHtml(html) {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Build conservative sender-email match candidates for inbound replies.
+ * This helps when tenants reply from aliases (e.g. +tag addresses).
+ */
+function buildSenderCandidates(rawEmail) {
+  const normalized = String(rawEmail || '').trim().toLowerCase();
+  if (!normalized.includes('@')) return [normalized];
+
+  const [localPart, domainPart] = normalized.split('@');
+  const candidates = new Set([normalized]);
+
+  // Generic plus-alias fallback: jane+lease@domain.com -> jane@domain.com
+  const plusLocal = localPart.split('+')[0];
+  if (plusLocal && plusLocal !== localPart) {
+    candidates.add(`${plusLocal}@${domainPart}`);
+  }
+
+  // Gmail-specific canonicalization: dots are ignored in local-part.
+  if (domainPart === 'gmail.com' || domainPart === 'googlemail.com') {
+    const localNoDots = plusLocal.replace(/\./g, '');
+    candidates.add(`${localNoDots}@gmail.com`);
+    candidates.add(`${localNoDots}@googlemail.com`);
+  }
+
+  return [...candidates];
+}
+
+async function findSenderByCandidates(rawEmail) {
+  const candidates = buildSenderCandidates(rawEmail);
+  for (const candidate of candidates) {
+    const sender = await userRepo.findByEmailInsensitive(candidate);
+    if (sender) return sender;
+  }
+  return null;
+}
+
 // ── Deduplication ─────────────────────────────────────────────────────────────
 
 /**
@@ -89,7 +125,7 @@ async function processInboundEmail(msg) {
 
   // 2. Match sender to a known user
   const fromEmail = String(msg.fromEmail || '').trim().toLowerCase();
-  const sender = await userRepo.findByEmailInsensitive(fromEmail) || await userRepo.findByEmail(fromEmail);
+  const sender = await findSenderByCandidates(fromEmail) || await userRepo.findByEmail(fromEmail);
   if (!sender) {
     await unmatchedInboundRepo.createEmailEntry({
       externalId: msg.messageId,
