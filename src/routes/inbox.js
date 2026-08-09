@@ -8,7 +8,9 @@ const controller = require('../controllers/inboxController');
 router.use(authenticate, authorize('landlord', 'employee', 'admin'), requiresStarter);
 
 // ── Conversation list + detail ────────────────────────────────────────────────
+router.get('/unread-summary', controller.getUnreadSummary);
 router.get('/',    controller.listConversations);
+router.get('/:id/trace', controller.getConversationTrace);
 router.get('/:id', controller.getConversation);
 
 // ── Conversation actions ──────────────────────────────────────────────────────

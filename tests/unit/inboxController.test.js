@@ -15,7 +15,9 @@ const { resolveOwnerId }  = require('../../src/lib/authHelpers');
 
 const {
   listConversations,
+  getUnreadSummary,
   getConversation,
+  getConversationTrace,
   updateConversation,
   sendReply,
   approveDraft,
@@ -108,6 +110,22 @@ describe('listConversations', () => {
   });
 });
 
+// ── getUnreadSummary ─────────────────────────────────────────────────────────
+
+describe('getUnreadSummary', () => {
+  test('returns unread aggregate for resolved owner scope', async () => {
+    convRepo.getUnreadSummary.mockResolvedValue({ totalUnread: 7, threadsWithUnread: 3 });
+    const req = makeReq({ user: { role: 'landlord', sub: OWNER_ID } });
+    const res = makeRes();
+
+    await getUnreadSummary(req, res, next);
+
+    expect(resolveOwnerId).toHaveBeenCalledWith(req.user);
+    expect(convRepo.getUnreadSummary).toHaveBeenCalledWith(OWNER_ID);
+    expect(res.json).toHaveBeenCalledWith({ totalUnread: 7, threadsWithUnread: 3 });
+  });
+});
+
 // ── getConversation ───────────────────────────────────────────────────────────
 
 describe('getConversation', () => {
@@ -158,6 +176,54 @@ describe('getConversation', () => {
     await getConversation(req, res, next);
 
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ conversation: mockConversation }));
+  });
+});
+
+// ── getConversationTrace ─────────────────────────────────────────────────────
+
+describe('getConversationTrace', () => {
+  test('returns trace payload for owner', async () => {
+    convRepo.findById.mockResolvedValue(mockConversation);
+    convRepo.getTraceSummary.mockResolvedValue({
+      channel: 'sms',
+      status: 'open',
+      unread_count: 2,
+      latest_inbound_at: '2026-08-09T00:00:00.000Z',
+      latest_outbound_at: null,
+      pending_ai_drafts: 1,
+      inbound_message_count: 4,
+      received_log_count: 4,
+      failed_log_count: 0,
+      latest_inbound_preview: 'hello',
+      tenant_open_unmatched_count: 0,
+    });
+
+    const req = makeReq({ params: { id: CONV_ID }, user: { role: 'landlord', sub: OWNER_ID } });
+    const res = makeRes();
+
+    await getConversationTrace(req, res, next);
+
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: CONV_ID,
+      channel: 'sms',
+      checkpoints: expect.objectContaining({
+        receivedWebhook: true,
+        routedToConversation: true,
+        queuedUnmatched: false,
+      }),
+    }));
+  });
+
+  test('returns 403 when non-owner requests trace', async () => {
+    resolveOwnerId.mockReturnValue('other-owner-uuid');
+    convRepo.findById.mockResolvedValue(mockConversation);
+
+    const req = makeReq({ params: { id: CONV_ID }, user: { role: 'landlord', sub: 'other-owner-uuid' } });
+    const res = makeRes();
+
+    await getConversationTrace(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(403);
   });
 });
 

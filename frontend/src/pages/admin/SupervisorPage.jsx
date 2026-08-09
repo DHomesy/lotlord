@@ -20,7 +20,7 @@ import {
   useSupervisorOverride,
   useSupervisorUpdate,
 } from '../../hooks/useSupervisor'
-import { useInboxConversation } from '../../hooks/useInbox'
+import { useInboxConversation, useInboxConversationTrace } from '../../hooks/useInbox'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const dtFmt = new Intl.DateTimeFormat('en-US', {
@@ -45,6 +45,48 @@ function UrgencyChip({ urgency }) {
       color={URGENCY_COLOR[urgency] ?? 'default'}
       sx={{ height: 18, fontSize: 10, fontWeight: 600 }}
     />
+  )
+}
+
+function TraceCheckChip({ ok, label }) {
+  return (
+    <Chip
+      size="small"
+      label={label}
+      color={ok ? 'success' : 'default'}
+      variant={ok ? 'filled' : 'outlined'}
+      sx={{ height: 18, fontSize: 10 }}
+    />
+  )
+}
+
+function InboundTracePanel({ conversationId }) {
+  const { data: trace, isLoading, isError } = useInboxConversationTrace(conversationId)
+
+  if (isLoading) return null
+  if (isError || !trace) {
+    return <Alert severity="warning" sx={{ mx: 2, mt: 1 }}>Inbound trace is temporarily unavailable.</Alert>
+  }
+
+  return (
+    <Paper variant="outlined" sx={{ mx: 2, mt: 1, p: 1.25, bgcolor: 'grey.50' }}>
+      <Stack spacing={0.75}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+          <Typography variant="caption" fontWeight={700}>Inbound Trace</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {trace.latestInboundAt ? `Last inbound ${fmtDate(trace.latestInboundAt)}` : 'No inbound recorded yet'}
+          </Typography>
+        </Stack>
+        <Stack direction="row" spacing={0.5} flexWrap="wrap">
+          <TraceCheckChip ok={trace.checkpoints?.receivedWebhook} label="Webhook" />
+          <TraceCheckChip ok={trace.checkpoints?.matchedUser} label="Matched" />
+          <TraceCheckChip ok={trace.checkpoints?.routedToConversation} label="Routed" />
+          <TraceCheckChip ok={!trace.checkpoints?.queuedUnmatched} label="No unmatched" />
+          <TraceCheckChip ok={!trace.checkpoints?.aiDraftPending} label="Draft cleared" />
+          <TraceCheckChip ok={trace.checkpoints?.aiSent} label="AI sent" />
+        </Stack>
+      </Stack>
+    </Paper>
   )
 }
 
@@ -114,6 +156,14 @@ function SupervisorConvList({ conversations, selectedId, onSelect }) {
                       label="AI draft"
                       size="small"
                       color="warning"
+                      sx={{ height: 16, fontSize: 10 }}
+                    />
+                  )}
+                  {Number(c.unread_count) > 0 && (
+                    <Chip
+                      label="New reply"
+                      size="small"
+                      color="error"
                       sx={{ height: 16, fontSize: 10 }}
                     />
                   )}
@@ -196,6 +246,9 @@ function SupervisorThread({ conversationId, onBack }) {
           )}
         </Stack>
       </Box>
+
+      {/* Message list */}
+      <InboundTracePanel conversationId={conv.id} />
 
       {/* Message list */}
       <Box sx={{ flexGrow: 1, overflowY: 'auto', px: 2, py: 1.5 }}>

@@ -321,6 +321,15 @@ async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, c
   });
   await convRepo.touchOnInbound(conv.id);
 
+  if (resolvedLandlordId) {
+    _notifyLandlordOfTenantReply(resolvedLandlordId, {
+      tenantName: `${tenantRecord.first_name || ''} ${tenantRecord.last_name || ''}`.trim() || 'Tenant',
+      messagePreview: content,
+      conversationId: conv.id,
+      channel,
+    }).catch((err) => console.error('[conversationService] tenant_reply notification failed:', err.message));
+  }
+
   // Stop here if no landlord context or conversation is escalated
   if (!resolvedLandlordId || conv.status === 'escalated') return;
 
@@ -492,6 +501,24 @@ async function _notifyLandlordOfAiSend(landlord, { tenantName, messagePreview, c
       }),
     ),
   );
+}
+
+/**
+ * Notify landlord when a tenant reply is received and routed.
+ */
+async function _notifyLandlordOfTenantReply(landlordId, { tenantName, messagePreview, conversationId, channel }) {
+  await notificationService.sendByTriggerEvent({
+    triggerEvent: 'tenant_reply_received',
+    recipientId: landlordId,
+    variables: {
+      tenant_name: tenantName,
+      message_preview: String(messagePreview || '').substring(0, 140),
+      conversation_id: conversationId,
+      channel,
+    },
+    channel: 'email',
+    landlordId,
+  });
 }
 
 module.exports = {

@@ -34,6 +34,12 @@ module.exports = {
   // Scopes the httpOnly refresh-token cookie to a shared domain (e.g. .lotlord.app)
   // so www.* and api.* subdomains can both receive it. Leave unset in test/staging.
   COOKIE_DOMAIN: optional('COOKIE_DOMAIN'),
+  // Refresh cookie policy knobs for cross-site deployments.
+  // Use COOKIE_SAME_SITE=none when frontend and API are on different sites/domains.
+  COOKIE_SAME_SITE: optional('COOKIE_SAME_SITE', 'lax'),
+  // Optional explicit secure override. If omitted, secure follows NODE_ENV=production.
+  // When COOKIE_SAME_SITE=none, secure is forced true by cookie config.
+  COOKIE_SECURE: optional('COOKIE_SECURE'),
 
   // AWS SES — outbound email
   // AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are standard SDK env vars;

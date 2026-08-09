@@ -7,12 +7,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
+- No unreleased entries yet.
+
+---
+## [1.14.2] — 2026-08-09 — Inbox Observability + Tenant Reply Awareness
+
 ### Added
 - **Unmatched inbound review queue (admin-only)** — Unknown inbound email senders are now persisted to `unmatched_inbound_messages` for beta triage instead of being dropped from operational visibility.
 - **Supervisor queue endpoints** — Added admin APIs:
   - `GET /api/v1/supervisor/unmatched-inbound`
   - `PATCH /api/v1/supervisor/unmatched-inbound/:id`
 - **Messages admin panel** — Added an admin queue panel inside AI Inbox for one-click resolve workflow.
+- **Tenant reply alerts** — Added `tenant_reply_received` notification trigger and seeded landlord templates so inbound tenant replies can notify owners immediately.
+- **Inbound trace endpoint + UI** — Added `GET /api/v1/inbox/:id/trace` and surfaced trace chips in both AI Inbox and Supervisor threads for webhook/match/routing visibility.
+- **Unread summary endpoint + nav badge** — Added `GET /api/v1/inbox/unread-summary` and sidebar unread badge for fast landlord awareness of new tenant replies.
 
 ### Security
 - **Frontend production dependency remediation** — Upgraded `react-router-dom` to a patched line and verified `npm audit --omit=dev` resolves with 0 vulnerabilities.

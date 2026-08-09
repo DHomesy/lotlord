@@ -75,6 +75,18 @@ async function listConversations(req, res, next) {
 }
 
 /**
+ * GET /api/v1/inbox/unread-summary
+ * Aggregate unread counts for the authenticated landlord/employee owner scope.
+ */
+async function getUnreadSummary(req, res, next) {
+  try {
+    const ownerId = resolveOwnerId(req.user);
+    const summary = await convRepo.getUnreadSummary(ownerId);
+    res.json(summary);
+  } catch (err) { next(err); }
+}
+
+/**
  * GET /api/v1/inbox/:id
  * Fetch a conversation thread (conversation metadata + all messages).
  * Landlords/employees can only access their own conversations.
@@ -90,6 +102,46 @@ async function getConversation(req, res, next) {
 
     const messages = await convRepo.findMessages(conv.id);
     res.json({ conversation: conv, messages });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/v1/inbox/:id/trace
+ * Lightweight processing trace for inbound observability.
+ */
+async function getConversationTrace(req, res, next) {
+  try {
+    const conv = await convRepo.findById(req.params.id);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+
+    const err = checkOwnership(req, conv);
+    if (err) return res.status(403).json({ error: err.message });
+
+    const trace = await convRepo.getTraceSummary(conv.id);
+    if (!trace) return res.status(404).json({ error: 'Trace not found' });
+
+    res.json({
+      conversationId: conv.id,
+      channel: trace.channel,
+      status: trace.status,
+      unreadCount: Number(trace.unread_count || 0),
+      latestInboundAt: trace.latest_inbound_at,
+      latestOutboundAt: trace.latest_outbound_at,
+      pendingAiDrafts: Number(trace.pending_ai_drafts || 0),
+      inboundMessageCount: Number(trace.inbound_message_count || 0),
+      receivedLogCount: Number(trace.received_log_count || 0),
+      failedLogCount: Number(trace.failed_log_count || 0),
+      latestInboundPreview: trace.latest_inbound_preview || null,
+      tenantOpenUnmatchedCount: Number(trace.tenant_open_unmatched_count || 0),
+      checkpoints: {
+        receivedWebhook: Number(trace.received_log_count || 0) > 0,
+        matchedUser: Number(trace.received_log_count || 0) > 0,
+        routedToConversation: Number(trace.inbound_message_count || 0) > 0,
+        queuedUnmatched: Number(trace.tenant_open_unmatched_count || 0) > 0,
+        aiDraftPending: Number(trace.pending_ai_drafts || 0) > 0,
+        aiSent: !!trace.latest_outbound_at,
+      },
+    });
   } catch (err) { next(err); }
 }
 
@@ -300,7 +352,9 @@ async function updateUnmatchedInbound(req, res, next) {
 
 module.exports = {
   listConversations,
+  getUnreadSummary,
   getConversation,
+  getConversationTrace,
   updateConversation,
   sendReply,
   approveDraft,

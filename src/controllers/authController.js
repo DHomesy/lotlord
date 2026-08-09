@@ -65,7 +65,13 @@ async function refresh(req, res, next) {
 async function logout(req, res, next) {
   try {
     await authService.logoutUser(req.cookies?.[COOKIE_NAME]);
-    res.clearCookie(COOKIE_NAME, { path: '/api/v1/auth' });
+    const opts = cookieOptions();
+    res.clearCookie(COOKIE_NAME, {
+      path: opts.path,
+      domain: opts.domain,
+      sameSite: opts.sameSite,
+      secure: opts.secure,
+    });
     res.json({ message: 'Logged out successfully' });
   } catch (err) { next(err); }
 }

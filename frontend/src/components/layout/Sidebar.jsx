@@ -3,6 +3,7 @@ import { useMySubscription } from '../../hooks/useBilling'
 import { hasStarter } from '../../lib/plans'
 import {
   Avatar,
+  Badge,
   Box,
   Chip,
   Divider,
@@ -13,6 +14,7 @@ import {
   ListItemText,
   Typography,
 } from '@mui/material'
+import { useInboxUnreadSummary } from '../../hooks/useInbox'
 import DashboardIcon      from '@mui/icons-material/Dashboard'
 import ApartmentIcon      from '@mui/icons-material/Apartment'
 import PeopleIcon         from '@mui/icons-material/People'
@@ -80,7 +82,9 @@ const NAV_GROUPS = [
 export default function Sidebar({ role, user, onNavClick }) {
   const location = useLocation()
   const { data: subscription } = useMySubscription()
+  const { data: unreadSummary } = useInboxUnreadSummary()
   const isPaid = role === 'admin' || hasStarter(subscription)
+  const unreadThreads = Number(unreadSummary?.threadsWithUnread || 0)
 
   const displayName = user?.firstName
     ? user.firstName
@@ -182,6 +186,13 @@ export default function Sidebar({ role, user, onNavClick }) {
                           primary={item.label}
                           primaryTypographyProps={{ variant: 'body2', fontWeight: active ? 600 : 400 }}
                         />
+                        {item.path === '/messages' && unreadThreads > 0 && (
+                          <Badge
+                            color="error"
+                            badgeContent={unreadThreads > 99 ? '99+' : unreadThreads}
+                            sx={{ mr: 1.25 }}
+                          />
+                        )}
                       </ListItemButton>
                     </ListItem>
                   )

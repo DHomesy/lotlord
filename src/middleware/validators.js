@@ -214,7 +214,13 @@ const updateMaintenanceValidators = [
 const NOTIFICATION_CHANNELS      = ['email', 'sms'];
 const NOTIFICATION_TRIGGER_EVENTS = [
   'rent_due', 'rent_overdue', 'late_fee_applied',
-  'lease_expiring', 'maintenance_update', 'payment_received', 'custom',
+  'lease_expiring', 'maintenance_update', 'payment_received',
+  'maintenance_submitted', 'maintenance_in_progress', 'maintenance_completed',
+  'subscription_payment_failed', 'subscription_trial_ending',
+  'ai_sent_reply', 'conversation_escalated',
+  'payment_initiated', 'payment_received_landlord', 'maintenance_cancelled',
+  'tenant_reply_received',
+  'custom',
 ];
 
 const createTemplateValidators = [

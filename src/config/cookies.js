@@ -4,7 +4,7 @@
  * module is the single source of truth for COOKIE_NAME and cookieOptions().
  */
 
-const { NODE_ENV, COOKIE_DOMAIN } = require('./env');
+const { NODE_ENV, COOKIE_DOMAIN, COOKIE_SAME_SITE, COOKIE_SECURE } = require('./env');
 
 const COOKIE_NAME = 'refreshToken';
 
@@ -20,10 +20,19 @@ const COOKIE_NAME = 'refreshToken';
  */
 function cookieOptions() {
   const isProd = NODE_ENV === 'production';
+  const sameSiteRaw = String(COOKIE_SAME_SITE || 'lax').trim().toLowerCase();
+  const sameSite = ['lax', 'strict', 'none'].includes(sameSiteRaw) ? sameSiteRaw : 'lax';
+
+  let secure = isProd;
+  if (COOKIE_SECURE === 'true') secure = true;
+  if (COOKIE_SECURE === 'false') secure = false;
+  // Browser requirement: SameSite=None cookies must be Secure.
+  if (sameSite === 'none') secure = true;
+
   return {
     httpOnly: true,
-    secure:   isProd,
-    sameSite: 'lax',
+    secure,
+    sameSite,
     domain:   COOKIE_DOMAIN || undefined,
     path:     '/api/v1/auth',
     maxAge:   30 * 24 * 60 * 60 * 1000, // 30 days in ms

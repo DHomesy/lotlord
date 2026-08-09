@@ -119,6 +119,22 @@ describe('handleInboundSms', () => {
     }));
   });
 
+  test('notifies landlord when a tenant reply is received', async () => {
+    setupHappyPath({ existingConv: mockConversation });
+    notificationService.sendByTriggerEvent = jest.fn().mockResolvedValue({});
+
+    await conversationService.handleInboundSms({
+      tenantUserId: TENANT_USER_ID, landlordId: LANDLORD_ID,
+      content: MESSAGE_CONTENT, logEntryId: LOG_ENTRY_ID,
+    });
+
+    expect(notificationService.sendByTriggerEvent).toHaveBeenCalledWith(expect.objectContaining({
+      triggerEvent: 'tenant_reply_received',
+      recipientId: LANDLORD_ID,
+      channel: 'email',
+    }));
+  });
+
   test('skips AI when landlord has ai_enabled=false', async () => {
     setupHappyPath({ existingConv: mockConversation, aiEnabled: false });
     await conversationService.handleInboundSms({

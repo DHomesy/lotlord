@@ -155,6 +155,71 @@ async function findAllForSupervisor({ status, urgency, ownerId, page = 1, limit 
   return rows;
 }
 
+/**
+ * Return aggregate unread counts for sidebar/header badges.
+ */
+async function getUnreadSummary(ownerId) {
+  const { rows } = await query(
+    `SELECT
+       COALESCE(SUM(c.unread_count), 0)::int AS total_unread,
+       COUNT(*) FILTER (WHERE c.unread_count > 0)::int AS threads_with_unread
+     FROM ai_conversations c
+     WHERE c.owner_id = $1 AND c.status IN ('open', 'escalated')`,
+    [ownerId],
+  );
+
+  return {
+    totalUnread: rows[0]?.total_unread || 0,
+    threadsWithUnread: rows[0]?.threads_with_unread || 0,
+  };
+}
+
+/**
+ * Build a lightweight inbound-processing trace for a conversation.
+ */
+async function getTraceSummary(conversationId) {
+  const { rows } = await query(
+    `SELECT
+       c.id AS conversation_id,
+       c.channel,
+       c.status,
+       c.owner_id,
+       c.unread_count,
+       tu.email AS tenant_email,
+       MAX(CASE WHEN m.role = 'user' THEN m.created_at END) AS latest_inbound_at,
+       MAX(CASE WHEN m.role = 'assistant' AND m.sent_at IS NOT NULL THEN COALESCE(m.sent_at, m.created_at) END) AS latest_outbound_at,
+       COUNT(*) FILTER (WHERE m.role = 'assistant' AND m.suggested = true AND m.sent_at IS NULL)::int AS pending_ai_drafts,
+       COUNT(*) FILTER (WHERE m.role = 'user')::int AS inbound_message_count,
+       COUNT(*) FILTER (WHERE l.status = 'received')::int AS received_log_count,
+       COUNT(*) FILTER (WHERE l.status = 'failed')::int AS failed_log_count,
+       (
+         SELECT content
+         FROM ai_messages m2
+         WHERE m2.conversation_id = c.id AND m2.role = 'user'
+         ORDER BY m2.created_at DESC
+         LIMIT 1
+       ) AS latest_inbound_preview,
+       (
+         SELECT COUNT(*)::int
+         FROM unmatched_inbound_messages uim
+         WHERE uim.status = 'open'
+           AND tu.email IS NOT NULL
+           AND LOWER(uim.from_address) = LOWER(tu.email)
+           AND uim.created_at > NOW() - INTERVAL '30 days'
+       ) AS tenant_open_unmatched_count
+     FROM ai_conversations c
+     JOIN tenants t ON t.id = c.tenant_id
+     JOIN users tu ON tu.id = t.user_id
+     LEFT JOIN ai_messages m ON m.conversation_id = c.id
+     LEFT JOIN notifications_log l ON l.conversation_id = c.id
+     WHERE c.id = $1
+     GROUP BY c.id, c.channel, c.status, c.owner_id, c.unread_count, tu.email`,
+    [conversationId],
+  );
+
+  return rows[0] || null;
+}
+
 // ── Messages ──────────────────────────────────────────────────────────────────
 
 async function appendMessage({
@@ -297,6 +362,8 @@ module.exports = {
   update,
   findAllByOwner,
   findAllForSupervisor,
+  getUnreadSummary,
+  getTraceSummary,
   appendMessage,
   findMessages,
   findPendingSuggestion,
