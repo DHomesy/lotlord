@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -42,6 +42,7 @@ import {
   useApproveAiDraft,
   useDismissAiDraft,
 } from '../../hooks/useInbox'
+import { useUnmatchedInboundQueue, useUpdateUnmatchedInbound } from '../../hooks/useSupervisor'
 import { useMySubscription } from '../../hooks/useBilling'
 import { hasStarter } from '../../lib/plans'
 import { useAuthStore } from '../../store/authStore'
@@ -520,6 +521,61 @@ function CategoryChip({ category }) {
   )
 }
 
+function UnmatchedInboundPanel() {
+  const { data: items = [], isLoading } = useUnmatchedInboundQueue({ status: 'open', limit: 10 })
+  const { mutate: updateItem, isPending } = useUpdateUnmatchedInbound()
+
+  if (isLoading) {
+    return <Alert severity="info">Loading unmatched inbound queue…</Alert>
+  }
+
+  if (!items.length) {
+    return <Alert severity="success">No unmatched inbound messages in queue.</Alert>
+  }
+
+  return (
+    <Paper variant="outlined" sx={{ p: 1.5 }}>
+      <Stack spacing={1}>
+        <Typography variant="subtitle2" fontWeight={600}>Unmatched Inbound Queue (Admin)</Typography>
+        <Typography variant="body2" color="text.secondary">
+          These inbound emails could not be mapped to a known user. Resolve items after review.
+        </Typography>
+        <Stack spacing={1}>
+          {items.map((row) => (
+            <Paper key={row.id} variant="outlined" sx={{ p: 1.25 }}>
+              <Stack spacing={0.5}>
+                <Stack direction="row" justifyContent="space-between" spacing={1}>
+                  <Typography variant="body2" fontWeight={600} noWrap>{row.from_address}</Typography>
+                  <Typography variant="caption" color="text.secondary">{fmtDate(row.created_at)}</Typography>
+                </Stack>
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  To: {row.to_address || 'unknown'}
+                </Typography>
+                <Typography variant="body2" noWrap>
+                  {row.subject || '(no subject)'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+                  {(row.body_text || '').slice(0, 200) || '(no text body)'}
+                </Typography>
+                <Stack direction="row" justifyContent="flex-end">
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={isPending}
+                    onClick={() => updateItem({ id: row.id, status: 'resolved' })}
+                  >
+                    Mark Resolved
+                  </Button>
+                </Stack>
+              </Stack>
+            </Paper>
+          ))}
+        </Stack>
+      </Stack>
+    </Paper>
+  )
+}
+
 // ─── AI Inbox — conversation list ────────────────────────────────────────────
 function AiConversationList({ conversations, selectedId, onSelect }) {
   if (!conversations?.length) {
@@ -746,6 +802,12 @@ function AiThreadView({ conversationId, onBack }) {
   const { conversation: conv, messages } = data
   const pendingDraft = messages.find((m) => m.suggested && !m.sent_at)
 
+  useEffect(() => {
+    if (conv?.id && Number(conv.unread_count) > 0) {
+      updateConv({ id: conv.id, action: 'mark_read' })
+    }
+  }, [conv?.id, conv?.unread_count, updateConv])
+
   const onSubmit = ({ content }) => {
     sendReply({ id: conv.id, content }, {
       onSuccess: () => { resetForm(); resetSend() },
@@ -926,6 +988,8 @@ function AiInboxTab() {
   const [statusFilter, setStatusFilter] = useState('open')
 
   const { data: conversations = [], isLoading } = useInboxConversations({ status: statusFilter })
+  const user = useAuthStore((s) => s.user)
+  const isAdmin = user?.role === 'admin'
 
   const showList   = !isMobile || !selectedId
   const showThread = !isMobile || !!selectedId
@@ -934,6 +998,8 @@ function AiInboxTab() {
 
   return (
     <Stack spacing={1.5}>
+      {isAdmin && <UnmatchedInboundPanel />}
+
       <Stack direction="row" spacing={1} alignItems="center">
         <Typography variant="body2" color="text.secondary">Filter:</Typography>
         {['open', 'escalated', 'resolved'].map((s) => (
@@ -1009,7 +1075,7 @@ export default function MessagesPage() {
   const navigate = useNavigate()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
 
-  const [tab, setTab]                           = useState(0)
+  const [tab, setTab]                           = useState('ai')
   const [selectedTenantId, setSelectedTenantId] = useState(null)
   const [composeOpen, setComposeOpen]           = useState(false)
 
@@ -1022,7 +1088,13 @@ export default function MessagesPage() {
   const showAiInbox = isPaid
   const logRows = Array.isArray(logData) ? logData : (logData?.log ?? [])
 
-  if (loadingConvs && tab === 0) return <LoadingOverlay />
+  useEffect(() => {
+    if (!showAiInbox && tab === 'ai') {
+      setTab('conversations')
+    }
+  }, [showAiInbox, tab])
+
+  if (loadingConvs && tab === 'conversations') return <LoadingOverlay />
 
   const showList   = !isMobile || !selectedTenantId
   const showThread = !isMobile || !!selectedTenantId
@@ -1031,7 +1103,7 @@ export default function MessagesPage() {
     <PageContainer
       title="Messages"
       actions={
-        tab === 0 ? (
+        tab === 'conversations' ? (
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -1043,16 +1115,21 @@ export default function MessagesPage() {
       }
     >
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
-        <Tab label="Conversations" />
-        <Tab label="Notification Log" />
-        <Tab label="Automation" />
         {showAiInbox && (
-          <Tab label="AI Inbox" icon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
+          <Tab
+            value="ai"
+            label="AI Inbox"
+            icon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />}
+            iconPosition="start"
+          />
         )}
+        <Tab value="conversations" label="Conversations" />
+        <Tab value="log" label="Notification Log" />
+        <Tab value="automation" label="Automation" />
       </Tabs>
 
       {/* ── Conversations ─────────────────────────────────────────────────── */}
-      {tab === 0 && (
+      {tab === 'conversations' && (
         <>
 
           <Paper
@@ -1108,17 +1185,17 @@ export default function MessagesPage() {
       )}
 
       {/* ── Notification Log ──────────────────────────────────────────────── */}
-      {tab === 1 && (
+      {tab === 'log' && (
         <DataTable rows={logRows} columns={LOG_COLUMNS} loading={loadingLog} />
       )}
 
       {/* ── Automation ────────────────────────────────────────────────────── */}
-      {tab === 2 && (
+      {tab === 'automation' && (
         <AutomationTab navigate={navigate} isPaid={isPaid} />
       )}
 
       {/* ── AI Inbox ──────────────────────────────────────────────────────── */}
-      {showAiInbox && tab === 3 && <AiInboxTab />}
+      {showAiInbox && tab === 'ai' && <AiInboxTab />}
     </PageContainer>
   )
 }

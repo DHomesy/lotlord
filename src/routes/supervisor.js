@@ -10,4 +10,8 @@ router.get('/conversations',           controller.listAllConversations);
 router.patch('/conversations/:id',     controller.supervisorUpdateConversation);
 router.post('/conversations/:id/override', controller.supervisorOverride);
 
+// ── Unmatched inbound review queue ───────────────────────────────────────────
+router.get('/unmatched-inbound',           controller.listUnmatchedInbound);
+router.patch('/unmatched-inbound/:id',     controller.updateUnmatchedInbound);
+
 module.exports = router;

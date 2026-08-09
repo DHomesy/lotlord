@@ -9,6 +9,14 @@ async function findByEmail(email) {
   return rows[0] || null;
 }
 
+async function findByEmailInsensitive(email) {
+  const { rows } = await query(
+    'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL LIMIT 1',
+    [email],
+  );
+  return rows[0] || null;
+}
+
 async function findById(id) {
   const { rows } = await query(
     `SELECT id, email, role, first_name, last_name, phone, avatar_url,
@@ -228,7 +236,7 @@ async function updateAwsSmsProvisioning(landlordId, { awsSmsPhoneNumber, awsSmsP
 }
 
 module.exports = {
-  findByEmail, findById, findByPhone, findByAwsSmsNumber, create, update, findAll,
+  findByEmail, findByEmailInsensitive, findById, findByPhone, findByAwsSmsNumber, create, update, findAll,
   updatePassword, incrementTokenVersion,
   findConnectStatus, findByStripeAccountId, updateStripeConnect,
   findBillingStatus, findByStripeBillingCustomerId, updateBillingStatus, findAllLandlords,

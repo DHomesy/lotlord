@@ -8,12 +8,14 @@
 jest.mock('../../src/config/db');
 jest.mock('../../src/dal/userRepository');
 jest.mock('../../src/dal/notificationRepository');
+jest.mock('../../src/dal/unmatchedInboundRepository');
 jest.mock('../../src/services/conversationService');
 jest.mock('uuid', () => ({ v4: jest.fn(() => 'log-entry-uuid') }));
 
 const { query }              = require('../../src/config/db');
 const userRepo               = require('../../src/dal/userRepository');
 const notificationRepo       = require('../../src/dal/notificationRepository');
+const unmatchedInboundRepo   = require('../../src/dal/unmatchedInboundRepository');
 const conversationService    = require('../../src/services/conversationService');
 const { processInboundEmail } = require('../../src/services/emailInboxService');
 
@@ -55,10 +57,12 @@ beforeEach(() => {
   query.mockResolvedValue({ rows: [] });
 
   // Default: sender is known
+  userRepo.findByEmailInsensitive.mockResolvedValue(mockSender);
   userRepo.findByEmail.mockResolvedValue(mockSender);
 
   // Default: log entry created successfully
   notificationRepo.createLogEntry.mockResolvedValue(mockLogEntry);
+  unmatchedInboundRepo.createEmailEntry.mockResolvedValue({ id: 'unmatched-id' });
 
   // Default: conversationService.handleInboundEmail is a no-op
   conversationService.handleInboundEmail = jest.fn().mockResolvedValue(undefined);
@@ -83,13 +87,28 @@ describe('deduplication', () => {
 
 describe('unknown sender', () => {
   test('returns null and skips logging when sender email is not found', async () => {
+    userRepo.findByEmailInsensitive.mockResolvedValue(null);
     userRepo.findByEmail.mockResolvedValue(null);
 
     const result = await processInboundEmail(makeMsg());
 
     expect(result).toBeNull();
+    expect(unmatchedInboundRepo.createEmailEntry).toHaveBeenCalledWith(expect.objectContaining({
+      fromAddress: 'tenant@example.com',
+    }));
     expect(notificationRepo.createLogEntry).not.toHaveBeenCalled();
     expect(conversationService.handleInboundEmail).not.toHaveBeenCalled();
+  });
+
+  test('matches sender even when inbound email casing differs', async () => {
+    userRepo.findByEmailInsensitive.mockResolvedValue(mockSender);
+    userRepo.findByEmail.mockResolvedValue(null);
+
+    const result = await processInboundEmail(makeMsg({ fromEmail: 'Tenant@Example.com' }));
+
+    expect(result).toEqual(mockLogEntry);
+    expect(userRepo.findByEmailInsensitive).toHaveBeenCalledWith('tenant@example.com');
+    expect(unmatchedInboundRepo.createEmailEntry).not.toHaveBeenCalled();
   });
 });
 

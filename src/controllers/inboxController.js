@@ -1,4 +1,5 @@
 const convRepo           = require('../dal/conversationRepository');
+const unmatchedInboundRepo = require('../dal/unmatchedInboundRepository');
 const conversationService = require('../services/conversationService');
 const { resolveOwnerId } = require('../lib/authHelpers');
 
@@ -7,6 +8,7 @@ const { resolveOwnerId } = require('../lib/authHelpers');
 const MAX_CONTENT_LENGTH = 5000;
 const VALID_STATUSES     = ['open', 'resolved', 'escalated'];
 const VALID_CATEGORIES   = ['maintenance', 'payment', 'lease', 'general'];
+const VALID_UNMATCHED_STATUSES = ['open', 'resolved'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -257,6 +259,45 @@ async function supervisorUpdateConversation(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * GET /api/v1/supervisor/unmatched-inbound
+ * Admin-only: list unmatched inbound queue entries for review.
+ */
+async function listUnmatchedInbound(req, res, next) {
+  try {
+    const { status = 'open' } = req.query;
+    const { page, limit } = parsePage(req.query);
+    if (!VALID_UNMATCHED_STATUSES.includes(status)) {
+      return res.status(400).json({ error: `status must be one of: ${VALID_UNMATCHED_STATUSES.join(', ')}` });
+    }
+
+    const rows = await unmatchedInboundRepo.list({ status, page, limit });
+    res.json(rows);
+  } catch (err) { next(err); }
+}
+
+/**
+ * PATCH /api/v1/supervisor/unmatched-inbound/:id
+ * Admin-only: resolve/re-open unmatched inbound queue entries.
+ * Body: { status: 'open'|'resolved', notes?: string }
+ */
+async function updateUnmatchedInbound(req, res, next) {
+  try {
+    const { status, notes } = req.body;
+    if (!VALID_UNMATCHED_STATUSES.includes(status)) {
+      return res.status(400).json({ error: `status must be one of: ${VALID_UNMATCHED_STATUSES.join(', ')}` });
+    }
+
+    const updated = await unmatchedInboundRepo.updateStatus(req.params.id, {
+      status,
+      notes,
+      reviewedBy: req.user.sub,
+    });
+    if (!updated) return res.status(404).json({ error: 'Queue item not found' });
+    res.json(updated);
+  } catch (err) { next(err); }
+}
+
 module.exports = {
   listConversations,
   getConversation,
@@ -267,4 +308,6 @@ module.exports = {
   listAllConversations,
   supervisorOverride,
   supervisorUpdateConversation,
+  listUnmatchedInbound,
+  updateUnmatchedInbound,
 };

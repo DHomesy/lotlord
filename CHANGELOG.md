@@ -7,6 +7,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
+### Added
+- **Unmatched inbound review queue (admin-only)** — Unknown inbound email senders are now persisted to `unmatched_inbound_messages` for beta triage instead of being dropped from operational visibility.
+- **Supervisor queue endpoints** — Added admin APIs:
+  - `GET /api/v1/supervisor/unmatched-inbound`
+  - `PATCH /api/v1/supervisor/unmatched-inbound/:id`
+- **Messages admin panel** — Added an admin queue panel inside AI Inbox for one-click resolve workflow.
+
+### Security
+- **Frontend production dependency remediation** — Upgraded `react-router-dom` to a patched line and verified `npm audit --omit=dev` resolves with 0 vulnerabilities.
+- **Frontend dev-toolchain remediation** — Applied `npm audit fix` in `frontend/` to resolve Vite/PostCSS/esbuild advisory set.
+- **Known residual upstream advisory (infra)** — `infra/` still reports `brace-expansion` via bundled `aws-cdk-lib`; currently upstream-packaged and not locally patchable without a new CDK release.
+
+### Quality
+- Added targeted unit coverage for unmatched inbound queue controller routes and inbound-email unmatched queue persistence behavior.
+
 ---
 ## [1.14.1] — 2026-08-08 — Stripe Upgrade Flow Bug Fix
 

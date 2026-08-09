@@ -29,13 +29,15 @@
  *   status       — 'received'
  *   body         — plain-text content of the email
  *   subject      — email subject line
- *   recipient_id — the matched user's UUID (required NOT NULL; unknown senders are skipped)
+ *   recipient_id — the matched user's UUID (required NOT NULL; unknown senders are queued
+ *                  in unmatched_inbound_messages for admin review)
  */
 
 const { v4: uuidv4 }         = require('uuid');
 const { query }               = require('../config/db');
 const userRepo                = require('../dal/userRepository');
 const notificationRepo        = require('../dal/notificationRepository');
+const unmatchedInboundRepo    = require('../dal/unmatchedInboundRepository');
 const conversationService     = require('./conversationService');
 
 // ── HTML stripping ────────────────────────────────────────────────────────────
@@ -86,10 +88,25 @@ async function processInboundEmail(msg) {
   }
 
   // 2. Match sender to a known user
-  const sender = await userRepo.findByEmail(msg.fromEmail);
+  const fromEmail = String(msg.fromEmail || '').trim().toLowerCase();
+  const sender = await userRepo.findByEmailInsensitive(fromEmail) || await userRepo.findByEmail(fromEmail);
   if (!sender) {
+    await unmatchedInboundRepo.createEmailEntry({
+      externalId: msg.messageId,
+      fromAddress: fromEmail,
+      toAddress: msg.to || null,
+      subject: msg.subject || '(no subject)',
+      bodyText: msg.text || null,
+      bodyHtml: msg.html || null,
+      inReplyTo: msg.inReplyTo || null,
+      referencesHeader: msg.references || null,
+      rawPayload: msg,
+    }).catch((err) => {
+      console.error('[emailInbox] Failed to write unmatched inbound email:', err.message);
+    });
+
     console.warn(
-      `[emailInbox] Unknown sender <${msg.fromEmail}> (messageId=${msg.messageId}) — not logged`,
+      `[emailInbox] Unknown sender <${fromEmail}> (messageId=${msg.messageId}) — not logged`,
     );
     return null;
   }

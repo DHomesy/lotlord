@@ -66,9 +66,11 @@ async function resolveLandlordForTenant(tenantUserId) {
   // Step 1: resolve tenants.id from the user ID
   const tenantRecord = await tenantRepo.findByUserId(tenantUserId);
   if (!tenantRecord) return null;
-  // Step 2: find their active lease (which now returns p.owner_id)
-  const leases = await leaseRepo.findAll({ tenantId: tenantRecord.id, status: 'active', limit: 1 });
-  return leases[0]?.owner_id || null;
+  // Step 2: prefer active lease owner; fallback to pending so early-thread replies are still routed.
+  const active = await leaseRepo.findAll({ tenantId: tenantRecord.id, status: 'active', limit: 1 });
+  if (active[0]?.owner_id) return active[0].owner_id;
+  const pending = await leaseRepo.findAll({ tenantId: tenantRecord.id, status: 'pending', limit: 1 });
+  return pending[0]?.owner_id || null;
 }
 
 // ── Conversation actions ──────────────────────────────────────────────────────
@@ -283,9 +285,16 @@ async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, c
   if (!conv) {
     // If no landlord context, resolve from the tenant's active lease using the
     // already-fetched tenantRecord — avoids a second findByUserId round-trip.
-    resolvedLandlordId = landlordId
-      || (await leaseRepo.findAll({ tenantId: tenantRecord.id, status: 'active', limit: 1 }))[0]?.owner_id
-      || null;
+    if (landlordId) {
+      resolvedLandlordId = landlordId;
+    } else {
+      const activeLease = await leaseRepo.findAll({ tenantId: tenantRecord.id, status: 'active', limit: 1 });
+      resolvedLandlordId = activeLease[0]?.owner_id || null;
+      if (!resolvedLandlordId) {
+        const pendingLease = await leaseRepo.findAll({ tenantId: tenantRecord.id, status: 'pending', limit: 1 });
+        resolvedLandlordId = pendingLease[0]?.owner_id || null;
+      }
+    }
 
     // Find or create a conversation
     conv = resolvedLandlordId

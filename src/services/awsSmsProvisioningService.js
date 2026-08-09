@@ -62,6 +62,13 @@ async function provisionSmsNumber(landlordId) {
     NumberCapabilities: ['SMS'],
     NumberType: (env.AWS_SMS_NUMBER_TYPE || 'TOLL_FREE'),
     DeletionProtectionEnabled: false,
+    ...(env.AWS_SMS_TWO_WAY_CHANNEL_ARN && env.AWS_SMS_TWO_WAY_CHANNEL_ROLE_ARN
+      ? {
+          TwoWayEnabled: true,
+          TwoWayChannelArn: env.AWS_SMS_TWO_WAY_CHANNEL_ARN,
+          TwoWayChannelRole: env.AWS_SMS_TWO_WAY_CHANNEL_ROLE_ARN,
+        }
+      : {}),
     ClientToken: `${landlordId}-${Date.now()}`,
   }));
 
