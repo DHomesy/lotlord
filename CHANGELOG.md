@@ -10,6 +10,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - No unreleased entries yet.
 
 ---
+## [1.14.5] — 2026-08-09 — Mobile UX Final Polish
+
+### Changed
+- **AI Inbox mobile action menu** — Replaced inline thread-header resolve/escalate icon cluster with a compact overflow menu on mobile to reduce header crowding and preserve message visibility.
+- **AI draft action ergonomics (mobile)** — Draft approval/edit/dismiss actions now stack as full-width controls on narrow screens for cleaner layout and easier tapping.
+- **AI Inbox responsive spacing refinements** — Tuned panel height, filter-chip wrapping, bubble density, and timestamp footprint to improve readability in long conversation threads on phones.
+
+### Quality
+- Verified frontend production build after final mobile responsiveness pass.
+
+---
 ## [1.14.4] — 2026-08-09 — AI Inbox Thread Stability Patch
 
 ### Fixed

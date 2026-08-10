@@ -7,7 +7,7 @@ import {
   Box, Paper, Stack, Typography, List, ListItemButton, ListItemText,
   ListItemAvatar, Avatar, Badge, Divider, TextField, Button, Alert,
   Chip, CircularProgress, IconButton, Tooltip, Tab, Tabs, useTheme, useMediaQuery,
-  Dialog, DialogTitle, DialogContent, DialogActions,
+  Dialog, DialogTitle, DialogContent, DialogActions, Menu, MenuItem,
 } from '@mui/material'
 import AddIcon           from '@mui/icons-material/Add'
 import ArrowBackIcon     from '@mui/icons-material/ArrowBack'
@@ -22,6 +22,7 @@ import EditIcon          from '@mui/icons-material/Edit'
 import HighlightOffIcon  from '@mui/icons-material/HighlightOff'
 import ReportProblemIcon from '@mui/icons-material/ReportProblem'
 import DoneAllIcon       from '@mui/icons-material/DoneAll'
+import MoreVertIcon      from '@mui/icons-material/MoreVert'
 
 import PageContainer     from '../../components/layout/PageContainer'
 import DataTable         from '../../components/common/DataTable'
@@ -737,6 +738,8 @@ function AiConversationList({ conversations, selectedId, onSelect }) {
 
 // ─── AI Inbox — draft banner ──────────────────────────────────────────────────
 function AiDraftBanner({ draft, conversationId, onApproved, onDismissed }) {
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const { mutate: approve, isPending: approving, error: approveError, reset: resetApprove } = useApproveAiDraft()
   const { mutate: dismiss, isPending: dismissing } = useDismissAiDraft()
   const { mutate: sendReply, isPending: sending } = useSendInboxReply()
@@ -771,8 +774,8 @@ function AiDraftBanner({ draft, conversationId, onApproved, onDismissed }) {
     <Paper
       variant="outlined"
       sx={{
-        mx: 2, mb: 1,
-        p: 1.5,
+        mx: isMobile ? 1 : 2, mb: 1,
+        p: isMobile ? 1.1 : 1.5,
         borderColor: 'warning.main',
         bgcolor: 'warning.50',
         borderRadius: 2,
@@ -796,7 +799,11 @@ function AiDraftBanner({ draft, conversationId, onApproved, onDismissed }) {
               <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mb: 1 }}>
                 {draft.content}
               </Typography>
-              <Stack direction="row" spacing={1} flexWrap="wrap">
+              <Stack
+                direction={isMobile ? 'column' : 'row'}
+                spacing={isMobile ? 0.75 : 1}
+                flexWrap="wrap"
+              >
                 <Button
                   size="small"
                   variant="contained"
@@ -804,6 +811,7 @@ function AiDraftBanner({ draft, conversationId, onApproved, onDismissed }) {
                   startIcon={<CheckCircleOutlineIcon />}
                   onClick={handleApprove}
                   disabled={busy}
+                  fullWidth={isMobile}
                 >
                   {approving ? 'Sending…' : 'Approve & Send'}
                 </Button>
@@ -814,6 +822,7 @@ function AiDraftBanner({ draft, conversationId, onApproved, onDismissed }) {
                   startIcon={<EditIcon />}
                   onClick={handleEditOpen}
                   disabled={busy}
+                  fullWidth={isMobile}
                 >
                   Edit
                 </Button>
@@ -824,6 +833,7 @@ function AiDraftBanner({ draft, conversationId, onApproved, onDismissed }) {
                   startIcon={<HighlightOffIcon />}
                   onClick={handleDismiss}
                   disabled={busy}
+                  fullWidth={isMobile}
                 >
                   Dismiss
                 </Button>
@@ -841,7 +851,7 @@ function AiDraftBanner({ draft, conversationId, onApproved, onDismissed }) {
                 disabled={sending}
                 sx={{ mb: 1 }}
               />
-              <Stack direction="row" spacing={1}>
+              <Stack direction={isMobile ? 'column' : 'row'} spacing={isMobile ? 0.75 : 1}>
                 <Button
                   size="small"
                   variant="contained"
@@ -849,6 +859,7 @@ function AiDraftBanner({ draft, conversationId, onApproved, onDismissed }) {
                   startIcon={<SendIcon />}
                   onClick={handleSendEdited}
                   disabled={sending || !editText.trim()}
+                  fullWidth={isMobile}
                 >
                   {sending ? 'Sending…' : 'Send edited reply'}
                 </Button>
@@ -857,6 +868,7 @@ function AiDraftBanner({ draft, conversationId, onApproved, onDismissed }) {
                   variant="text"
                   onClick={handleEditCancel}
                   disabled={sending}
+                  fullWidth={isMobile}
                 >
                   Cancel
                 </Button>
@@ -872,6 +884,7 @@ function AiDraftBanner({ draft, conversationId, onApproved, onDismissed }) {
 // ─── AI Inbox — thread view ───────────────────────────────────────────────────
 function AiThreadView({ conversationId, onBack }) {
   const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const { data, isLoading, isError, refetch } = useInboxConversation(conversationId)
   const { mutate: sendReply, isPending: sending, error: sendError, reset: resetSend } = useSendInboxReply()
   const { mutate: updateConv } = useUpdateInboxConversation()
@@ -881,6 +894,7 @@ function AiThreadView({ conversationId, onBack }) {
 
   const conv = data?.conversation
   const messages = Array.isArray(data?.messages) ? data.messages : []
+  const [actionMenuAnchor, setActionMenuAnchor] = useState(null)
 
   useEffect(() => {
     if (conv?.id && Number(conv.unread_count) > 0) {
@@ -903,6 +917,9 @@ function AiThreadView({ conversationId, onBack }) {
     })
   }
 
+  const openActionMenu = (event) => setActionMenuAnchor(event.currentTarget)
+  const closeActionMenu = () => setActionMenuAnchor(null)
+
   const handleAction = (action) => {
     updateConv({ id: conv.id, action }, { onSuccess: () => refetch() })
   }
@@ -913,17 +930,17 @@ function AiThreadView({ conversationId, onBack }) {
   return (
     <Stack sx={{ height: '100%', overflow: 'hidden' }}>
       {/* Thread header */}
-      <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ px: isMobile ? 1.25 : 2, py: isMobile ? 1 : 1.5, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: isMobile ? 0.75 : 1 }}>
         {onBack && (
           <IconButton size="small" onClick={onBack} sx={{ mr: 0.5 }}>
             <ArrowBackIcon fontSize="small" />
           </IconButton>
         )}
-        <Avatar sx={{ width: 32, height: 32, fontSize: 12 }}>
+        <Avatar sx={{ width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, fontSize: isMobile ? 11 : 12 }}>
           {`${conv.tenant_first_name?.[0] ?? ''}${conv.tenant_last_name?.[0] ?? ''}`.toUpperCase()}
         </Avatar>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Stack direction="row" spacing={0.75} alignItems="center">
+          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexWrap: 'wrap' }}>
             <Typography variant="body2" fontWeight={600} noWrap>
               {conv.tenant_first_name} {conv.tenant_last_name}
             </Typography>
@@ -933,29 +950,51 @@ function AiThreadView({ conversationId, onBack }) {
         </Box>
         {/* Resolve / Escalate actions */}
         {!isResolved && !isEscalated && (
-          <Stack direction="row" spacing={0.5}>
-            <Tooltip title="Escalate — disable AI, flag for manual review">
-              <IconButton size="small" color="warning" onClick={() => handleAction('escalate')}>
-                <ReportProblemIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Mark resolved">
-              <IconButton size="small" color="success" onClick={() => handleAction('resolve')}>
-                <DoneAllIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Stack>
+          isMobile ? (
+            <>
+              <Tooltip title="Conversation actions">
+                <IconButton size="small" onClick={openActionMenu}>
+                  <MoreVertIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Menu
+                anchorEl={actionMenuAnchor}
+                open={Boolean(actionMenuAnchor)}
+                onClose={closeActionMenu}
+              >
+                <MenuItem onClick={() => { closeActionMenu(); handleAction('escalate') }}>
+                  Escalate
+                </MenuItem>
+                <MenuItem onClick={() => { closeActionMenu(); handleAction('resolve') }}>
+                  Mark resolved
+                </MenuItem>
+              </Menu>
+            </>
+          ) : (
+            <Stack direction="row" spacing={0.5}>
+              <Tooltip title="Escalate — disable AI, flag for manual review">
+                <IconButton size="small" color="warning" onClick={() => handleAction('escalate')}>
+                  <ReportProblemIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Mark resolved">
+                <IconButton size="small" color="success" onClick={() => handleAction('resolve')}>
+                  <DoneAllIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          )
         )}
         {isEscalated && <Chip label="Escalated" size="small" color="warning" />}
         {isResolved  && <Chip label="Resolved"  size="small" color="success" />}
       </Box>
 
-      {/* AI draft banner */}
-      <InboundTracePanel conversationId={conv.id} />
+      {/* Hide trace on mobile to prioritize readable thread content */}
+      {!isMobile && <InboundTracePanel conversationId={conv.id} />}
 
       {/* AI draft banner */}
       {pendingDraft && (
-        <Box sx={{ pt: 1.5 }}>
+        <Box sx={{ pt: isMobile ? 1 : 1.5 }}>
           <AiDraftBanner
             draft={pendingDraft}
             conversationId={conv.id}
@@ -966,7 +1005,7 @@ function AiThreadView({ conversationId, onBack }) {
       )}
 
       {/* Message list */}
-      <Box sx={{ flexGrow: 1, overflowY: 'auto', px: 2, py: 1.5 }}>
+      <Box sx={{ flexGrow: 1, overflowY: 'auto', px: isMobile ? 1 : 2, py: isMobile ? 1 : 1.5 }}>
         {messages.length === 0 && (
           <Typography variant="body2" color="text.secondary" textAlign="center" mt={4}>
             No messages yet.
@@ -984,8 +1023,8 @@ function AiThreadView({ conversationId, onBack }) {
                 <Paper
                   variant="outlined"
                   sx={{
-                    maxWidth: '72%',
-                    p: 1.5,
+                    maxWidth: isMobile ? '90%' : '72%',
+                    p: isMobile ? 1.1 : 1.5,
                     bgcolor: isAiDraft
                       ? 'warning.50'
                       : isInbound
@@ -1017,7 +1056,7 @@ function AiThreadView({ conversationId, onBack }) {
                   </Typography>
                   <Stack direction="row" spacing={0.5} alignItems="center" mt={0.5}>
                     {channelIcon(conv.channel)}
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: isMobile ? 10.5 : undefined }}>
                       {fmtDate(msg.created_at)}
                     </Typography>
                   </Stack>
@@ -1033,7 +1072,7 @@ function AiThreadView({ conversationId, onBack }) {
         <Box
           component="form"
           onSubmit={handleSubmit(onSubmit)}
-          sx={{ borderTop: 1, borderColor: 'divider', px: 2, py: 1.5 }}
+          sx={{ borderTop: 1, borderColor: 'divider', px: isMobile ? 1 : 2, py: isMobile ? 1 : 1.5 }}
         >
           {sendError && (
             <Alert severity="error" sx={{ mb: 1.5 }}>
@@ -1045,13 +1084,13 @@ function AiThreadView({ conversationId, onBack }) {
               This conversation is escalated. AI is disabled — your reply will be sent directly.
             </Alert>
           )}
-          <Stack direction="row" spacing={1} alignItems="flex-start">
+          <Stack direction="row" spacing={isMobile ? 0.75 : 1} alignItems="flex-start">
             <TextField
               label="Reply"
               size="small"
               fullWidth
               multiline
-              rows={2}
+              rows={isMobile ? 3 : 2}
               disabled={sending}
               {...register('content')}
               error={!!errors.content}
@@ -1061,7 +1100,7 @@ function AiThreadView({ conversationId, onBack }) {
               type="submit"
               variant="contained"
               disabled={sending}
-              sx={{ mt: 0.5, minWidth: 48, px: 1.5 }}
+              sx={{ mt: 0.5, minWidth: isMobile ? 44 : 48, px: isMobile ? 1.1 : 1.5 }}
             >
               {sending ? <CircularProgress size={18} color="inherit" /> : <SendIcon fontSize="small" />}
             </Button>
@@ -1092,7 +1131,7 @@ function AiInboxTab() {
     <Stack spacing={1.5}>
       {isAdmin && <UnmatchedInboundPanel />}
 
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
         <Typography variant="body2" color="text.secondary">Filter:</Typography>
         {['open', 'escalated', 'resolved'].map((s) => (
           <Chip
@@ -1109,7 +1148,12 @@ function AiInboxTab() {
 
       <Paper
         variant="outlined"
-        sx={{ display: 'flex', height: 'calc(100vh - 280px)', minHeight: 400, overflow: 'hidden' }}
+        sx={{
+          display: 'flex',
+          height: { xs: 'calc(100vh - 220px)', md: 'calc(100vh - 280px)' },
+          minHeight: { xs: 320, md: 400 },
+          overflow: 'hidden',
+        }}
       >
         {/* Left — AI conversation list */}
         {showList && (
