@@ -257,6 +257,11 @@ router.post('/ses', async (req, res) => {
   // Lambda waits for a 2xx — respond fast and do work in background
   res.sendStatus(200);
 
+  console.info(
+    `[ses webhook] Accepted inbound messageId=${msg.messageId} from=${msg.fromEmail} ` +
+    `subject="${msg.subject || '(no subject)'}"`,
+  );
+
   emailInboxService.processInboundEmail(msg).catch(err =>
     console.error('[ses webhook] processInboundEmail failed:', err.message),
   );

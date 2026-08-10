@@ -190,6 +190,9 @@ function SupervisorThread({ conversationId, onBack }) {
   if (isError)   return <Alert severity="error" sx={{ m: 2 }}>Failed to load conversation.</Alert>
 
   const { conversation: conv, messages } = data
+  const orderedMessages = [...messages].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  )
   const isResolved  = conv.status === 'resolved'
   const isEscalated = conv.status === 'escalated'
 
@@ -258,7 +261,7 @@ function SupervisorThread({ conversationId, onBack }) {
           </Typography>
         )}
         <Stack spacing={1.5}>
-          {messages.map((msg) => {
+          {orderedMessages.map((msg) => {
             const isInbound = msg.role === 'user'
             const isAiDraft = msg.suggested && !msg.sent_at
             return (

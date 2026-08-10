@@ -1,5 +1,17 @@
 {
   "app": "node bin/infra.js",
+  "context": {
+    "environments": {
+      "test": {
+        "apiUrl": "",
+        "webhookSecret": ""
+      },
+      "prod": {
+        "apiUrl": "",
+        "webhookSecret": ""
+      }
+    }
+  },
   "watch": {
     "include": ["**"],
     "exclude": [

@@ -1,5 +1,7 @@
 # LotLord Infrastructure (AWS CDK)
 
+Infra Docs Baseline: app release 1.14.3
+
 This directory contains AWS infrastructure-as-code for LotLord using CDK v2.
 
 It is designed to make SES, S3, and AWS SMS setup reproducible with minimal manual console work.
@@ -39,8 +41,19 @@ npx cdk bootstrap aws://<account-id>/<region>
 
 CDK app uses context values for webhook wiring:
 
+- `stage` (optional): `test` (default) or `prod`
 - `apiUrl` (required): public API base URL, e.g. `https://your-api.railway.app`
 - `webhookSecret` (required): shared secret used in webhook subscriptions
+
+Guardrails in `bin/infra.js` now prevent silent bad deploys:
+- No fallback to `http://localhost:3000`
+- Stage config must provide both `apiUrl` and `webhookSecret`
+- `ngrok` domains are blocked unless you explicitly pass `--context allowEphemeralUrl=true`
+- `prod` requires `https://` URLs
+
+`apiUrl` is normalized automatically:
+- Trailing slashes are removed
+- `/api/v1` suffix is stripped if provided
 
 Generate a strong secret:
 
@@ -50,17 +63,42 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ## Deploy
 
+### Recommended test/prod setup
+
+Use environment variables per stage so redeploys are deterministic:
+
+```bash
+# test
+export INFRA_STAGE=test
+export INFRA_API_URL_TEST=https://api-test.yourdomain.com
+export INFRA_WEBHOOK_SECRET_TEST=<secret>
+
+# prod
+export INFRA_STAGE=prod
+export INFRA_API_URL_PROD=https://api.yourdomain.com
+export INFRA_WEBHOOK_SECRET_PROD=<secret>
+```
+
+You can also keep stage values in `cdk.json` under `context.environments.test/prod`.
+
 ### 1) Synthesize
 
 ```bash
 cd infra
 npm run synth -- --context apiUrl=https://your-api.railway.app --context webhookSecret=<secret>
+
+# or stage-based
+npm run synth -- --context stage=test
 ```
 
 ### 2) Deploy all stacks
 
 ```bash
 npm run deploy -- --context apiUrl=https://your-api.railway.app --context webhookSecret=<secret>
+
+# or stage-based
+npm run deploy -- --context stage=test
+npm run deploy -- --context stage=prod
 ```
 
 Or deploy individually:
@@ -134,6 +172,12 @@ These are provider/compliance steps not fully automatable by CDK:
 
 ## Troubleshooting
 
+- Deploy failed with ngrok URL blocked
+  - Use a stable domain for `apiUrl`, or pass `--context allowEphemeralUrl=true` only for temporary local testing.
+
+- Deploy failed for missing config
+  - Provide `apiUrl` and `webhookSecret` via context flags or stage env vars (`INFRA_API_URL_TEST/PROD`, `INFRA_WEBHOOK_SECRET_TEST/PROD`).
+
 - 401 on `/webhooks/aws/sms`
   - `AWS_SMS_WEBHOOK_SECRET` mismatch with deployment context `webhookSecret`
 
@@ -147,6 +191,7 @@ These are provider/compliance steps not fully automatable by CDK:
 - SES inbound not processing
   - SES receipt rule set not active
   - Lambda/webhook secret mismatch
+  - Lambda `API_URL` points at stale/ephemeral host from a previous deploy
 
 ## Useful Commands
 

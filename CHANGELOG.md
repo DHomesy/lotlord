@@ -10,6 +10,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - No unreleased entries yet.
 
 ---
+## [1.14.3] — 2026-08-09 — Infra Hardening + Inbound Reliability
+
+### Added
+- **Stage-aware infra config** — CDK now supports explicit `test` / `prod` stage config resolution for webhook wiring and prevents implicit drift across environments.
+- **Deploy guardrails for webhook targets** — Infra deploy now fails fast when webhook `apiUrl` or `webhookSecret` is missing, blocks ephemeral ngrok hosts by default, and enforces HTTPS on `prod` stage.
+- **Stage config scaffolding** — Added `context.environments.test/prod` placeholders in `infra/cdk.json` for deterministic per-environment deploy settings.
+
+### Changed
+- **SES inbound Lambda URL handling hardened** — Inbound processor now normalizes webhook destination URLs (including accidental `/api/v1` suffix inputs) and reports failing target URL in error output for faster diagnosis.
+- **Inbound webhook observability** — Added explicit API log line when `/api/v1/webhooks/ses` accepts a message payload.
+- **Messages UI thread ordering** — Conversation threads in Messages and Supervisor now render newest messages first.
+
+### Documentation
+- **Infra runbook refresh** — Updated `infra/README.md` with stage-based deploy workflow, guardrail behavior, and troubleshooting guidance to prevent legacy URL regressions.
+
+---
 ## [1.14.2] — 2026-08-09 — Inbox Observability + Tenant Reply Awareness
 
 ### Added

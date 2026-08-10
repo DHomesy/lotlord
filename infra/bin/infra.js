@@ -6,20 +6,90 @@ const { StorageStack } = require('../lib/storage-stack');
 
 const app = new cdk.App();
 
-// Required context — pass via CLI:
-//   cdk deploy \
-//     --context apiUrl=https://your-app.railway.app \
-//     --context webhookSecret=<random-secret>
-const apiUrl = app.node.tryGetContext('apiUrl') ?? 'http://localhost:3000';
-const webhookSecret = app.node.tryGetContext('webhookSecret') ?? '';
+const VALID_STAGES = ['test', 'prod'];
 
-if (!webhookSecret) {
-  console.warn(
-    '\n[infra] WARNING: webhookSecret context not set.\n' +
-    'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"\n' +
-    'Then deploy with: cdk deploy --context apiUrl=<url> --context webhookSecret=<secret>\n',
-  );
+function boolContext(name) {
+  const raw = app.node.tryGetContext(name);
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'string') return raw.toLowerCase() === 'true';
+  return false;
 }
+
+function envByStage(prefix, stage) {
+  return process.env[`${prefix}_${stage.toUpperCase()}`] || '';
+}
+
+function normalizeApiBaseUrl(rawUrl) {
+  const url = new URL(String(rawUrl || '').trim());
+  if (!['https:', 'http:'].includes(url.protocol)) {
+    throw new Error(`[infra] Invalid apiUrl protocol '${url.protocol}'. Use http(s).`);
+  }
+  url.search = '';
+  url.hash = '';
+  url.pathname = url.pathname.replace(/\/+$/, '');
+  if (url.pathname.endsWith('/api/v1')) {
+    url.pathname = url.pathname.slice(0, -('/api/v1'.length));
+  }
+  return url.toString().replace(/\/$/, '');
+}
+
+function resolveConfig() {
+  const stage = String(
+    app.node.tryGetContext('stage') || process.env.INFRA_STAGE || 'test',
+  ).trim().toLowerCase();
+
+  if (!VALID_STAGES.includes(stage)) {
+    throw new Error(`[infra] Invalid stage '${stage}'. Expected one of: ${VALID_STAGES.join(', ')}`);
+  }
+
+  const perStage = app.node.tryGetContext('environments') || {};
+  const stageConfig = perStage[stage] || {};
+
+  const apiUrlRaw =
+    app.node.tryGetContext('apiUrl') ||
+    stageConfig.apiUrl ||
+    envByStage('INFRA_API_URL', stage);
+
+  const webhookSecret =
+    app.node.tryGetContext('webhookSecret') ||
+    stageConfig.webhookSecret ||
+    envByStage('INFRA_WEBHOOK_SECRET', stage);
+
+  if (!apiUrlRaw) {
+    throw new Error(
+      `[infra] Missing apiUrl for stage='${stage}'. ` +
+      `Set --context apiUrl=..., context environments.${stage}.apiUrl in cdk.json, ` +
+      `or env INFRA_API_URL_${stage.toUpperCase()}.`,
+    );
+  }
+  if (!webhookSecret) {
+    throw new Error(
+      `[infra] Missing webhookSecret for stage='${stage}'. ` +
+      `Set --context webhookSecret=..., context environments.${stage}.webhookSecret in cdk.json, ` +
+      `or env INFRA_WEBHOOK_SECRET_${stage.toUpperCase()}.`,
+    );
+  }
+
+  const apiUrl = normalizeApiBaseUrl(apiUrlRaw);
+  const host = new URL(apiUrl).hostname;
+  const allowEphemeralUrl = boolContext('allowEphemeralUrl');
+
+  if (/ngrok\.io$|ngrok-free\.app$/i.test(host) && !allowEphemeralUrl) {
+    throw new Error(
+      `[infra] Refusing ephemeral ngrok apiUrl '${apiUrl}' for stage='${stage}'. ` +
+      `Use a stable domain or pass --context allowEphemeralUrl=true for temporary testing only.`,
+    );
+  }
+
+  if (stage === 'prod' && !apiUrl.startsWith('https://')) {
+    throw new Error(`[infra] Production stage requires https apiUrl. Got '${apiUrl}'.`);
+  }
+
+  return { stage, apiUrl, webhookSecret };
+}
+
+const { stage, apiUrl, webhookSecret } = resolveConfig();
+console.log(`[infra] Stage='${stage}' API_URL='${apiUrl}'`);
 
 const awsEnv = {
   account: process.env.CDK_DEFAULT_ACCOUNT,

@@ -26,6 +26,24 @@ const { simpleParser } = require('mailparser');
 
 const s3 = new S3Client({ region: process.env.AWS_REGION ?? 'us-east-1' });
 
+function buildSesWebhookUrl(apiUrlRaw) {
+  const base = String(apiUrlRaw || '').trim();
+  if (!base) throw new Error('API_URL environment variable is not set');
+
+  const url = new URL(base);
+  const normalizedPath = url.pathname.replace(/\/+$/, '');
+  // Accept either base URL (https://api.example.com) or /api/v1-suffixed input.
+  const pathWithoutApiV1 = normalizedPath.endsWith('/api/v1')
+    ? normalizedPath.slice(0, -('/api/v1'.length))
+    : normalizedPath;
+  const finalPath = `${pathWithoutApiV1}/api/v1/webhooks/ses`.replace(/\/{2,}/g, '/');
+
+  url.pathname = finalPath;
+  url.search = '';
+  url.hash = '';
+  return url.toString();
+}
+
 /**
  * @param {import('aws-lambda').SQSEvent} event
  * @returns {Promise<import('aws-lambda').SQSBatchResponse>}
@@ -96,9 +114,9 @@ async function processEmailObject(bucket, key) {
   const apiUrl       = process.env.API_URL;
   const secret       = process.env.WEBHOOK_SECRET;
 
-  if (!apiUrl) throw new Error('API_URL environment variable is not set');
+  const webhookUrl = buildSesWebhookUrl(apiUrl);
 
-  const response = await fetch(`${apiUrl}/api/v1/webhooks/ses`, {
+  const response = await fetch(webhookUrl, {
     method: 'POST',
     headers: {
       'Content-Type':    'application/json',
@@ -109,7 +127,7 @@ async function processEmailObject(bucket, key) {
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
-    throw new Error(`API responded ${response.status}: ${body}`);
+    throw new Error(`API responded ${response.status} at ${webhookUrl}: ${body}`);
   }
 
   console.info(
