@@ -879,20 +879,23 @@ function AiThreadView({ conversationId, onBack }) {
     resolver: zodResolver(z.object({ content: z.string().min(1, 'Message is required') })),
   })
 
-  if (isLoading) return <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>
-  if (isError)   return <Alert severity="error" sx={{ m: 2 }}>Failed to load conversation.</Alert>
-
-  const { conversation: conv, messages } = data
-  const orderedMessages = [...messages].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  )
-  const pendingDraft = orderedMessages.find((m) => m.suggested && !m.sent_at)
+  const conv = data?.conversation
+  const messages = Array.isArray(data?.messages) ? data.messages : []
 
   useEffect(() => {
     if (conv?.id && Number(conv.unread_count) > 0) {
       updateConv({ id: conv.id, action: 'mark_read' })
     }
   }, [conv?.id, conv?.unread_count, updateConv])
+
+  if (isLoading) return <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>
+  if (isError)   return <Alert severity="error" sx={{ m: 2 }}>Failed to load conversation.</Alert>
+  if (!conv)     return <Alert severity="warning" sx={{ m: 2 }}>Conversation data is unavailable.</Alert>
+
+  const orderedMessages = [...messages].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  )
+  const pendingDraft = orderedMessages.find((m) => m.suggested && !m.sent_at)
 
   const onSubmit = ({ content }) => {
     sendReply({ id: conv.id, content }, {

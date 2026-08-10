@@ -10,6 +10,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - No unreleased entries yet.
 
 ---
+## [1.14.4] — 2026-08-09 — AI Inbox Thread Stability Patch
+
+### Fixed
+- **AI Inbox thread white-screen crash** — Resolved a React hook-order issue in the AI thread view that could blank the Messages page when opening a conversation after inbound data loaded.
+- **Thread payload safety guards** — Added defensive handling for missing conversation/message payload shape to prevent runtime render crashes on partial responses.
+
+### Quality
+- Verified frontend production build after AI Inbox thread stability fix.
+
+---
 ## [1.14.3] — 2026-08-09 — Infra Hardening + Inbound Reliability
 
 ### Added
