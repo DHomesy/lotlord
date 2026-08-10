@@ -161,6 +161,7 @@ async function updateConversation(req, res, next) {
     // Handle convenience actions
     const { action } = req.body;
     if (action === 'resolve')    return res.json(await conversationService.resolveConversation(conv.id));
+    if (action === 'reopen')     return res.json(await conversationService.reopenConversation(conv.id));
     if (action === 'escalate')   return res.json(await conversationService.escalateConversation(conv.id, req.user.sub));
     if (action === 'mark_read')  return res.json(await conversationService.markRead(conv.id));
 
@@ -296,6 +297,7 @@ async function supervisorUpdateConversation(req, res, next) {
 
     const { action } = req.body;
     if (action === 'resolve')   return res.json(await conversationService.resolveConversation(conv.id));
+    if (action === 'reopen')    return res.json(await conversationService.reopenConversation(conv.id));
     if (action === 'escalate')  return res.json(await conversationService.escalateConversation(conv.id, req.user.sub));
     if (action === 'mark_read') return res.json(await conversationService.markRead(conv.id));
 

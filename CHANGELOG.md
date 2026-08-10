@@ -10,6 +10,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - No unreleased entries yet.
 
 ---
+## [1.14.6] — 2026-08-10 — AI Re-open Workflow UX Completion
+
+### Added
+- **AI Inbox re-open confirmation toast** — Added a success toast after using Re-open so landlords get immediate feedback that AI workflow has been restored for the conversation.
+
+### Changed
+- **Re-open workflow clarity** — Finalized thread action UX around re-opening escalated/resolved conversations for continued AI processing.
+
+### Quality
+- Verified frontend production build after toast and re-open UX refinements.
+
+---
 ## [1.14.5] — 2026-08-09 — Mobile UX Final Polish
 
 ### Changed

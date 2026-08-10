@@ -7,7 +7,7 @@ import {
   Box, Paper, Stack, Typography, List, ListItemButton, ListItemText,
   ListItemAvatar, Avatar, Badge, Divider, TextField, Button, Alert,
   Chip, CircularProgress, IconButton, Tooltip, Tab, Tabs, useTheme, useMediaQuery,
-  Dialog, DialogTitle, DialogContent, DialogActions, Menu, MenuItem,
+  Dialog, DialogTitle, DialogContent, DialogActions, Menu, MenuItem, Snackbar,
 } from '@mui/material'
 import AddIcon           from '@mui/icons-material/Add'
 import ArrowBackIcon     from '@mui/icons-material/ArrowBack'
@@ -23,6 +23,7 @@ import HighlightOffIcon  from '@mui/icons-material/HighlightOff'
 import ReportProblemIcon from '@mui/icons-material/ReportProblem'
 import DoneAllIcon       from '@mui/icons-material/DoneAll'
 import MoreVertIcon      from '@mui/icons-material/MoreVert'
+import AutorenewIcon     from '@mui/icons-material/Autorenew'
 
 import PageContainer     from '../../components/layout/PageContainer'
 import DataTable         from '../../components/common/DataTable'
@@ -895,6 +896,7 @@ function AiThreadView({ conversationId, onBack }) {
   const conv = data?.conversation
   const messages = Array.isArray(data?.messages) ? data.messages : []
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null)
+  const [reopenToastOpen, setReopenToastOpen] = useState(false)
 
   useEffect(() => {
     if (conv?.id && Number(conv.unread_count) > 0) {
@@ -921,11 +923,17 @@ function AiThreadView({ conversationId, onBack }) {
   const closeActionMenu = () => setActionMenuAnchor(null)
 
   const handleAction = (action) => {
-    updateConv({ id: conv.id, action }, { onSuccess: () => refetch() })
+    updateConv({ id: conv.id, action }, {
+      onSuccess: () => {
+        refetch()
+        if (action === 'reopen') setReopenToastOpen(true)
+      },
+    })
   }
 
   const isResolved  = conv.status === 'resolved'
   const isEscalated = conv.status === 'escalated'
+  const canReopen = isResolved || isEscalated
 
   return (
     <Stack sx={{ height: '100%', overflow: 'hidden' }}>
@@ -948,42 +956,60 @@ function AiThreadView({ conversationId, onBack }) {
             <CategoryChip category={conv.category} />
           </Stack>
         </Box>
-        {/* Resolve / Escalate actions */}
-        {!isResolved && !isEscalated && (
-          isMobile ? (
-            <>
-              <Tooltip title="Conversation actions">
-                <IconButton size="small" onClick={openActionMenu}>
-                  <MoreVertIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Menu
-                anchorEl={actionMenuAnchor}
-                open={Boolean(actionMenuAnchor)}
-                onClose={closeActionMenu}
-              >
+        {/* Conversation actions */}
+        {isMobile ? (
+          <>
+            <Tooltip title="Conversation actions">
+              <IconButton size="small" onClick={openActionMenu}>
+                <MoreVertIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Menu
+              anchorEl={actionMenuAnchor}
+              open={Boolean(actionMenuAnchor)}
+              onClose={closeActionMenu}
+            >
+              {!canReopen && (
                 <MenuItem onClick={() => { closeActionMenu(); handleAction('escalate') }}>
                   Escalate
                 </MenuItem>
+              )}
+              {!canReopen && (
                 <MenuItem onClick={() => { closeActionMenu(); handleAction('resolve') }}>
                   Mark resolved
                 </MenuItem>
-              </Menu>
-            </>
-          ) : (
-            <Stack direction="row" spacing={0.5}>
+              )}
+              {canReopen && (
+                <MenuItem onClick={() => { closeActionMenu(); handleAction('reopen') }}>
+                  Re-open
+                </MenuItem>
+              )}
+            </Menu>
+          </>
+        ) : (
+          <Stack direction="row" spacing={0.5}>
+            {!canReopen && (
               <Tooltip title="Escalate — disable AI, flag for manual review">
                 <IconButton size="small" color="warning" onClick={() => handleAction('escalate')}>
                   <ReportProblemIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
+            )}
+            {!canReopen && (
               <Tooltip title="Mark resolved">
                 <IconButton size="small" color="success" onClick={() => handleAction('resolve')}>
                   <DoneAllIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
-            </Stack>
-          )
+            )}
+            {canReopen && (
+              <Tooltip title="Re-open conversation and restore AI workflow">
+                <IconButton size="small" color="primary" onClick={() => handleAction('reopen')}>
+                  <AutorenewIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Stack>
         )}
         {isEscalated && <Chip label="Escalated" size="small" color="warning" />}
         {isResolved  && <Chip label="Resolved"  size="small" color="success" />}
@@ -1107,6 +1133,17 @@ function AiThreadView({ conversationId, onBack }) {
           </Stack>
         </Box>
       )}
+
+      <Snackbar
+        open={reopenToastOpen}
+        autoHideDuration={2500}
+        onClose={() => setReopenToastOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setReopenToastOpen(false)} severity="success" variant="filled" sx={{ width: '100%' }}>
+          Conversation reopened. AI workflow restored.
+        </Alert>
+      </Snackbar>
     </Stack>
   )
 }

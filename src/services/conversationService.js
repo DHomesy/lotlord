@@ -83,6 +83,13 @@ async function resolveConversation(conversationId) {
 }
 
 /**
+ * Re-open a conversation so inbound messages continue through normal AI workflow.
+ */
+async function reopenConversation(conversationId) {
+  return convRepo.update(conversationId, { status: 'open' });
+}
+
+/**
  * Escalate a conversation: set status + max urgency, disable further AI drafts.
  * @param {string} conversationId
  * @param {string} actorId - The user who escalated (landlord or admin)
@@ -526,6 +533,7 @@ module.exports = {
   handleInboundEmail,
   resolveLandlordForTenant,
   resolveConversation,
+  reopenConversation,
   escalateConversation,
   markRead,
   approveSuggestedReply,
