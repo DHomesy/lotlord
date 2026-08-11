@@ -30,15 +30,17 @@ const tenantRepo       = require('../dal/tenantRepository');
 const leaseRepo        = require('../dal/leaseRepository');
 const ledgerRepo       = require('../dal/ledgerRepository');
 const notificationService = require('./notificationService');
+const aiPromptAssemblyService = require('./aiPromptAssemblyService');
 const openai           = require('../integrations/openai');
 
-// Escalation trigger words — any match disables AI and flags the conversation.
+// Escalation trigger words — any match raises risk + review flags.
 const ESCALATION_TRIGGERS = [
   'emergency', 'flood', 'fire', 'gas leak', 'no heat', 'mold', 'uninhabitable',
   'lawyer', 'attorney', 'sue', 'lawsuit', 'eviction', 'court',
 ];
 
 const AI_RATE_LIMIT_PER_DAY = 5;
+const AUTOMATION_MODES = ['ai_active', 'ai_assist_only', 'human_only'];
 
 // ── Public entry points (called from webhooks) ────────────────────────────────
 
@@ -86,7 +88,13 @@ async function resolveConversation(conversationId) {
  * Re-open a conversation so inbound messages continue through normal AI workflow.
  */
 async function reopenConversation(conversationId) {
-  return convRepo.update(conversationId, { status: 'open' });
+  return convRepo.update(conversationId, {
+    status: 'open',
+    risk_state: 'normal',
+    needs_human_review: false,
+    review_reason: null,
+    automation_mode: 'ai_active',
+  });
 }
 
 /**
@@ -95,7 +103,13 @@ async function reopenConversation(conversationId) {
  * @param {string} actorId - The user who escalated (landlord or admin)
  */
 async function escalateConversation(conversationId, actorId) {
-  const conv = await convRepo.update(conversationId, { status: 'escalated', urgency: 5 });
+  const conv = await convRepo.update(conversationId, {
+    status: 'escalated',
+    urgency: 5,
+    risk_state: 'elevated',
+    needs_human_review: true,
+    review_reason: actorId ? `escalated_by:${actorId}` : 'escalated',
+  });
 
   // Notify the landlord that they need to take over this thread
   if (conv?.owner_id) {
@@ -115,6 +129,16 @@ async function escalateConversation(conversationId, actorId) {
  */
 async function markRead(conversationId) {
   return convRepo.update(conversationId, { unread_count: 0 });
+}
+
+/**
+ * Explicitly set the conversation automation mode.
+ */
+async function setAutomationMode(conversationId, mode) {
+  if (!AUTOMATION_MODES.includes(mode)) {
+    throw Object.assign(new Error('Invalid automation mode'), { status: 400 });
+  }
+  return convRepo.update(conversationId, { automation_mode: mode });
 }
 
 // ── AI approval flow ──────────────────────────────────────────────────────────
@@ -337,8 +361,8 @@ async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, c
     }).catch((err) => console.error('[conversationService] tenant_reply notification failed:', err.message));
   }
 
-  // Stop here if no landlord context or conversation is escalated
-  if (!resolvedLandlordId || conv.status === 'escalated') return;
+  // Stop here if no landlord context or conversation policy explicitly requires human-only mode.
+  if (!resolvedLandlordId || conv.automation_mode === 'human_only') return;
 
   // Check for escalation triggers first
   const lower = content.toLowerCase();
@@ -365,11 +389,21 @@ async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, c
   const { category, urgency } = await openai.classifyMessage(content).catch(() => ({ category: 'general', urgency: 3 }));
   await convRepo.update(conv.id, { category, urgency });
 
-  const history = await convRepo.findMessages(conv.id, { limit: 20 });
-  const { reply, tokensUsed, model } = await openai.generateReply({
-    history:    history.map((m) => ({ role: m.role, content: m.content })),
+  const history = await convRepo.findMessages(conv.id, { limit: 100 });
+  const promptEnvelope = await aiPromptAssemblyService.buildPromptEnvelope({
+    workflowType: aiPromptAssemblyService.WORKFLOW_TYPES.TENANT_TRIAGE,
+    conversationId: conv.id,
+    tenantId: tenantRecord.id,
+    ownerId: resolvedLandlordId,
+    policyContext: context,
+    history: history.map((m) => ({ role: m.role, content: m.content })),
     newMessage: content,
-    systemContext: context,
+  });
+
+  const { reply, tokensUsed, model } = await openai.generateReply({
+    history:    promptEnvelope.history,
+    newMessage: content,
+    systemContext: promptEnvelope.systemContext,
   });
 
   const draft = await convRepo.appendMessage({
@@ -382,8 +416,8 @@ async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, c
     modelUsed:      model,
   });
 
-  // Auto-send if landlord has opted in
-  if (landlord.ai_reply_mode === 'auto') {
+  // Auto-send only in full automation mode. In assist-only mode we keep drafts pending.
+  if (landlord.ai_reply_mode === 'auto' && conv.automation_mode === 'ai_active') {
     const guardrail = await notificationService.canAutoSendSmsForOwner({
       ownerId: resolvedLandlordId,
       body: reply,
@@ -535,6 +569,7 @@ module.exports = {
   resolveConversation,
   reopenConversation,
   escalateConversation,
+  setAutomationMode,
   markRead,
   approveSuggestedReply,
   dismissSuggestedReply,

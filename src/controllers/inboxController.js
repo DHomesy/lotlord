@@ -8,6 +8,7 @@ const { resolveOwnerId } = require('../lib/authHelpers');
 const MAX_CONTENT_LENGTH = 5000;
 const VALID_STATUSES     = ['open', 'resolved', 'escalated'];
 const VALID_CATEGORIES   = ['maintenance', 'payment', 'lease', 'general'];
+const VALID_AUTOMATION_MODES = ['ai_active', 'ai_assist_only', 'human_only'];
 const VALID_UNMATCHED_STATUSES = ['open', 'resolved'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -124,6 +125,10 @@ async function getConversationTrace(req, res, next) {
       conversationId: conv.id,
       channel: trace.channel,
       status: trace.status,
+      riskState: trace.risk_state || 'normal',
+      automationMode: trace.automation_mode || 'ai_active',
+      needsHumanReview: !!trace.needs_human_review,
+      reviewReason: trace.review_reason || null,
       unreadCount: Number(trace.unread_count || 0),
       latestInboundAt: trace.latest_inbound_at,
       latestOutboundAt: trace.latest_outbound_at,
@@ -164,6 +169,15 @@ async function updateConversation(req, res, next) {
     if (action === 'reopen')     return res.json(await conversationService.reopenConversation(conv.id));
     if (action === 'escalate')   return res.json(await conversationService.escalateConversation(conv.id, req.user.sub));
     if (action === 'mark_read')  return res.json(await conversationService.markRead(conv.id));
+    if (action === 'set_mode') {
+      const { mode } = req.body;
+      if (!VALID_AUTOMATION_MODES.includes(mode)) {
+        return res.status(400).json({
+          error: `mode must be one of: ${VALID_AUTOMATION_MODES.join(', ')}`,
+        });
+      }
+      return res.json(await conversationService.setAutomationMode(conv.id, mode));
+    }
 
     // Direct field update — validate before hitting the DB
     const { status, urgency, category } = req.body;
@@ -300,6 +314,15 @@ async function supervisorUpdateConversation(req, res, next) {
     if (action === 'reopen')    return res.json(await conversationService.reopenConversation(conv.id));
     if (action === 'escalate')  return res.json(await conversationService.escalateConversation(conv.id, req.user.sub));
     if (action === 'mark_read') return res.json(await conversationService.markRead(conv.id));
+    if (action === 'set_mode') {
+      const { mode } = req.body;
+      if (!VALID_AUTOMATION_MODES.includes(mode)) {
+        return res.status(400).json({
+          error: `mode must be one of: ${VALID_AUTOMATION_MODES.join(', ')}`,
+        });
+      }
+      return res.json(await conversationService.setAutomationMode(conv.id, mode));
+    }
 
     const { status, urgency, category } = req.body;
     if (status === undefined && urgency === undefined && category === undefined) {

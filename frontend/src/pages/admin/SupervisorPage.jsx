@@ -3,7 +3,7 @@ import {
   Box, Paper, Stack, Typography, List, ListItemButton, ListItemText,
   ListItemAvatar, Avatar, Badge, Divider, TextField, Button, Alert,
   Chip, CircularProgress, MenuItem, Select, FormControl, InputLabel,
-  IconButton, Tooltip, useTheme, useMediaQuery,
+  IconButton, Tooltip, Snackbar, useTheme, useMediaQuery,
 } from '@mui/material'
 import AutoAwesomeIcon    from '@mui/icons-material/AutoAwesome'
 import ReportProblemIcon  from '@mui/icons-material/ReportProblem'
@@ -12,6 +12,7 @@ import SendIcon           from '@mui/icons-material/Send'
 import ArrowBackIcon      from '@mui/icons-material/ArrowBack'
 import EmailIcon          from '@mui/icons-material/Email'
 import SmsIcon            from '@mui/icons-material/Sms'
+import AutorenewIcon      from '@mui/icons-material/Autorenew'
 
 import PageContainer  from '../../components/layout/PageContainer'
 import LoadingOverlay from '../../components/common/LoadingOverlay'
@@ -35,6 +36,11 @@ function channelIcon(ch) {
 
 const URGENCY_COLOR = ['', 'success', 'success', 'warning', 'error', 'error']
 const URGENCY_LABEL = ['', 'Low', 'Minor', 'Normal', 'High', 'Critical']
+const AUTOMATION_MODE_META = {
+  ai_active: { label: 'AI Active', color: 'success' },
+  ai_assist_only: { label: 'AI Assist Only', color: 'warning' },
+  human_only: { label: 'Human Only', color: 'default' },
+}
 
 function UrgencyChip({ urgency }) {
   if (!urgency) return null
@@ -43,6 +49,19 @@ function UrgencyChip({ urgency }) {
       label={URGENCY_LABEL[urgency] ?? urgency}
       size="small"
       color={URGENCY_COLOR[urgency] ?? 'default'}
+      sx={{ height: 18, fontSize: 10, fontWeight: 600 }}
+    />
+  )
+}
+
+function AutomationModeChip({ mode }) {
+  const meta = AUTOMATION_MODE_META[mode] || AUTOMATION_MODE_META.ai_active
+  return (
+    <Chip
+      label={meta.label}
+      size="small"
+      color={meta.color}
+      variant={mode === 'human_only' ? 'outlined' : 'filled'}
       sx={{ height: 18, fontSize: 10, fontWeight: 600 }}
     />
   )
@@ -142,6 +161,16 @@ function SupervisorConvList({ conversations, selectedId, onSelect }) {
                 <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
                   {channelIcon(c.channel)}
                   <UrgencyChip urgency={c.urgency} />
+                  <AutomationModeChip mode={c.automation_mode || 'ai_active'} />
+                  {c.needs_human_review && (
+                    <Chip
+                      label="Review needed"
+                      size="small"
+                      color="warning"
+                      variant="outlined"
+                      sx={{ height: 16, fontSize: 10 }}
+                    />
+                  )}
                   {c.status !== 'open' && (
                     <Chip
                       label={c.status}
@@ -182,6 +211,7 @@ function SupervisorConvList({ conversations, selectedId, onSelect }) {
 // ─── Thread + override panel (right pane) ─────────────────────────────────────
 function SupervisorThread({ conversationId, onBack }) {
   const [overrideText, setOverrideText] = useState('')
+  const [actionToast, setActionToast] = useState({ open: false, message: '', severity: 'success' })
   const { data, isLoading, isError, refetch } = useInboxConversation(conversationId)
   const { mutate: override, isPending: overriding, error: overrideError, reset: resetOverride } = useSupervisorOverride()
   const { mutate: update } = useSupervisorUpdate()
@@ -195,6 +225,12 @@ function SupervisorThread({ conversationId, onBack }) {
   )
   const isResolved  = conv.status === 'resolved'
   const isEscalated = conv.status === 'escalated'
+  const canReopen = isResolved || isEscalated
+  const currentMode = conv.automation_mode || 'ai_active'
+
+  const showToast = (message, severity = 'success') => {
+    setActionToast({ open: true, message, severity })
+  }
 
   const handleOverride = () => {
     if (!overrideText.trim()) return
@@ -204,8 +240,18 @@ function SupervisorThread({ conversationId, onBack }) {
     })
   }
 
-  const handleUpdate = (action) => {
-    update({ id: conv.id, action }, { onSuccess: () => refetch() })
+  const handleUpdate = (action, extra = {}) => {
+    update({ id: conv.id, action, ...extra }, {
+      onSuccess: () => {
+        refetch()
+        if (action === 'reopen') showToast('Conversation reopened. AI workflow restored.')
+        if (action === 'escalate') showToast('Conversation escalated. Human review has been flagged.')
+        if (action === 'set_mode') {
+          const modeLabel = AUTOMATION_MODE_META[extra.mode]?.label || extra.mode
+          showToast(`Automation mode set to ${modeLabel}.`)
+        }
+      },
+    })
   }
 
   return (
@@ -228,14 +274,26 @@ function SupervisorThread({ conversationId, onBack }) {
             Landlord: {conv.landlord_first_name} {conv.landlord_last_name}
             {' · '}Channel: {conv.channel}
           </Typography>
+          <Stack direction="row" spacing={0.5} mt={0.5} flexWrap="wrap">
+            <AutomationModeChip mode={currentMode} />
+            {conv.needs_human_review && (
+              <Chip
+                label="Human review needed"
+                size="small"
+                color="warning"
+                variant="outlined"
+                sx={{ height: 18, fontSize: 10 }}
+              />
+            )}
+          </Stack>
         </Box>
         <Stack direction="row" spacing={0.5} alignItems="center">
           <UrgencyChip urgency={conv.urgency} />
           {isEscalated && <Chip label="Escalated" size="small" color="warning" />}
           {isResolved  && <Chip label="Resolved"  size="small" color="success" />}
-          {!isResolved && !isEscalated && (
+          {!canReopen && (
             <>
-              <Tooltip title="Escalate — disable AI, flag for manual review">
+              <Tooltip title="Escalate — flag for manual review">
                 <IconButton size="small" color="warning" onClick={() => handleUpdate('escalate')}>
                   <ReportProblemIcon fontSize="small" />
                 </IconButton>
@@ -247,6 +305,43 @@ function SupervisorThread({ conversationId, onBack }) {
               </Tooltip>
             </>
           )}
+          {canReopen && (
+            <Tooltip title="Re-open conversation and restore AI workflow">
+              <IconButton size="small" color="primary" onClick={() => handleUpdate('reopen')}>
+                <AutorenewIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          <Tooltip title="Set mode: AI Active">
+            <Chip
+              label="AI"
+              size="small"
+              color={currentMode === 'ai_active' ? 'success' : 'default'}
+              variant={currentMode === 'ai_active' ? 'filled' : 'outlined'}
+              onClick={() => handleUpdate('set_mode', { mode: 'ai_active' })}
+              sx={{ height: 22, fontSize: 10, cursor: 'pointer' }}
+            />
+          </Tooltip>
+          <Tooltip title="Set mode: AI Assist Only">
+            <Chip
+              label="Assist"
+              size="small"
+              color={currentMode === 'ai_assist_only' ? 'warning' : 'default'}
+              variant={currentMode === 'ai_assist_only' ? 'filled' : 'outlined'}
+              onClick={() => handleUpdate('set_mode', { mode: 'ai_assist_only' })}
+              sx={{ height: 22, fontSize: 10, cursor: 'pointer' }}
+            />
+          </Tooltip>
+          <Tooltip title="Set mode: Human Only">
+            <Chip
+              label="Human"
+              size="small"
+              color={currentMode === 'human_only' ? 'warning' : 'default'}
+              variant={currentMode === 'human_only' ? 'filled' : 'outlined'}
+              onClick={() => handleUpdate('set_mode', { mode: 'human_only' })}
+              sx={{ height: 22, fontSize: 10, cursor: 'pointer' }}
+            />
+          </Tooltip>
         </Stack>
       </Box>
 
@@ -304,6 +399,16 @@ function SupervisorThread({ conversationId, onBack }) {
       {/* Override panel */}
       {!isResolved && (
         <Box sx={{ borderTop: 1, borderColor: 'divider', px: 2, py: 1.5 }}>
+          {isEscalated && (
+            <Alert severity="warning" icon={<ReportProblemIcon />} sx={{ mb: 1 }}>
+              This conversation is escalated. AI behavior is controlled by mode: {AUTOMATION_MODE_META[currentMode]?.label || currentMode}.
+            </Alert>
+          )}
+          {currentMode === 'human_only' && (
+            <Alert severity="info" sx={{ mb: 1 }}>
+              Human Only mode is active. AI draft generation is paused for this thread.
+            </Alert>
+          )}
           <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>
             Override (inject as landlord)
           </Typography>
@@ -334,6 +439,22 @@ function SupervisorThread({ conversationId, onBack }) {
           </Stack>
         </Box>
       )}
+
+      <Snackbar
+        open={actionToast.open}
+        autoHideDuration={2500}
+        onClose={() => setActionToast((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setActionToast((prev) => ({ ...prev, open: false }))}
+          severity={actionToast.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {actionToast.message}
+        </Alert>
+      </Snackbar>
     </Stack>
   )
 }

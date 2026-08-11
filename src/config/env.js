@@ -84,6 +84,9 @@ module.exports = {
 
   // OpenAI
   OPENAI_API_KEY: optional('OPENAI_API_KEY'),
+  AI_PROMPT_BUDGET_TENANT_TOKENS: optional('AI_PROMPT_BUDGET_TENANT_TOKENS', '1800'),
+  AI_PROMPT_BUDGET_OWNER_QA_TOKENS: optional('AI_PROMPT_BUDGET_OWNER_QA_TOKENS', '2200'),
+  AI_PROMPT_MAX_RECENT_TURNS: optional('AI_PROMPT_MAX_RECENT_TURNS', '20'),
 
   // Error alerting — email address to notify on 5xx errors and unhandled rejections
   ALERT_EMAIL: optional('ALERT_EMAIL'),

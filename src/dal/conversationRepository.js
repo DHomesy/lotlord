@@ -63,7 +63,16 @@ async function touchOnInbound(conversationId) {
  * Only updates supplied fields.
  */
 async function update(id, fields) {
-  const allowed = ['status', 'urgency', 'category', 'unread_count'];
+  const allowed = [
+    'status',
+    'urgency',
+    'category',
+    'unread_count',
+    'risk_state',
+    'automation_mode',
+    'needs_human_review',
+    'review_reason',
+  ];
   const setClauses = [];
   const values = [];
   let idx = 1;
@@ -101,6 +110,7 @@ async function findAllByOwner(ownerId, { status, urgency, page = 1, limit = 30 }
   const { rows } = await query(
     `SELECT
        c.id, c.channel, c.status, c.urgency, c.category,
+       c.risk_state, c.automation_mode, c.needs_human_review, c.review_reason,
        c.last_message_at, c.unread_count,
        u.first_name AS tenant_first_name, u.last_name AS tenant_last_name,
        (SELECT content FROM ai_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_preview,
@@ -136,6 +146,7 @@ async function findAllForSupervisor({ status, urgency, ownerId, page = 1, limit 
   const { rows } = await query(
     `SELECT
        c.id, c.channel, c.status, c.urgency, c.category,
+       c.risk_state, c.automation_mode, c.needs_human_review, c.review_reason,
        c.last_message_at, c.unread_count, c.owner_id,
        u.first_name AS tenant_first_name, u.last_name AS tenant_last_name,
        lu.first_name AS landlord_first_name, lu.last_name AS landlord_last_name,
@@ -183,6 +194,10 @@ async function getTraceSummary(conversationId) {
        c.id AS conversation_id,
        c.channel,
        c.status,
+      c.risk_state,
+      c.automation_mode,
+      c.needs_human_review,
+      c.review_reason,
        c.owner_id,
        c.unread_count,
        tu.email AS tenant_email,
@@ -213,7 +228,8 @@ async function getTraceSummary(conversationId) {
      LEFT JOIN ai_messages m ON m.conversation_id = c.id
      LEFT JOIN notifications_log l ON l.conversation_id = c.id
      WHERE c.id = $1
-     GROUP BY c.id, c.channel, c.status, c.owner_id, c.unread_count, tu.email`,
+     GROUP BY c.id, c.channel, c.status, c.risk_state, c.automation_mode,
+              c.needs_human_review, c.review_reason, c.owner_id, c.unread_count, tu.email`,
     [conversationId],
   );
 

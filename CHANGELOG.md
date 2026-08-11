@@ -10,6 +10,42 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - No unreleased entries yet.
 
 ---
+## [1.15.0] — 2026-08-11 — Sprint D.1 Completion (Mode/Policy + Memory Foundation)
+
+### Added
+- **Conversation policy schema (D.1 foundation)** — Added AI conversation policy columns via migration `037_ai_conversation_policy.sql`:
+  - `risk_state` (`normal|elevated|critical`)
+  - `automation_mode` (`ai_active|ai_assist_only|human_only`)
+  - `needs_human_review` (boolean)
+  - `review_reason` (nullable)
+- **Prompt assembly service (memory foundation, no retrieval)** — Added `aiPromptAssemblyService` with deterministic assembly order, token-budgeted recent turn selection, and no-op placeholders for structured facts and rolling summary providers.
+- **Config knobs for prompt budgets** — Added:
+  - `AI_PROMPT_BUDGET_TENANT_TOKENS`
+  - `AI_PROMPT_BUDGET_OWNER_QA_TOKENS`
+  - `AI_PROMPT_MAX_RECENT_TURNS`
+- **Supervisor parity controls** — Supervisor thread now supports explicit mode actions (`AI`, `Assist`, `Human`) and re-open from escalated/resolved state, with success toasts and policy cues.
+
+### Changed
+- **Escalation semantics decoupled from AI-off** — Escalation now marks risk/review flags instead of implicitly disabling AI.
+- **AI execution gate is mode-driven** — Inbound AI draft generation is blocked only when `automation_mode = human_only`.
+- **Assist-only behavior hardened** — Auto-send now runs only in `ai_active`; `ai_assist_only` keeps drafts pending for review.
+- **Re-open policy reset** — Re-open now resets policy fields to D.1 defaults (`risk_state=normal`, review cleared, mode restored to `ai_active`).
+- **Inbox + supervisor action API expansion** — Added `set_mode` action handling and validation in both landlord and supervisor update endpoints.
+- **Trace payload expanded** — Inbox trace response now includes policy fields (`riskState`, `automationMode`, `needsHumanReview`, `reviewReason`).
+
+### Frontend
+- **AI Inbox policy cues** — Added automation mode chips and review-needed badges in conversation list + thread header.
+- **AI Inbox mode controls** — Added mode toggles for desktop and mobile action surfaces.
+- **Policy-aware escalation messaging** — Updated copy to reflect mode-driven AI behavior in both landlord and supervisor inboxes.
+
+### Quality
+- Added and updated unit tests for D.1 behavior across:
+  - `conversationService`
+  - `inboxController`
+  - `aiPromptAssemblyService`
+- Verified targeted backend unit suites and frontend production build after changes.
+
+---
 ## [1.14.6] — 2026-08-10 — AI Re-open Workflow UX Completion
 
 ### Added

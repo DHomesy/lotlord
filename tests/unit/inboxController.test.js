@@ -187,6 +187,10 @@ describe('getConversationTrace', () => {
     convRepo.getTraceSummary.mockResolvedValue({
       channel: 'sms',
       status: 'open',
+      risk_state: 'elevated',
+      automation_mode: 'ai_assist_only',
+      needs_human_review: true,
+      review_reason: 'escalated_by:owner-uuid',
       unread_count: 2,
       latest_inbound_at: '2026-08-09T00:00:00.000Z',
       latest_outbound_at: null,
@@ -206,6 +210,9 @@ describe('getConversationTrace', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       conversationId: CONV_ID,
       channel: 'sms',
+      riskState: 'elevated',
+      automationMode: 'ai_assist_only',
+      needsHumanReview: true,
       checkpoints: expect.objectContaining({
         receivedWebhook: true,
         routedToConversation: true,
@@ -271,6 +278,37 @@ describe('updateConversation', () => {
 
     expect(conversationService.markRead).toHaveBeenCalledWith(CONV_ID);
     expect(res.json).toHaveBeenCalledWith(read);
+  });
+
+  test('action=set_mode delegates to conversationService.setAutomationMode', async () => {
+    const updated = { ...mockConversation, automation_mode: 'human_only' };
+    conversationService.setAutomationMode.mockResolvedValue(updated);
+
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'set_mode', mode: 'human_only' },
+      user: { role: 'landlord', sub: OWNER_ID },
+    });
+    const res = makeRes();
+
+    await updateConversation(req, res, next);
+
+    expect(conversationService.setAutomationMode).toHaveBeenCalledWith(CONV_ID, 'human_only');
+    expect(res.json).toHaveBeenCalledWith(updated);
+  });
+
+  test('action=set_mode returns 400 for invalid mode', async () => {
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'set_mode', mode: 'bad_mode' },
+      user: { role: 'landlord', sub: OWNER_ID },
+    });
+    const res = makeRes();
+
+    await updateConversation(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(conversationService.setAutomationMode).not.toHaveBeenCalled();
   });
 
   test('direct field update succeeds with valid values', async () => {
@@ -609,6 +647,23 @@ describe('supervisorUpdateConversation', () => {
 
     expect(conversationService.resolveConversation).toHaveBeenCalledWith(CONV_ID);
     expect(res.json).toHaveBeenCalledWith(resolved);
+  });
+
+  test('action=set_mode delegates to service for supervisor', async () => {
+    const updated = { ...mockConversation, automation_mode: 'ai_assist_only' };
+    conversationService.setAutomationMode.mockResolvedValue(updated);
+
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'set_mode', mode: 'ai_assist_only' },
+      user: { role: 'admin', sub: ADMIN_ID },
+    });
+    const res = makeRes();
+
+    await supervisorUpdateConversation(req, res, next);
+
+    expect(conversationService.setAutomationMode).toHaveBeenCalledWith(CONV_ID, 'ai_assist_only');
+    expect(res.json).toHaveBeenCalledWith(updated);
   });
 
   test('direct field update with valid values succeeds', async () => {

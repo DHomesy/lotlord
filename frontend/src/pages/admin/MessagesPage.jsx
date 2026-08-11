@@ -526,6 +526,12 @@ const CATEGORY_COLOR = {
   general:     'default',
 }
 
+const AUTOMATION_MODE_META = {
+  ai_active: { label: 'AI Active', color: 'success' },
+  ai_assist_only: { label: 'AI Assist Only', color: 'warning' },
+  human_only: { label: 'Human Only', color: 'default' },
+}
+
 function UrgencyChip({ urgency }) {
   if (!urgency) return null
   return (
@@ -547,6 +553,19 @@ function CategoryChip({ category }) {
       color={CATEGORY_COLOR[category] ?? 'default'}
       variant="outlined"
       sx={{ height: 18, fontSize: 10, textTransform: 'capitalize' }}
+    />
+  )
+}
+
+function AutomationModeChip({ mode }) {
+  const meta = AUTOMATION_MODE_META[mode] || AUTOMATION_MODE_META.ai_active
+  return (
+    <Chip
+      label={meta.label}
+      size="small"
+      color={meta.color}
+      variant={mode === 'human_only' ? 'outlined' : 'filled'}
+      sx={{ height: 18, fontSize: 10, fontWeight: 600 }}
     />
   )
 }
@@ -707,6 +726,16 @@ function AiConversationList({ conversations, selectedId, onSelect }) {
                   <Stack direction="row" spacing={0.5} flexWrap="wrap">
                     <UrgencyChip urgency={c.urgency} />
                     <CategoryChip category={c.category} />
+                    <AutomationModeChip mode={c.automation_mode || 'ai_active'} />
+                    {c.needs_human_review && (
+                      <Chip
+                        label="Review needed"
+                        size="small"
+                        color="warning"
+                        variant="outlined"
+                        sx={{ height: 18, fontSize: 10 }}
+                      />
+                    )}
                     {c.has_pending_suggestion && (
                       <Chip
                         icon={<AutoAwesomeIcon sx={{ fontSize: 11 }} />}
@@ -896,7 +925,7 @@ function AiThreadView({ conversationId, onBack }) {
   const conv = data?.conversation
   const messages = Array.isArray(data?.messages) ? data.messages : []
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null)
-  const [reopenToastOpen, setReopenToastOpen] = useState(false)
+  const [actionToast, setActionToast] = useState({ open: false, message: '', severity: 'success' })
 
   useEffect(() => {
     if (conv?.id && Number(conv.unread_count) > 0) {
@@ -922,11 +951,22 @@ function AiThreadView({ conversationId, onBack }) {
   const openActionMenu = (event) => setActionMenuAnchor(event.currentTarget)
   const closeActionMenu = () => setActionMenuAnchor(null)
 
-  const handleAction = (action) => {
-    updateConv({ id: conv.id, action }, {
+  const currentMode = conv.automation_mode || 'ai_active'
+
+  const showToast = (message, severity = 'success') => {
+    setActionToast({ open: true, message, severity })
+  }
+
+  const handleAction = (action, extra = {}) => {
+    updateConv({ id: conv.id, action, ...extra }, {
       onSuccess: () => {
         refetch()
-        if (action === 'reopen') setReopenToastOpen(true)
+        if (action === 'reopen') showToast('Conversation reopened. AI workflow restored.')
+        if (action === 'escalate') showToast('Conversation escalated. Human review has been flagged.')
+        if (action === 'set_mode') {
+          const modeLabel = AUTOMATION_MODE_META[extra.mode]?.label || extra.mode
+          showToast(`Automation mode set to ${modeLabel}.`)
+        }
       },
     })
   }
@@ -954,6 +994,16 @@ function AiThreadView({ conversationId, onBack }) {
             </Typography>
             <UrgencyChip urgency={conv.urgency} />
             <CategoryChip category={conv.category} />
+            <AutomationModeChip mode={currentMode} />
+            {conv.needs_human_review && (
+              <Chip
+                label="Human review needed"
+                size="small"
+                color="warning"
+                variant="outlined"
+                sx={{ height: 18, fontSize: 10 }}
+              />
+            )}
           </Stack>
         </Box>
         {/* Conversation actions */}
@@ -979,6 +1029,16 @@ function AiThreadView({ conversationId, onBack }) {
                   Mark resolved
                 </MenuItem>
               )}
+              <Divider />
+              <MenuItem onClick={() => { closeActionMenu(); handleAction('set_mode', { mode: 'ai_active' }) }}>
+                Set mode: AI Active
+              </MenuItem>
+              <MenuItem onClick={() => { closeActionMenu(); handleAction('set_mode', { mode: 'ai_assist_only' }) }}>
+                Set mode: AI Assist Only
+              </MenuItem>
+              <MenuItem onClick={() => { closeActionMenu(); handleAction('set_mode', { mode: 'human_only' }) }}>
+                Set mode: Human Only
+              </MenuItem>
               {canReopen && (
                 <MenuItem onClick={() => { closeActionMenu(); handleAction('reopen') }}>
                   Re-open
@@ -989,7 +1049,7 @@ function AiThreadView({ conversationId, onBack }) {
         ) : (
           <Stack direction="row" spacing={0.5}>
             {!canReopen && (
-              <Tooltip title="Escalate — disable AI, flag for manual review">
+              <Tooltip title="Escalate — flag for manual review">
                 <IconButton size="small" color="warning" onClick={() => handleAction('escalate')}>
                   <ReportProblemIcon fontSize="small" />
                 </IconButton>
@@ -1009,6 +1069,36 @@ function AiThreadView({ conversationId, onBack }) {
                 </IconButton>
               </Tooltip>
             )}
+            <Tooltip title="Set mode: AI Active">
+              <Chip
+                label="AI"
+                size="small"
+                color={currentMode === 'ai_active' ? 'success' : 'default'}
+                variant={currentMode === 'ai_active' ? 'filled' : 'outlined'}
+                onClick={() => handleAction('set_mode', { mode: 'ai_active' })}
+                sx={{ height: 22, fontSize: 10, cursor: 'pointer' }}
+              />
+            </Tooltip>
+            <Tooltip title="Set mode: AI Assist Only">
+              <Chip
+                label="Assist"
+                size="small"
+                color={currentMode === 'ai_assist_only' ? 'warning' : 'default'}
+                variant={currentMode === 'ai_assist_only' ? 'filled' : 'outlined'}
+                onClick={() => handleAction('set_mode', { mode: 'ai_assist_only' })}
+                sx={{ height: 22, fontSize: 10, cursor: 'pointer' }}
+              />
+            </Tooltip>
+            <Tooltip title="Set mode: Human Only">
+              <Chip
+                label="Human"
+                size="small"
+                color={currentMode === 'human_only' ? 'warning' : 'default'}
+                variant={currentMode === 'human_only' ? 'filled' : 'outlined'}
+                onClick={() => handleAction('set_mode', { mode: 'human_only' })}
+                sx={{ height: 22, fontSize: 10, cursor: 'pointer' }}
+              />
+            </Tooltip>
           </Stack>
         )}
         {isEscalated && <Chip label="Escalated" size="small" color="warning" />}
@@ -1107,7 +1197,12 @@ function AiThreadView({ conversationId, onBack }) {
           )}
           {isEscalated && (
             <Alert severity="warning" icon={<ReportProblemIcon />} sx={{ mb: 1.5 }}>
-              This conversation is escalated. AI is disabled — your reply will be sent directly.
+              This conversation is escalated. AI behavior is now controlled by mode: {AUTOMATION_MODE_META[currentMode]?.label || currentMode}.
+            </Alert>
+          )}
+          {currentMode === 'human_only' && (
+            <Alert severity="info" sx={{ mb: 1.5 }}>
+              Human Only mode is active. AI draft generation is paused for this thread.
             </Alert>
           )}
           <Stack direction="row" spacing={isMobile ? 0.75 : 1} alignItems="flex-start">
@@ -1135,13 +1230,18 @@ function AiThreadView({ conversationId, onBack }) {
       )}
 
       <Snackbar
-        open={reopenToastOpen}
+        open={actionToast.open}
         autoHideDuration={2500}
-        onClose={() => setReopenToastOpen(false)}
+        onClose={() => setActionToast((prev) => ({ ...prev, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert onClose={() => setReopenToastOpen(false)} severity="success" variant="filled" sx={{ width: '100%' }}>
-          Conversation reopened. AI workflow restored.
+        <Alert
+          onClose={() => setActionToast((prev) => ({ ...prev, open: false }))}
+          severity={actionToast.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {actionToast.message}
         </Alert>
       </Snackbar>
     </Stack>

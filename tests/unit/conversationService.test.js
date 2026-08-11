@@ -35,7 +35,7 @@ const MESSAGE_CONTENT = 'Hi, my tap is leaking.';
 const mockTenantRecord = { id: TENANT_ID, user_id: TENANT_USER_ID, first_name: 'Ten', last_name: 'Ant', email: 'ten@test.com', phone: null };
 const mockConversation = {
   id: CONV_ID, tenant_id: TENANT_ID, owner_id: LANDLORD_ID,
-  channel: 'sms', status: 'open', urgency: 3,
+  channel: 'sms', status: 'open', urgency: 3, automation_mode: 'ai_active',
 };
 const mockLandlord = {
   id: LANDLORD_ID, first_name: 'Land', last_name: 'Lord',
@@ -181,17 +181,28 @@ describe('handleInboundSms', () => {
       content: 'I am going to sue you!', logEntryId: LOG_ENTRY_ID,
     });
 
-    expect(convRepo.update).toHaveBeenCalledWith(CONV_ID, { status: 'escalated', urgency: 5 });
+    expect(convRepo.update).toHaveBeenCalledWith(CONV_ID, expect.objectContaining({
+      status: 'escalated',
+      urgency: 5,
+      risk_state: 'elevated',
+      needs_human_review: true,
+    }));
     expect(openai.generateReply).not.toHaveBeenCalled();
   });
 
-  test('appends message to existing escalated conversation instead of creating a new thread', async () => {
+  test('reuses escalated conversation and still drafts when automation mode is ai_active', async () => {
     // Tenant had an escalated conversation; findActive should return it now
-    const escalatedConv = { ...mockConversation, status: 'escalated' };
+    const escalatedConv = { ...mockConversation, status: 'escalated', automation_mode: 'ai_active' };
     tenantRepo.findByUserId.mockResolvedValue(mockTenantRecord);
     convRepo.findActive.mockResolvedValue(escalatedConv); // returns escalated conv
     convRepo.appendMessage.mockResolvedValue({ id: 'msg-1' });
     convRepo.touchOnInbound.mockResolvedValue();
+    userRepo.findById.mockResolvedValue(mockLandlord);
+    convRepo.countRecentAiReplies.mockResolvedValue(0);
+    openai.classifyMessage.mockResolvedValue({ category: 'maintenance', urgency: 2 });
+    convRepo.update.mockResolvedValue({ ...escalatedConv, category: 'maintenance', urgency: 2 });
+    convRepo.findMessages.mockResolvedValue([]);
+    openai.generateReply.mockResolvedValue({ reply: 'Draft response', tokensUsed: 11, model: 'gpt-4o-mini' });
 
     await conversationService.handleInboundSms({
       tenantUserId: TENANT_USER_ID, landlordId: LANDLORD_ID,
@@ -204,7 +215,21 @@ describe('handleInboundSms', () => {
     expect(convRepo.appendMessage).toHaveBeenCalledWith(expect.objectContaining({
       conversationId: CONV_ID, role: 'user',
     }));
-    // AI skipped because conv is escalated
+    expect(openai.generateReply).toHaveBeenCalled();
+  });
+
+  test('suppresses AI drafting when automation mode is human_only', async () => {
+    const humanOnlyConv = { ...mockConversation, status: 'escalated', automation_mode: 'human_only' };
+    tenantRepo.findByUserId.mockResolvedValue(mockTenantRecord);
+    convRepo.findActive.mockResolvedValue(humanOnlyConv);
+    convRepo.appendMessage.mockResolvedValue({ id: 'msg-1' });
+    convRepo.touchOnInbound.mockResolvedValue();
+
+    await conversationService.handleInboundSms({
+      tenantUserId: TENANT_USER_ID, landlordId: LANDLORD_ID,
+      content: MESSAGE_CONTENT, logEntryId: LOG_ENTRY_ID,
+    });
+
     expect(openai.generateReply).not.toHaveBeenCalled();
   });
 
@@ -228,6 +253,20 @@ describe('handleInboundSms', () => {
     });
 
     expect(convRepo.markSent).toHaveBeenCalled();
+  });
+
+  test('does not auto-send when conversation mode is ai_assist_only', async () => {
+    setupHappyPath({ existingConv: { ...mockConversation, automation_mode: 'ai_assist_only' }, replyMode: 'auto' });
+    convRepo.findMessages.mockResolvedValue([]);
+    openai.generateReply.mockResolvedValue({ reply: 'Draft only', tokensUsed: 8, model: 'gpt-4o-mini' });
+
+    await conversationService.handleInboundSms({
+      tenantUserId: TENANT_USER_ID, landlordId: LANDLORD_ID,
+      content: MESSAGE_CONTENT, logEntryId: LOG_ENTRY_ID,
+    });
+
+    expect(convRepo.markSent).not.toHaveBeenCalled();
+    expect(convRepo.appendMessage).toHaveBeenCalledWith(expect.objectContaining({ role: 'assistant', suggested: true }));
   });
 });
 
@@ -340,10 +379,15 @@ describe('escalateConversation', () => {
     notificationService.sendByTriggerEvent = jest.fn().mockResolvedValue({});
   });
 
-  test('updates status to escalated with urgency 5', async () => {
+  test('updates status + policy fields for escalated review', async () => {
     convRepo.update.mockResolvedValue({ ...mockConversation, status: 'escalated', urgency: 5, owner_id: LANDLORD_ID });
     await conversationService.escalateConversation(CONV_ID, LANDLORD_ID);
-    expect(convRepo.update).toHaveBeenCalledWith(CONV_ID, { status: 'escalated', urgency: 5 });
+    expect(convRepo.update).toHaveBeenCalledWith(CONV_ID, expect.objectContaining({
+      status: 'escalated',
+      urgency: 5,
+      risk_state: 'elevated',
+      needs_human_review: true,
+    }));
   });
 
   test('sends notification to landlord', async () => {
@@ -355,6 +399,43 @@ describe('escalateConversation', () => {
       triggerEvent: 'conversation_escalated',
       recipientId:  LANDLORD_ID,
     }));
+  });
+});
+
+// ── reopenConversation ───────────────────────────────────────────────────────
+
+describe('reopenConversation', () => {
+  test('resets status and policy flags to active defaults', async () => {
+    convRepo.update.mockResolvedValue({ ...mockConversation, status: 'open', risk_state: 'normal' });
+
+    await conversationService.reopenConversation(CONV_ID);
+
+    expect(convRepo.update).toHaveBeenCalledWith(CONV_ID, {
+      status: 'open',
+      risk_state: 'normal',
+      needs_human_review: false,
+      review_reason: null,
+      automation_mode: 'ai_active',
+    });
+  });
+});
+
+// ── setAutomationMode ────────────────────────────────────────────────────────
+
+describe('setAutomationMode', () => {
+  test('updates automation mode when valid', async () => {
+    convRepo.update.mockResolvedValue({ ...mockConversation, automation_mode: 'human_only' });
+
+    const result = await conversationService.setAutomationMode(CONV_ID, 'human_only');
+
+    expect(convRepo.update).toHaveBeenCalledWith(CONV_ID, { automation_mode: 'human_only' });
+    expect(result).toMatchObject({ automation_mode: 'human_only' });
+  });
+
+  test('throws 400 for invalid mode', async () => {
+    await expect(conversationService.setAutomationMode(CONV_ID, 'invalid_mode'))
+      .rejects.toMatchObject({ status: 400 });
+    expect(convRepo.update).not.toHaveBeenCalled();
   });
 });
 
