@@ -582,6 +582,48 @@ function TraceCheckChip({ ok, label }) {
   )
 }
 
+function MaintenanceSlotStatusPanel({ conv }) {
+  if (conv.category !== 'maintenance') return null
+
+  const required = [
+    { key: 'maintenance_issue', label: 'Issue', value: conv.maintenance_issue },
+    { key: 'maintenance_onset_time', label: 'When started', value: conv.maintenance_onset_time },
+    { key: 'maintenance_location', label: 'Location', value: conv.maintenance_location },
+  ]
+
+  const missing = Array.isArray(conv.maintenance_missing_fields) ? conv.maintenance_missing_fields : []
+
+  return (
+    <Paper variant="outlined" sx={{ px: 1.25, py: 1, mb: 1.5, bgcolor: 'warning.50', borderColor: 'warning.light' }}>
+      <Stack spacing={0.75}>
+        <Typography variant="caption" fontWeight={700} color="warning.dark">
+          Maintenance triage status
+        </Typography>
+        <Stack direction="row" spacing={0.5} flexWrap="wrap">
+          {required.map((slot) => {
+            const filled = !!String(slot.value || '').trim()
+            return (
+              <Chip
+                key={slot.key}
+                size="small"
+                label={filled ? `${slot.label}: captured` : `${slot.label}: missing`}
+                color={filled ? 'success' : 'default'}
+                variant={filled ? 'filled' : 'outlined'}
+                sx={{ height: 18, fontSize: 10 }}
+              />
+            )
+          })}
+        </Stack>
+        {missing.length > 0 && (
+          <Typography variant="caption" color="text.secondary">
+            Waiting on: {missing.join(', ')}
+          </Typography>
+        )}
+      </Stack>
+    </Paper>
+  )
+}
+
 function InboundTracePanel({ conversationId }) {
   const { data: trace, isLoading, isError } = useInboxConversationTrace(conversationId)
 
@@ -1205,6 +1247,7 @@ function AiThreadView({ conversationId, onBack }) {
               Human Only mode is active. AI draft generation is paused for this thread.
             </Alert>
           )}
+          <MaintenanceSlotStatusPanel conv={conv} />
           <Stack direction="row" spacing={isMobile ? 0.75 : 1} alignItems="flex-start">
             <TextField
               label="Reply"

@@ -31,6 +31,7 @@ const leaseRepo        = require('../dal/leaseRepository');
 const ledgerRepo       = require('../dal/ledgerRepository');
 const notificationService = require('./notificationService');
 const aiPromptAssemblyService = require('./aiPromptAssemblyService');
+const maintenanceTriageService = require('./maintenanceTriageService');
 const openai           = require('../integrations/openai');
 
 // Escalation trigger words — any match raises risk + review flags.
@@ -387,15 +388,48 @@ async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, c
   // Build context + classify + generate draft
   const context    = await _buildContext(tenantRecord.id);
   const { category, urgency } = await openai.classifyMessage(content).catch(() => ({ category: 'general', urgency: 3 }));
-  await convRepo.update(conv.id, { category, urgency });
+
+  const updateFields = { category, urgency };
 
   const history = await convRepo.findMessages(conv.id, { limit: 100 });
+  let policyContext = context;
+
+  if (category === 'maintenance') {
+    const extractedSlots = maintenanceTriageService.deriveMaintenanceSlots({
+      history: history.map((m) => ({ content: m.content })),
+      newMessage: content,
+    });
+
+    const persistedSlots = {
+      issue: conv.maintenance_issue,
+      onset_time: conv.maintenance_onset_time,
+      location: conv.maintenance_location,
+    };
+
+    const triageSlots = maintenanceTriageService.mergeSlots(persistedSlots, extractedSlots);
+    const missingFields = maintenanceTriageService.getMissingFields(triageSlots);
+
+    updateFields.maintenance_issue = triageSlots.issue;
+    updateFields.maintenance_onset_time = triageSlots.onset_time;
+    updateFields.maintenance_location = triageSlots.location;
+    updateFields.maintenance_missing_fields = missingFields;
+
+    const triageGuidance = maintenanceTriageService.buildMaintenanceGuidance({
+      slots: triageSlots,
+      missingFields,
+    });
+
+    policyContext = [context, triageGuidance].filter(Boolean).join('\n\n');
+  }
+
+  await convRepo.update(conv.id, updateFields);
+
   const promptEnvelope = await aiPromptAssemblyService.buildPromptEnvelope({
     workflowType: aiPromptAssemblyService.WORKFLOW_TYPES.TENANT_TRIAGE,
     conversationId: conv.id,
     tenantId: tenantRecord.id,
     ownerId: resolvedLandlordId,
-    policyContext: context,
+    policyContext,
     history: history.map((m) => ({ role: m.role, content: m.content })),
     newMessage: content,
   });

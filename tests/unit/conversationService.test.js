@@ -119,6 +119,43 @@ describe('handleInboundSms', () => {
     }));
   });
 
+  test('persists merged maintenance triage slots and injects triage guidance into AI context', async () => {
+    const existingConv = {
+      ...mockConversation,
+      maintenance_issue: null,
+      maintenance_onset_time: null,
+      maintenance_location: 'kitchen',
+      maintenance_missing_fields: ['issue', 'onset_time'],
+    };
+
+    setupHappyPath({ existingConv });
+    openai.classifyMessage.mockResolvedValue({ category: 'maintenance', urgency: 2, summary: 'Leak' });
+    convRepo.findMessages.mockResolvedValue([
+      { role: 'user', content: 'My sink is leaking badly.' },
+      { role: 'assistant', content: 'When did this start?' },
+      { role: 'user', content: 'It started yesterday.' },
+    ]);
+
+    await conversationService.handleInboundSms({
+      tenantUserId: TENANT_USER_ID,
+      landlordId: LANDLORD_ID,
+      content: MESSAGE_CONTENT,
+      logEntryId: LOG_ENTRY_ID,
+    });
+
+    expect(convRepo.update).toHaveBeenCalledWith(CONV_ID, expect.objectContaining({
+      category: 'maintenance',
+      maintenance_issue: expect.any(String),
+      maintenance_onset_time: expect.any(String),
+      maintenance_location: 'kitchen',
+      maintenance_missing_fields: expect.any(Array),
+    }));
+
+    const generateArgs = openai.generateReply.mock.calls[0][0];
+    expect(generateArgs.systemContext).toContain('Maintenance triage policy:');
+    expect(generateArgs.systemContext).toContain('Required fields: issue, onset_time, location.');
+  });
+
   test('notifies landlord when a tenant reply is received', async () => {
     setupHappyPath({ existingConv: mockConversation });
     notificationService.sendByTriggerEvent = jest.fn().mockResolvedValue({});

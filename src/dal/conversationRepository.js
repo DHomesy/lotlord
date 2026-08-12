@@ -72,6 +72,10 @@ async function update(id, fields) {
     'automation_mode',
     'needs_human_review',
     'review_reason',
+    'maintenance_issue',
+    'maintenance_onset_time',
+    'maintenance_location',
+    'maintenance_missing_fields',
   ];
   const setClauses = [];
   const values = [];
@@ -111,6 +115,7 @@ async function findAllByOwner(ownerId, { status, urgency, page = 1, limit = 30 }
     `SELECT
        c.id, c.channel, c.status, c.urgency, c.category,
        c.risk_state, c.automation_mode, c.needs_human_review, c.review_reason,
+      c.maintenance_issue, c.maintenance_onset_time, c.maintenance_location, c.maintenance_missing_fields,
        c.last_message_at, c.unread_count,
        u.first_name AS tenant_first_name, u.last_name AS tenant_last_name,
        (SELECT content FROM ai_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_preview,
@@ -147,6 +152,7 @@ async function findAllForSupervisor({ status, urgency, ownerId, page = 1, limit 
     `SELECT
        c.id, c.channel, c.status, c.urgency, c.category,
        c.risk_state, c.automation_mode, c.needs_human_review, c.review_reason,
+      c.maintenance_issue, c.maintenance_onset_time, c.maintenance_location, c.maintenance_missing_fields,
        c.last_message_at, c.unread_count, c.owner_id,
        u.first_name AS tenant_first_name, u.last_name AS tenant_last_name,
        lu.first_name AS landlord_first_name, lu.last_name AS landlord_last_name,
@@ -198,6 +204,10 @@ async function getTraceSummary(conversationId) {
       c.automation_mode,
       c.needs_human_review,
       c.review_reason,
+      c.maintenance_issue,
+      c.maintenance_onset_time,
+      c.maintenance_location,
+      c.maintenance_missing_fields,
        c.owner_id,
        c.unread_count,
        tu.email AS tenant_email,
@@ -229,7 +239,9 @@ async function getTraceSummary(conversationId) {
      LEFT JOIN notifications_log l ON l.conversation_id = c.id
      WHERE c.id = $1
      GROUP BY c.id, c.channel, c.status, c.risk_state, c.automation_mode,
-              c.needs_human_review, c.review_reason, c.owner_id, c.unread_count, tu.email`,
+              c.needs_human_review, c.review_reason,
+              c.maintenance_issue, c.maintenance_onset_time, c.maintenance_location, c.maintenance_missing_fields,
+              c.owner_id, c.unread_count, tu.email`,
     [conversationId],
   );
 

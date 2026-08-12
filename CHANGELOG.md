@@ -10,6 +10,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - No unreleased entries yet.
 
 ---
+## [1.15.1] — 2026-08-12 — Sprint D.2 Slice: Maintenance Triage Continuity
+
+### Added
+- **Maintenance triage slot persistence schema** — Added migration `038_maintenance_triage_slots.sql` to persist maintenance triage context on `ai_conversations`:
+  - `maintenance_issue`
+  - `maintenance_onset_time`
+  - `maintenance_location`
+  - `maintenance_missing_fields` (`TEXT[]`)
+- **Maintenance triage continuity service** — Added `maintenanceTriageService` for deterministic slot extraction, slot merge continuity, missing-field detection, and policy guidance generation for follow-up prompts.
+- **Landlord inbox triage visibility panel** — Added a thread-level triage status panel with captured/missing chips and missing-field summary for maintenance conversations.
+
+### Changed
+- **Inbound conversation flow now persists triage continuity state** — `conversationService` now merges extracted triage slots with persisted slots each inbound turn and stores the merged result.
+- **AI prompt context now includes maintenance triage guidance** — For maintenance conversations, generated guidance is appended to policy context so follow-up drafting requests the highest-priority missing required field.
+- **Conversation repository projections expanded** — `conversationRepository` now reads/writes maintenance triage slot fields across owner list, supervisor list, and trace summary payloads.
+
+### Quality
+- Added/updated targeted unit coverage in:
+  - `tests/unit/maintenanceTriageService.test.js`
+  - `tests/unit/conversationService.test.js`
+- Verified focused backend unit suites and frontend production build after this slice.
+
+---
 ## [1.15.0] — 2026-08-11 — Sprint D.1 Completion (Mode/Policy + Memory Foundation)
 
 ### Added
