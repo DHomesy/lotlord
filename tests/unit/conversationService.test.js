@@ -10,7 +10,9 @@ jest.mock('../../src/dal/userRepository');
 jest.mock('../../src/dal/tenantRepository');
 jest.mock('../../src/dal/leaseRepository');
 jest.mock('../../src/dal/ledgerRepository');
+jest.mock('../../src/dal/maintenanceRepository');
 jest.mock('../../src/services/notificationService');
+jest.mock('../../src/services/auditService');
 jest.mock('../../src/integrations/openai');
 jest.mock('uuid', () => ({ v4: jest.fn(() => 'test-uuid') }));
 
@@ -19,7 +21,9 @@ const userRepo           = require('../../src/dal/userRepository');
 const tenantRepo         = require('../../src/dal/tenantRepository');
 const leaseRepo          = require('../../src/dal/leaseRepository');
 const ledgerRepo         = require('../../src/dal/ledgerRepository');
+const maintenanceRepo    = require('../../src/dal/maintenanceRepository');
 const notificationService = require('../../src/services/notificationService');
+const audit              = require('../../src/services/auditService');
 const openai             = require('../../src/integrations/openai');
 const conversationService = require('../../src/services/conversationService');
 
@@ -754,5 +758,109 @@ describe('markRead', () => {
     // must NOT set status — only reset unread counter
     expect(convRepo.update).toHaveBeenCalledTimes(1);
     expect(convRepo.update.mock.calls[0][1]).toEqual({ unread_count: 0 });
+  });
+});
+
+// ── createMaintenanceRequestFromConversation ───────────────────────────────
+
+describe('createMaintenanceRequestFromConversation', () => {
+  beforeEach(() => {
+    convRepo.findById.mockResolvedValue({
+      ...mockConversation,
+      category: 'maintenance',
+      urgency: 4,
+      maintenance_issue: 'Kitchen sink leaking',
+      maintenance_onset_time: 'yesterday evening',
+      maintenance_location: 'kitchen',
+    });
+    leaseRepo.findAll.mockResolvedValue([{ id: 'lease-1', unit_id: 'unit-uuid' }]);
+    tenantRepo.findById.mockResolvedValue({ id: TENANT_ID, user_id: TENANT_USER_ID });
+    maintenanceRepo.create.mockResolvedValue({ id: 'maint-uuid', unit_id: 'unit-uuid', priority: 'high' });
+    convRepo.update.mockResolvedValue({ ...mockConversation, needs_human_review: true, review_reason: 'maintenance_request_created:maint-uuid' });
+    convRepo.appendMessage.mockResolvedValue({ id: 'sys-msg-uuid' });
+    audit.log = jest.fn();
+  });
+
+  test('creates a maintenance request and records conversation follow-up marker', async () => {
+    const result = await conversationService.createMaintenanceRequestFromConversation(CONV_ID, LANDLORD_ID);
+
+    expect(maintenanceRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      unitId: 'unit-uuid',
+      submittedBy: TENANT_USER_ID,
+      category: 'plumbing',
+      priority: 'high',
+      title: 'Kitchen sink leaking',
+    }));
+    expect(convRepo.update).toHaveBeenCalledWith(CONV_ID, {
+      needs_human_review: true,
+      review_reason: 'maintenance_request_created:maint-uuid',
+    });
+    expect(convRepo.appendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: CONV_ID,
+      role: 'system',
+    }));
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'maintenance_request_created_from_conversation',
+      resourceId: 'maint-uuid',
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      maintenanceRequest: expect.objectContaining({ id: 'maint-uuid' }),
+      conversation: expect.objectContaining({ needs_human_review: true }),
+    }));
+  });
+
+  test('throws 409 when required maintenance fields are missing', async () => {
+    convRepo.findById.mockResolvedValue({
+      ...mockConversation,
+      category: 'maintenance',
+      maintenance_issue: null,
+      maintenance_onset_time: 'today',
+      maintenance_location: 'kitchen',
+    });
+
+    await expect(conversationService.createMaintenanceRequestFromConversation(CONV_ID, LANDLORD_ID))
+      .rejects.toMatchObject({ status: 409 });
+    expect(maintenanceRepo.create).not.toHaveBeenCalled();
+  });
+
+  test('uses emergency priority when slot language indicates immediate hazard', async () => {
+    convRepo.findById.mockResolvedValue({
+      ...mockConversation,
+      category: 'maintenance',
+      urgency: 3,
+      maintenance_issue: 'Flooding from burst pipe in bathroom',
+      maintenance_onset_time: '10 minutes ago',
+      maintenance_location: 'bathroom',
+    });
+
+    await conversationService.createMaintenanceRequestFromConversation(CONV_ID, LANDLORD_ID);
+
+    expect(maintenanceRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      priority: 'emergency',
+      category: 'plumbing',
+    }));
+  });
+
+  test('throws 409 when conversation category is not maintenance', async () => {
+    convRepo.findById.mockResolvedValue({ ...mockConversation, category: 'payment' });
+
+    await expect(conversationService.createMaintenanceRequestFromConversation(CONV_ID, LANDLORD_ID))
+      .rejects.toMatchObject({ status: 409 });
+    expect(maintenanceRepo.create).not.toHaveBeenCalled();
+  });
+
+  test('throws 409 when maintenance request already exists for the conversation', async () => {
+    convRepo.findById.mockResolvedValue({
+      ...mockConversation,
+      category: 'maintenance',
+      maintenance_issue: 'Kitchen sink leaking',
+      maintenance_onset_time: 'yesterday',
+      maintenance_location: 'kitchen',
+      review_reason: 'maintenance_request_created:maint-uuid',
+    });
+
+    await expect(conversationService.createMaintenanceRequestFromConversation(CONV_ID, LANDLORD_ID))
+      .rejects.toMatchObject({ status: 409 });
+    expect(maintenanceRepo.create).not.toHaveBeenCalled();
   });
 });

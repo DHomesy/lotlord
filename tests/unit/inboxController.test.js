@@ -311,6 +311,27 @@ describe('updateConversation', () => {
     expect(conversationService.setAutomationMode).not.toHaveBeenCalled();
   });
 
+  test('action=create_maintenance_request delegates to service and returns 201', async () => {
+    const payload = {
+      conversation: { ...mockConversation, needs_human_review: true },
+      maintenanceRequest: { id: 'maint-uuid' },
+    };
+    conversationService.createMaintenanceRequestFromConversation.mockResolvedValue(payload);
+
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'create_maintenance_request' },
+      user: { role: 'landlord', sub: OWNER_ID },
+    });
+    const res = makeRes();
+
+    await updateConversation(req, res, next);
+
+    expect(conversationService.createMaintenanceRequestFromConversation).toHaveBeenCalledWith(CONV_ID, OWNER_ID);
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(payload);
+  });
+
   test('direct field update succeeds with valid values', async () => {
     const updated = { ...mockConversation, status: 'resolved', urgency: 2, category: 'maintenance' };
     convRepo.update.mockResolvedValue(updated);
@@ -664,6 +685,27 @@ describe('supervisorUpdateConversation', () => {
 
     expect(conversationService.setAutomationMode).toHaveBeenCalledWith(CONV_ID, 'ai_assist_only');
     expect(res.json).toHaveBeenCalledWith(updated);
+  });
+
+  test('action=create_maintenance_request delegates to service for supervisor and returns 201', async () => {
+    const payload = {
+      conversation: { ...mockConversation, needs_human_review: true },
+      maintenanceRequest: { id: 'maint-uuid' },
+    };
+    conversationService.createMaintenanceRequestFromConversation.mockResolvedValue(payload);
+
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'create_maintenance_request' },
+      user: { role: 'admin', sub: ADMIN_ID },
+    });
+    const res = makeRes();
+
+    await supervisorUpdateConversation(req, res, next);
+
+    expect(conversationService.createMaintenanceRequestFromConversation).toHaveBeenCalledWith(CONV_ID, ADMIN_ID);
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(payload);
   });
 
   test('direct field update with valid values succeeds', async () => {

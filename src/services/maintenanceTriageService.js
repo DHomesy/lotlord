@@ -1,4 +1,5 @@
 const REQUIRED_MAINTENANCE_FIELDS = ['issue', 'onset_time', 'location'];
+const MAINTENANCE_CATEGORIES = ['plumbing', 'electric', 'hvac', 'appliance', 'structural', 'other'];
 
 function normalize(str) {
   return String(str || '').trim();
@@ -103,10 +104,57 @@ function buildMaintenanceGuidance({ slots, missingFields }) {
   return lines.join('\n');
 }
 
+function mapPriorityFromUrgency(urgency) {
+  const u = Number(urgency || 3);
+  if (u >= 5) return 'emergency';
+  if (u >= 4) return 'high';
+  if (u <= 2) return 'low';
+  return 'medium';
+}
+
+function inferMaintenanceCategory({ slots = {}, history = [], newMessage = '' } = {}) {
+  const corpus = [
+    slots.issue,
+    slots.location,
+    ...history.map((m) => m?.content),
+    newMessage,
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (/(sink|toilet|faucet|tap|shower|bath|pipe|plumb|drain|leak|water|sewer)/.test(corpus)) return 'plumbing';
+  if (/(outlet|breaker|electric|electrical|light|wiring|power|spark)/.test(corpus)) return 'electric';
+  if (/(heat|heater|furnace|hvac|a\/c|ac\s|air\s*condition|thermostat|no\s+heat|no\s+cool)/.test(corpus)) return 'hvac';
+  if (/(fridge|refrigerator|dishwasher|oven|stove|appliance|microwave|washer|dryer)/.test(corpus)) return 'appliance';
+  if (/(wall|ceiling|window|door|lock|roof|foundation|floor|stairs|crack)/.test(corpus)) return 'structural';
+
+  return 'other';
+}
+
+function inferMaintenancePriority({ slots = {}, history = [], newMessage = '', urgency } = {}) {
+  const base = mapPriorityFromUrgency(urgency);
+  const priorityRank = { low: 1, medium: 2, high: 3, emergency: 4 };
+
+  const corpus = [
+    slots.issue,
+    ...history.map((m) => m?.content),
+    newMessage,
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  const emergencySignals = /(fire|gas\s+leak|flood|flooding|burst\s+pipe|electrical\s+fire|smoke|uninhabitable)/;
+  if (emergencySignals.test(corpus)) return 'emergency';
+
+  const highSignals = /(no\s+heat|no\s+hot\s+water|power\s+outage|sewage|mold|cannot\s+lock|won'?t\s+lock)/;
+  if (highSignals.test(corpus) && priorityRank[base] < priorityRank.high) return 'high';
+
+  return base;
+}
+
 module.exports = {
   REQUIRED_MAINTENANCE_FIELDS,
+  MAINTENANCE_CATEGORIES,
   deriveMaintenanceSlots,
   mergeSlots,
   getMissingFields,
   buildMaintenanceGuidance,
+  inferMaintenanceCategory,
+  inferMaintenancePriority,
 };

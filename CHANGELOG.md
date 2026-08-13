@@ -10,6 +10,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - No unreleased entries yet.
 
 ---
+## [1.15.2] — 2026-08-12 — Sprint D.2 Slice: Conversation-to-Ticket Action + Inference
+
+### Added
+- **Conversation-driven maintenance request action** — Added `create_maintenance_request` action support to both landlord and supervisor conversation update flows, backed by `conversationService.createMaintenanceRequestFromConversation(...)`.
+- **Supervisor triage visibility parity** — Added maintenance triage status panel to Supervisor thread view, mirroring landlord thread visibility for captured/missing triage slots.
+- **Duplicate-creation guardrail** — Added server-side protection to block creating multiple maintenance requests from the same conversation once a request marker has been recorded.
+
+### Changed
+- **AI Inbox + Supervisor UI controls** — Added “Create ticket” controls with eligibility gating (maintenance category, all triage slots present, not already created, not resolved) and success/error toasts.
+- **Ticket creation now uses inferred classification** — Maintenance requests created from conversation triage now infer `category` from triage language (`plumbing|electric|hvac|appliance|structural|other`) instead of always defaulting to `other`.
+- **Priority inference hardened** — Maintenance request priority now derives from urgency baseline with safety overrides for emergency/high-risk language (e.g., flood, burst pipe, gas leak, no heat).
+
+### Quality
+- Added and updated targeted unit coverage for:
+  - maintenance request creation from conversation
+  - duplicate creation prevention
+  - inferred category/priority behavior
+  - inbox/supervisor action handling
+- Verified focused backend unit suites and frontend production build after these changes.
+
+---
 ## [1.15.1] — 2026-08-12 — Sprint D.2 Slice: Maintenance Triage Continuity
 
 ### Added

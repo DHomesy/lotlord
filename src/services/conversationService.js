@@ -29,9 +29,11 @@ const userRepo         = require('../dal/userRepository');
 const tenantRepo       = require('../dal/tenantRepository');
 const leaseRepo        = require('../dal/leaseRepository');
 const ledgerRepo       = require('../dal/ledgerRepository');
+const maintenanceRepo  = require('../dal/maintenanceRepository');
 const notificationService = require('./notificationService');
 const aiPromptAssemblyService = require('./aiPromptAssemblyService');
 const maintenanceTriageService = require('./maintenanceTriageService');
+const audit = require('./auditService');
 const openai           = require('../integrations/openai');
 
 // Escalation trigger words — any match raises risk + review flags.
@@ -140,6 +142,102 @@ async function setAutomationMode(conversationId, mode) {
     throw Object.assign(new Error('Invalid automation mode'), { status: 400 });
   }
   return convRepo.update(conversationId, { automation_mode: mode });
+}
+
+/**
+ * Create a maintenance request from a triaged maintenance conversation.
+ * Requires all triage slots (issue, onset_time, location) to be present.
+ */
+async function createMaintenanceRequestFromConversation(conversationId, actorId) {
+  const conv = await convRepo.findById(conversationId);
+  if (!conv) throw Object.assign(new Error('Conversation not found'), { status: 404 });
+  if (conv.category !== 'maintenance') {
+    throw Object.assign(new Error('Conversation is not categorized as maintenance'), { status: 409 });
+  }
+  if (String(conv.review_reason || '').startsWith('maintenance_request_created:')) {
+    throw Object.assign(new Error('Maintenance request already created for this conversation'), { status: 409 });
+  }
+
+  const slots = {
+    issue: conv.maintenance_issue,
+    onset_time: conv.maintenance_onset_time,
+    location: conv.maintenance_location,
+  };
+  const missingFields = maintenanceTriageService.getMissingFields(slots);
+  if (missingFields.length) {
+    throw Object.assign(
+      new Error(`Cannot create maintenance request until required fields are captured: ${missingFields.join(', ')}`),
+      { status: 409 },
+    );
+  }
+
+  let leases = await leaseRepo.findAll({ tenantId: conv.tenant_id, ownerId: conv.owner_id, status: 'active', limit: 1 });
+  if (!Array.isArray(leases) || !leases.length) {
+    leases = await leaseRepo.findAll({ tenantId: conv.tenant_id, ownerId: conv.owner_id, status: 'pending', limit: 1 });
+  }
+  if (!Array.isArray(leases) || !leases.length || !leases[0].unit_id) {
+    throw Object.assign(new Error('No eligible lease/unit found for this tenant conversation'), { status: 409 });
+  }
+
+  const tenant = await tenantRepo.findById(conv.tenant_id);
+  if (!tenant?.user_id) {
+    throw Object.assign(new Error('Tenant user not found for conversation'), { status: 404 });
+  }
+
+  const category = maintenanceTriageService.inferMaintenanceCategory({ slots });
+  const priority = maintenanceTriageService.inferMaintenancePriority({
+    slots,
+    urgency: conv.urgency,
+  });
+  const title = String(slots.issue || 'Maintenance request').trim().slice(0, 180) || 'Maintenance request';
+  const description = [
+    `Issue: ${slots.issue}`,
+    `When started: ${slots.onset_time}`,
+    `Location: ${slots.location}`,
+    `Source conversation: ${conv.id}`,
+  ].join('\n');
+
+  const request = await maintenanceRepo.create({
+    id: uuidv4(),
+    unitId: leases[0].unit_id,
+    submittedBy: tenant.user_id,
+    category,
+    priority,
+    title,
+    description,
+  });
+
+  audit.log({
+    action: 'maintenance_request_created_from_conversation',
+    resourceType: 'maintenance',
+    resourceId: request.id,
+    userId: actorId || conv.owner_id || null,
+    metadata: {
+      conversationId: conv.id,
+      ownerId: conv.owner_id,
+      tenantId: conv.tenant_id,
+      priority,
+      category,
+    },
+  });
+
+  const updatedConversation = await convRepo.update(conv.id, {
+    needs_human_review: true,
+    review_reason: `maintenance_request_created:${request.id}`,
+  });
+
+  await convRepo.appendMessage({
+    id: uuidv4(),
+    conversationId: conv.id,
+    role: 'system',
+    content: `Maintenance request created (${request.id}) for follow-up.`,
+    suggested: false,
+  });
+
+  return {
+    conversation: updatedConversation,
+    maintenanceRequest: request,
+  };
 }
 
 // ── AI approval flow ──────────────────────────────────────────────────────────
@@ -603,6 +701,7 @@ module.exports = {
   resolveConversation,
   reopenConversation,
   escalateConversation,
+  createMaintenanceRequestFromConversation,
   setAutomationMode,
   markRead,
   approveSuggestedReply,

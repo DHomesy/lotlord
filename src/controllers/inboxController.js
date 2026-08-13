@@ -169,6 +169,9 @@ async function updateConversation(req, res, next) {
     if (action === 'reopen')     return res.json(await conversationService.reopenConversation(conv.id));
     if (action === 'escalate')   return res.json(await conversationService.escalateConversation(conv.id, req.user.sub));
     if (action === 'mark_read')  return res.json(await conversationService.markRead(conv.id));
+    if (action === 'create_maintenance_request') {
+      return res.status(201).json(await conversationService.createMaintenanceRequestFromConversation(conv.id, req.user.sub));
+    }
     if (action === 'set_mode') {
       const { mode } = req.body;
       if (!VALID_AUTOMATION_MODES.includes(mode)) {
@@ -314,6 +317,9 @@ async function supervisorUpdateConversation(req, res, next) {
     if (action === 'reopen')    return res.json(await conversationService.reopenConversation(conv.id));
     if (action === 'escalate')  return res.json(await conversationService.escalateConversation(conv.id, req.user.sub));
     if (action === 'mark_read') return res.json(await conversationService.markRead(conv.id));
+    if (action === 'create_maintenance_request') {
+      return res.status(201).json(await conversationService.createMaintenanceRequestFromConversation(conv.id, req.user.sub));
+    }
     if (action === 'set_mode') {
       const { mode } = req.body;
       if (!VALID_AUTOMATION_MODES.includes(mode)) {

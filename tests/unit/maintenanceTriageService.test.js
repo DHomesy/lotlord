@@ -59,4 +59,29 @@ describe('maintenanceTriageService', () => {
 
     expect(guidance).toContain('All required maintenance fields are present');
   });
+
+  test('infers plumbing category from slot language', () => {
+    const category = triage.inferMaintenanceCategory({
+      slots: {
+        issue: 'Kitchen sink leaking under cabinet',
+        onset_time: 'today',
+        location: 'kitchen',
+      },
+    });
+
+    expect(category).toBe('plumbing');
+  });
+
+  test('elevates to emergency priority when emergency signals are present', () => {
+    const priority = triage.inferMaintenancePriority({
+      slots: {
+        issue: 'There is flooding from a burst pipe',
+        onset_time: '10 minutes ago',
+        location: 'bathroom',
+      },
+      urgency: 3,
+    });
+
+    expect(priority).toBe('emergency');
+  });
 });

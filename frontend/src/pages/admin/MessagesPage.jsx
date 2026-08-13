@@ -624,6 +624,14 @@ function MaintenanceSlotStatusPanel({ conv }) {
   )
 }
 
+function canCreateMaintenanceRequest(conv) {
+  if (!conv || conv.category !== 'maintenance') return false
+  if (conv.status === 'resolved') return false
+  if (String(conv.review_reason || '').startsWith('maintenance_request_created:')) return false
+  const missing = Array.isArray(conv.maintenance_missing_fields) ? conv.maintenance_missing_fields : []
+  return missing.length === 0
+}
+
 function InboundTracePanel({ conversationId }) {
   const { data: trace, isLoading, isError } = useInboxConversationTrace(conversationId)
 
@@ -1001,7 +1009,7 @@ function AiThreadView({ conversationId, onBack }) {
 
   const handleAction = (action, extra = {}) => {
     updateConv({ id: conv.id, action, ...extra }, {
-      onSuccess: () => {
+      onSuccess: (result) => {
         refetch()
         if (action === 'reopen') showToast('Conversation reopened. AI workflow restored.')
         if (action === 'escalate') showToast('Conversation escalated. Human review has been flagged.')
@@ -1009,6 +1017,14 @@ function AiThreadView({ conversationId, onBack }) {
           const modeLabel = AUTOMATION_MODE_META[extra.mode]?.label || extra.mode
           showToast(`Automation mode set to ${modeLabel}.`)
         }
+        if (action === 'create_maintenance_request') {
+          const requestId = result?.maintenanceRequest?.id
+          showToast(requestId ? `Maintenance request created (${requestId}).` : 'Maintenance request created.')
+        }
+      },
+      onError: (err) => {
+        const msg = err?.response?.data?.error || 'Unable to complete action.'
+        showToast(msg, 'error')
       },
     })
   }
@@ -1016,6 +1032,7 @@ function AiThreadView({ conversationId, onBack }) {
   const isResolved  = conv.status === 'resolved'
   const isEscalated = conv.status === 'escalated'
   const canReopen = isResolved || isEscalated
+  const canCreateTicket = canCreateMaintenanceRequest(conv)
 
   return (
     <Stack sx={{ height: '100%', overflow: 'hidden' }}>
@@ -1071,6 +1088,12 @@ function AiThreadView({ conversationId, onBack }) {
                   Mark resolved
                 </MenuItem>
               )}
+              <MenuItem
+                disabled={!canCreateTicket}
+                onClick={() => { closeActionMenu(); handleAction('create_maintenance_request') }}
+              >
+                Create maintenance request
+              </MenuItem>
               <Divider />
               <MenuItem onClick={() => { closeActionMenu(); handleAction('set_mode', { mode: 'ai_active' }) }}>
                 Set mode: AI Active
@@ -1140,6 +1163,19 @@ function AiThreadView({ conversationId, onBack }) {
                 onClick={() => handleAction('set_mode', { mode: 'human_only' })}
                 sx={{ height: 22, fontSize: 10, cursor: 'pointer' }}
               />
+            </Tooltip>
+            <Tooltip title={canCreateTicket ? 'Create maintenance request from captured triage fields' : 'Fill all maintenance triage fields before creating request'}>
+              <span>
+                <Chip
+                  icon={<CheckCircleOutlineIcon sx={{ fontSize: 13 }} />}
+                  label="Create ticket"
+                  size="small"
+                  color={canCreateTicket ? 'success' : 'default'}
+                  variant={canCreateTicket ? 'filled' : 'outlined'}
+                  onClick={canCreateTicket ? () => handleAction('create_maintenance_request') : undefined}
+                  sx={{ height: 22, fontSize: 10, cursor: canCreateTicket ? 'pointer' : 'not-allowed' }}
+                />
+              </span>
             </Tooltip>
           </Stack>
         )}
