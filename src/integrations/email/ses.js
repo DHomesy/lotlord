@@ -143,28 +143,31 @@ async function sendEmail({ to, subject, html, text, messageId }) {
  * @param {string}  opts.subject     Subject line ("Re: " is prepended if missing)
  * @param {string}  opts.html        HTML reply body
  * @param {string}  [opts.text]      Plain-text fallback
+ * @param {string}  [opts.messageId] Custom Message-ID header value
  * @param {string}  [opts.inReplyTo] Message-ID of the email being replied to
  * @param {string}  [opts.references] Space-separated chain of prior Message-IDs
  */
-async function replyToEmail({ to, subject, html, text, inReplyTo, references }) {
+async function replyToEmail({ to, subject, html, text, messageId, inReplyTo, references }) {
   const safeSubject  = subject ?? '';
   const replySubject = safeSubject.startsWith('Re:') ? safeSubject : `Re: ${safeSubject}`;
   const plainText    = text || html.replace(/<[^>]+>/g, '');
   const boundary     = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
   const headerLines = [
-    `From: LotLord <${env.SES_FROM_ADDRESS}>`,
-    `To: ${to}`,
-    `Subject: ${replySubject}`,
+    `From: LotLord <${sanitizeHeader(env.SES_FROM_ADDRESS)}>` ,
+    `To: ${sanitizeHeader(to)}`,
+    `Subject: ${sanitizeHeader(replySubject)}`,
     `MIME-Version: 1.0`,
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
   ];
 
-  if (inReplyTo)  headerLines.push(`In-Reply-To: ${inReplyTo}`);
+  if (messageId) headerLines.push(`Message-ID: ${sanitizeHeader(messageId)}`);
+  if (env.SES_REPLY_TO_ADDRESS) headerLines.push(`Reply-To: ${sanitizeHeader(env.SES_REPLY_TO_ADDRESS)}`);
+  if (inReplyTo)  headerLines.push(`In-Reply-To: ${sanitizeHeader(inReplyTo)}`);
   if (references || inReplyTo) {
     // References chain: existing refs + the message we're replying to
     const refs = [references, inReplyTo].filter(Boolean).join(' ').trim();
-    headerLines.push(`References: ${refs}`);
+    headerLines.push(`References: ${sanitizeHeader(refs)}`);
   }
 
   // Each body part is base64-encoded to handle non-ASCII characters safely
@@ -175,13 +178,13 @@ async function replyToEmail({ to, subject, html, text, inReplyTo, references }) 
     'Content-Type: text/plain; charset=UTF-8',
     'Content-Transfer-Encoding: base64',
     '',
-    Buffer.from(plainText, 'utf8').toString('base64'),
+    wrapBase64(Buffer.from(plainText, 'utf8').toString('base64')),
     '',
     `--${boundary}`,
     'Content-Type: text/html; charset=UTF-8',
     'Content-Transfer-Encoding: base64',
     '',
-    Buffer.from(html, 'utf8').toString('base64'),
+    wrapBase64(Buffer.from(html, 'utf8').toString('base64')),
     '',
     `--${boundary}--`,
   ].join('\r\n');

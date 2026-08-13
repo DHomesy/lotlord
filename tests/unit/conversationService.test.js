@@ -231,6 +231,31 @@ describe('handleInboundSms', () => {
     expect(openai.generateReply).not.toHaveBeenCalled();
   });
 
+  test('marks soft review and still drafts AI response for non-hard trigger phrases', async () => {
+    tenantRepo.findByUserId.mockResolvedValue(mockTenantRecord);
+    convRepo.findActive.mockResolvedValue(mockConversation);
+    convRepo.appendMessage.mockResolvedValue({ id: 'msg-1' });
+    convRepo.touchOnInbound.mockResolvedValue();
+    userRepo.findById.mockResolvedValue(mockLandlord);
+    convRepo.countRecentAiReplies.mockResolvedValue(0);
+    openai.classifyMessage.mockResolvedValue({ category: 'maintenance', urgency: 4 });
+    convRepo.update.mockResolvedValue({ ...mockConversation, risk_state: 'elevated', needs_human_review: true });
+    convRepo.findMessages.mockResolvedValue([]);
+    openai.generateReply.mockResolvedValue({ reply: 'Let me gather a few details.', tokensUsed: 12, model: 'gpt-4o-mini' });
+
+    await conversationService.handleInboundSms({
+      tenantUserId: TENANT_USER_ID, landlordId: LANDLORD_ID,
+      content: 'We have mold in the bathroom and need help.', logEntryId: LOG_ENTRY_ID,
+    });
+
+    expect(convRepo.update).toHaveBeenCalledWith(CONV_ID, expect.objectContaining({
+      risk_state: 'elevated',
+      needs_human_review: true,
+      review_reason: expect.stringContaining('soft_review_trigger:'),
+    }));
+    expect(openai.generateReply).toHaveBeenCalled();
+  });
+
   test('reuses escalated conversation and still drafts when automation mode is ai_active', async () => {
     // Tenant had an escalated conversation; findActive should return it now
     const escalatedConv = { ...mockConversation, status: 'escalated', automation_mode: 'ai_active' };
@@ -582,7 +607,7 @@ describe('sendManualReply', () => {
   });
 
   test('delivers via email and passes html + text', async () => {
-    convRepo.findById.mockResolvedValue({ ...mockConversation, channel: 'email' });
+    convRepo.findById.mockResolvedValue({ ...mockConversation, channel: 'email', thread_id: '<tenant-last-id@mail.example.com>' });
     notificationService.sendAdhoc = jest.fn().mockResolvedValue({});
 
     await conversationService.sendManualReply(CONV_ID, { content: 'Email reply', senderId: LANDLORD_ID });
@@ -590,6 +615,7 @@ describe('sendManualReply', () => {
     expect(notificationService.sendAdhoc).toHaveBeenCalledWith(expect.objectContaining({
       html: '<p>Email reply</p>',
       text: 'Email reply',
+      inReplyTo: '<tenant-last-id@mail.example.com>',
     }));
   });
 
@@ -674,6 +700,28 @@ describe('handleInboundEmail', () => {
     });
 
     expect(convRepo.create).toHaveBeenCalledWith(expect.objectContaining({ channel: 'email' }));
+  });
+
+  test('stores latest inbound email message ID as thread reply anchor', async () => {
+    tenantRepo.findByUserId.mockResolvedValue(mockTenantRecord);
+    convRepo.findById.mockResolvedValue({ ...mockConversation, tenant_id: TENANT_ID, channel: 'email' });
+    convRepo.appendMessage.mockResolvedValue({ id: 'msg-1' });
+    convRepo.touchOnInbound.mockResolvedValue();
+    userRepo.findById.mockResolvedValue({ ...mockLandlord, ai_enabled: false });
+
+    await conversationService.handleInboundEmail({
+      tenantUserId: TENANT_USER_ID,
+      landlordId: LANDLORD_ID,
+      content: 'Following up by email',
+      logEntryId: LOG_ENTRY_ID,
+      channel: 'email',
+      conversationId: CONV_ID,
+      inboundMessageId: '<tenant-msg-id@mail.example.com>',
+    });
+
+    expect(convRepo.update).toHaveBeenCalledWith(CONV_ID, {
+      thread_id: '<tenant-msg-id@mail.example.com>',
+    });
   });
 
   // ── F2 threading: directConvId ─────────────────────────────────────────────

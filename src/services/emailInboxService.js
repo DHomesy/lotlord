@@ -186,6 +186,7 @@ async function processInboundEmail(msg) {
     logEntryId:    logEntry.id,
     channel:       'email',
     conversationId,
+    inboundMessageId: msg.messageId,
   }).catch((err) => console.error('[emailInbox] AI handling failed:', err.message));
 
   return logEntry;

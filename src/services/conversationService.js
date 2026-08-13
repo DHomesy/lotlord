@@ -36,10 +36,14 @@ const maintenanceTriageService = require('./maintenanceTriageService');
 const audit = require('./auditService');
 const openai           = require('../integrations/openai');
 
-// Escalation trigger words — any match raises risk + review flags.
-const ESCALATION_TRIGGERS = [
-  'emergency', 'flood', 'fire', 'gas leak', 'no heat', 'mold', 'uninhabitable',
-  'lawyer', 'attorney', 'sue', 'lawsuit', 'eviction', 'court',
+// Hard escalation: immediately stop AI handling for this inbound turn.
+const HARD_ESCALATION_TRIGGERS = [
+  'fire', 'gas leak', 'lawyer', 'attorney', 'sue', 'lawsuit', 'eviction', 'court',
+];
+
+// Soft review: keep AI triage active (mode permitting), but flag human review.
+const SOFT_REVIEW_TRIGGERS = [
+  'emergency', 'flood', 'no heat', 'mold', 'uninhabitable',
 ];
 
 const AI_RATE_LIMIT_PER_DAY = 5;
@@ -59,8 +63,8 @@ async function handleInboundSms({ tenantUserId, landlordId, content, logEntryId,
  * Handle an inbound email from a tenant.
  * Called fire-and-forget from emailInboxService.
  */
-async function handleInboundEmail({ tenantUserId, landlordId, content, logEntryId, channel = 'email', conversationId }) {
-  return _handleInbound({ tenantUserId, landlordId, content, logEntryId, channel, conversationId });
+async function handleInboundEmail({ tenantUserId, landlordId, content, logEntryId, channel = 'email', conversationId, inboundMessageId }) {
+  return _handleInbound({ tenantUserId, landlordId, content, logEntryId, channel, conversationId, inboundMessageId });
 }
 
 /**
@@ -286,6 +290,7 @@ async function approveSuggestedReply(conversationId, approvedBy, expectedMsgId) 
       tenantUser,
       landlord,
       conversationId,
+      threadId: conv.thread_id,
     });
   } catch (deliveryErr) {
     // Best-effort reversal so the draft reappears as pending for a retry.
@@ -333,7 +338,7 @@ async function sendManualReply(conversationId, { content, senderId }) {
   const tenantUser = await _getTenantUser(conv.tenant_id);
   if (!tenantUser) throw Object.assign(new Error('Tenant user not found'), { status: 404 });
 
-  await _deliverMessage({ content, channel: conv.channel, tenantUser, landlord, conversationId });
+  await _deliverMessage({ content, channel: conv.channel, tenantUser, landlord, conversationId, threadId: conv.thread_id });
 
   return convRepo.appendMessage({
     id:             uuidv4(),
@@ -364,7 +369,7 @@ async function supervisorOverride(conversationId, content, adminId) {
   if (!tenantUser) throw Object.assign(new Error('Tenant user not found'), { status: 404 });
 
   // Deliver immediately
-  await _deliverMessage({ content, channel: conv.channel, tenantUser, landlord, conversationId });
+  await _deliverMessage({ content, channel: conv.channel, tenantUser, landlord, conversationId, threadId: conv.thread_id });
 
   return convRepo.appendMessage({
     id:                 uuidv4(),
@@ -380,7 +385,7 @@ async function supervisorOverride(conversationId, content, adminId) {
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
-async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, channel, conversationId: directConvId }) {
+async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, channel, conversationId: directConvId, inboundMessageId }) {
   if (!tenantUserId) return; // Unknown sender — nothing to do
 
   // Look up the tenants record for this user
@@ -451,6 +456,12 @@ async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, c
   });
   await convRepo.touchOnInbound(conv.id);
 
+  // For email threads, keep the latest inbound Message-ID as reply anchor.
+  if (channel === 'email' && inboundMessageId) {
+    await convRepo.update(conv.id, { thread_id: inboundMessageId });
+    conv.thread_id = inboundMessageId;
+  }
+
   if (resolvedLandlordId) {
     _notifyLandlordOfTenantReply(resolvedLandlordId, {
       tenantName: `${tenantRecord.first_name || ''} ${tenantRecord.last_name || ''}`.trim() || 'Tenant',
@@ -463,13 +474,22 @@ async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, c
   // Stop here if no landlord context or conversation policy explicitly requires human-only mode.
   if (!resolvedLandlordId || conv.automation_mode === 'human_only') return;
 
-  // Check for escalation triggers first
+  // Check escalation/review policy first.
   const lower = content.toLowerCase();
-  const triggerFound = ESCALATION_TRIGGERS.find((t) => lower.includes(t));
-  if (triggerFound) {
-    console.warn(`[conversationService] Escalation trigger "${triggerFound}" in conversation ${conv.id}`);
+  const hardTrigger = HARD_ESCALATION_TRIGGERS.find((t) => lower.includes(t));
+  if (hardTrigger) {
+    console.warn(`[conversationService] Escalation trigger "${hardTrigger}" in conversation ${conv.id}`);
     await escalateConversation(conv.id, resolvedLandlordId);
     return;
+  }
+
+  const softTrigger = SOFT_REVIEW_TRIGGERS.find((t) => lower.includes(t));
+  if (softTrigger) {
+    await convRepo.update(conv.id, {
+      risk_state: 'elevated',
+      needs_human_review: true,
+      review_reason: `soft_review_trigger:${softTrigger}`,
+    });
   }
 
   // Load landlord to check AI config
@@ -596,7 +616,7 @@ async function _buildContext(tenantId) {
  * Email content is plain-text wrapped in a minimal safe HTML shell so
  * raw tenant-controlled text never renders as HTML in the landlord's email.
  */
-async function _deliverMessage({ content, channel, tenantUser, landlord, conversationId }) {
+async function _deliverMessage({ content, channel, tenantUser, landlord, conversationId, threadId }) {
   if (channel === 'sms') {
     let body = content;
     try {
@@ -630,12 +650,17 @@ async function _deliverMessage({ content, channel, tenantUser, landlord, convers
     const domain    = (env.SES_FROM_ADDRESS || 'lotlord.app').split('@')[1] || 'lotlord.app';
     const messageId = conversationId ? `<conv-${conversationId}-${Date.now()}@${domain}>` : undefined;
 
+    const inReplyTo = threadId || undefined;
+    const references = inReplyTo || undefined;
+
     await notificationService.sendAdhoc({
       recipientId: tenantUser.id,
       subject:     'Message from your property manager',
       html:        `<p>${safeHtml}</p>`,
       text:        content,
       messageId,
+      inReplyTo,
+      references,
     });
   }
 }

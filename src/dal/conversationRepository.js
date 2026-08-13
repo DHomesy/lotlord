@@ -68,6 +68,7 @@ async function update(id, fields) {
     'urgency',
     'category',
     'unread_count',
+    'thread_id',
     'risk_state',
     'automation_mode',
     'needs_human_review',

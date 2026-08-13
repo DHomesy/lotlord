@@ -10,6 +10,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - No unreleased entries yet.
 
 ---
+## [1.15.3] — 2026-08-13 — Sprint D.2 Slice: Email Reply Threading + Escalation Tuning
+
+### Added
+- **Threading context persistence for email conversations** — Inbound tenant email `Message-ID` is now stored as the conversation thread anchor so outbound replies can reference the tenant's latest email for mailbox-level threading continuity.
+- **AI inbox behavior visibility docs** — Added a behavior matrix and action-surface clarification in `README.md` for easier testing and operator awareness.
+
+### Changed
+- **Outbound conversation email now replies in-thread when context exists** — Email sends now use RFC 2822 reply headers (`In-Reply-To` / `References`) when prior inbound thread context is present.
+- **Escalation policy split into hard vs soft review triggers** — Hard legal/safety triggers still escalate immediately; softer risk signals now mark human review while AI triage can continue when automation mode permits.
+- **Conversation repository update allow-list expanded** — `thread_id` is now updatable via repository metadata update path to support reply-thread anchoring.
+
+### Quality
+- Added/updated unit coverage for:
+  - soft-review trigger behavior (review flag + continued AI drafting)
+  - inbound email thread anchor persistence
+  - outbound email reply threading parameter wiring
+- Verified focused backend unit suites after changes.
+
+---
 ## [1.15.2] — 2026-08-12 — Sprint D.2 Slice: Conversation-to-Ticket Action + Inference
 
 ### Added
