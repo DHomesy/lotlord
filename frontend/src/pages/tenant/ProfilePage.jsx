@@ -6,8 +6,10 @@ import { TextField, Stack, Button, Alert, Typography, Card, CardContent, Divider
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import BugReportIcon from '@mui/icons-material/BugReport'
 import PageContainer from '../../components/layout/PageContainer'
 import ConnectBankDialog from '../../components/billing/ConnectBankDialog'
+import ReportBugDialog from '../../components/support/ReportBugDialog'
 import { useAuthStore } from '../../store/authStore'
 import { useUpdateMe, useChangePassword } from '../../hooks/useUsers'
 import { useMyPaymentMethods } from '../../hooks/useStripeSetup'
@@ -28,6 +30,7 @@ export default function TenantProfilePage() {
   const { mutate: changePassword, isPending: changingPw, isSuccess: pwChanged, isError: pwError } = useChangePassword()
   const { data: paymentMethods = [] } = useMyPaymentMethods()
   const [bankOpen, setBankOpen] = useState(false)
+  const [reportBugOpen, setReportBugOpen] = useState(false)
 
   const profileForm = useForm({ resolver: zodResolver(profileSchema), defaultValues: { name: user?.name || '', phone: user?.phone || '' } })
   const passwordForm = useForm({ resolver: zodResolver(passwordSchema) })
@@ -112,6 +115,25 @@ export default function TenantProfilePage() {
       )}
 
       <ConnectBankDialog open={bankOpen} onClose={() => setBankOpen(false)} />
+
+      <Divider sx={{ my: 4 }} />
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'flex-start', sm: 'center' }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="h6">Support</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Found a bug? Send a quick report and we will follow up.
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          startIcon={<BugReportIcon />}
+          onClick={() => setReportBugOpen(true)}
+        >
+          Report a Bug
+        </Button>
+      </Stack>
+
+      <ReportBugDialog open={reportBugOpen} onClose={() => setReportBugOpen(false)} />
     </PageContainer>
   )
 }

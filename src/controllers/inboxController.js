@@ -10,6 +10,7 @@ const VALID_STATUSES     = ['open', 'resolved', 'escalated'];
 const VALID_CATEGORIES   = ['maintenance', 'payment', 'lease', 'general'];
 const VALID_AUTOMATION_MODES = ['ai_active', 'ai_assist_only', 'human_only'];
 const VALID_UNMATCHED_STATUSES = ['open', 'resolved'];
+const VALID_OWNER_QA_INTENTS = ['upcoming_dues', 'past_due_tenants', 'balance_by_tenant', 'maintenance_overview'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -172,6 +173,19 @@ async function updateConversation(req, res, next) {
     if (action === 'create_maintenance_request') {
       return res.status(201).json(await conversationService.createMaintenanceRequestFromConversation(conv.id, req.user.sub));
     }
+    if (action === 'owner_qa_snapshot') {
+      const { intent, daysAhead, limit } = req.body;
+      if (!VALID_OWNER_QA_INTENTS.includes(String(intent || '').toLowerCase())) {
+        return res.status(400).json({
+          error: `intent must be one of: ${VALID_OWNER_QA_INTENTS.join(', ')}`,
+        });
+      }
+      return res.json(await conversationService.getOwnerQASnapshotFromConversation(conv.id, req.user.sub, {
+        intent,
+        daysAhead,
+        limit,
+      }));
+    }
     if (action === 'set_mode') {
       const { mode } = req.body;
       if (!VALID_AUTOMATION_MODES.includes(mode)) {
@@ -319,6 +333,19 @@ async function supervisorUpdateConversation(req, res, next) {
     if (action === 'mark_read') return res.json(await conversationService.markRead(conv.id));
     if (action === 'create_maintenance_request') {
       return res.status(201).json(await conversationService.createMaintenanceRequestFromConversation(conv.id, req.user.sub));
+    }
+    if (action === 'owner_qa_snapshot') {
+      const { intent, daysAhead, limit } = req.body;
+      if (!VALID_OWNER_QA_INTENTS.includes(String(intent || '').toLowerCase())) {
+        return res.status(400).json({
+          error: `intent must be one of: ${VALID_OWNER_QA_INTENTS.join(', ')}`,
+        });
+      }
+      return res.json(await conversationService.getOwnerQASnapshotFromConversation(conv.id, req.user.sub, {
+        intent,
+        daysAhead,
+        limit,
+      }));
     }
     if (action === 'set_mode') {
       const { mode } = req.body;

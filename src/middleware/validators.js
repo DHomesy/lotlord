@@ -317,6 +317,23 @@ const sendSmsValidators = [
     .isLength({ max: 1600 }).withMessage('body must be 1600 characters or fewer'),
 ];
 
+const reportBugValidators = [
+  body('summary')
+    .trim()
+    .notEmpty().withMessage('summary is required')
+    .isLength({ max: 160 }).withMessage('summary must be 160 characters or fewer'),
+  body('details')
+    .trim()
+    .notEmpty().withMessage('details are required')
+    .isLength({ max: 3000 }).withMessage('details must be 3000 characters or fewer'),
+  body('severity')
+    .optional()
+    .isIn(['low', 'medium', 'high', 'critical']).withMessage('severity must be low, medium, high, or critical'),
+  body('pageUrl')
+    .optional({ values: 'falsy' })
+    .isLength({ max: 500 }).withMessage('pageUrl must be 500 characters or fewer'),
+];
+
 // ── Users update ──────────────────────────────────────────────────────────────
 const updateUserValidators = [
   body('firstName').optional().trim().notEmpty().withMessage('firstName must not be blank'),
@@ -364,6 +381,7 @@ module.exports = {
   updateTemplateValidators,
   sendNotificationValidators,
   sendSmsValidators,
+  reportBugValidators,
   createSetupIntentValidators,
   createPaymentIntentValidators,
   createChargeValidators,

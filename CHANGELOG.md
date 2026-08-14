@@ -10,6 +10,45 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - No unreleased entries yet.
 
 ---
+## [1.15.5] — 2026-08-13 — Sprint D.3 Slice: Owner Q&A Query Broker (Initial)
+
+### Added
+- **Deterministic owner Q&A broker service** — Added `ownerQaService.getOwnerSnapshot(...)` with strict, whitelisted intents:
+  - `upcoming_dues`
+  - `past_due_tenants`
+  - `balance_by_tenant`
+  - `maintenance_overview`
+- **Owner-scoped data query repository** — Added `ownerQaRepository` SQL paths that scope all portfolio snapshots by authenticated owner context.
+- **Conversation action for owner snapshots** — Added `owner_qa_snapshot` action support in landlord inbox and supervisor conversation update flows.
+- **Audit trace for owner Q&A usage** — Added `owner_qa_snapshot_requested` audit event and system trace message on snapshot generation.
+
+### Changed
+- **AI inbox/supervisor action surface** — `PATCH /inbox/:id` and `PATCH /supervisor/conversations/:id` now accept `owner_qa_snapshot` action payloads with validated intent values.
+
+### Quality
+- Added focused unit tests for:
+  - `ownerQaService` intent routing, summaries, and validation
+  - `conversationService.getOwnerQASnapshotFromConversation(...)`
+  - inbox/supervisor controller action dispatch for `owner_qa_snapshot`
+- Verified targeted unit suites (`ownerQaService`, `conversationService`, `inboxController`).
+
+---
+## [1.15.4] — 2026-08-13 — Sprint D.3 Slice: In-App Bug Reporting
+
+### Added
+- **Authenticated bug reporting endpoint** — Added `POST /api/v1/notifications/report-bug` for admin, landlord, employee, and tenant users to submit bug reports with summary, details, severity, and page context.
+- **Backend bug-report service** — Added `bugReportService.submitBugReport(...)` to normalize severity, generate report IDs, deliver support alerts, and write audit entries.
+- **Audit trail for support submissions** — Added `bug_report_submitted` audit action with reporter and context metadata.
+- **Frontend beta support dialog** — Added reusable `ReportBugDialog` and integrated “Report a Bug” entry points into both admin and tenant Profile pages.
+
+### Changed
+- **Support routing fallback behavior** — Bug reports now route to `BUG_REPORT_EMAIL` when configured, otherwise fall back to `ALERT_EMAIL`.
+- **Validation coverage for bug payloads** — Added server-side validators for bug summary/details/severity/page URL length limits.
+
+### Quality
+- Added focused unit coverage for bug report submission behavior and support-email fallback logic in `tests/unit/bugReportService.test.js`.
+
+---
 ## [1.15.3] — 2026-08-13 — Sprint D.2 Slice: Email Reply Threading + Escalation Tuning
 
 ### Added

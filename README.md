@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.15.3 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.15.5 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -658,8 +658,8 @@ Base URL: `/api/v1`
 | Notifications | `POST /notifications/send` (email, ad-hoc or template), `POST /notifications/send-sms` (ad-hoc SMS), `GET /notifications/log`, `GET /notifications/log/:id` |
 | Messages | `GET /notifications/messages` (conversation list), `POST /notifications/messages` (send message to tenant), `GET /notifications/messages/:tenantId` (conversation thread) |
 | Webhooks | `POST /webhooks/stripe`, `POST /webhooks/aws/sms`, `POST /webhooks/ses` (inbound email from Lambda), `POST /webhooks/ses/bounce` (SNS bounce/complaint) |
-| AI Inbox | `GET /inbox`, `GET /inbox/:id`, `GET /inbox/:id/trace`, `GET /inbox/unread-summary`, `PATCH /inbox/:id` (actions: resolve, escalate, reopen, mark_read, set_mode, create_maintenance_request), `POST /inbox/:id/reply`, `POST /inbox/:id/messages/:msgId/approve`, `DELETE /inbox/:id/messages/:msgId` |
-| AI Supervisor | `GET /supervisor/conversations`, `POST /supervisor/conversations/:id/override`, `PATCH /supervisor/conversations/:id` (actions include set_mode + create_maintenance_request), `GET /supervisor/unmatched-inbound`, `PATCH /supervisor/unmatched-inbound/:id` (admin only) |
+| AI Inbox | `GET /inbox`, `GET /inbox/:id`, `GET /inbox/:id/trace`, `GET /inbox/unread-summary`, `PATCH /inbox/:id` (actions: resolve, escalate, reopen, mark_read, set_mode, create_maintenance_request, owner_qa_snapshot), `POST /inbox/:id/reply`, `POST /inbox/:id/messages/:msgId/approve`, `DELETE /inbox/:id/messages/:msgId` |
+| AI Supervisor | `GET /supervisor/conversations`, `POST /supervisor/conversations/:id/override`, `PATCH /supervisor/conversations/:id` (actions include set_mode, create_maintenance_request, owner_qa_snapshot), `GET /supervisor/unmatched-inbound`, `PATCH /supervisor/unmatched-inbound/:id` (admin only) |
 | AI | `GET /ai/conversations`, `GET /ai/conversations/:id/messages` |
 | Audit Log | `GET /audit` (admin only; query params: `resourceType`, `action`, `userId`, `resourceId`, `startDate`, `endDate`, `page`, `limit`) |
 | Health | `GET /health` → `{ status, version, env }` — unauthenticated; useful for uptime monitoring |
@@ -1115,6 +1115,8 @@ OPENAI_API_KEY=
 
 # Error alerting (production only)
 ALERT_EMAIL=
+# Optional dedicated destination for in-app bug reports
+BUG_REPORT_EMAIL=
 ```
 
 ---

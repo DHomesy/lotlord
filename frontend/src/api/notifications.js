@@ -12,3 +12,4 @@ export const sendNotification = (data) => http.post(`${base}/send`, data).then((
 export const getConversations = () => http.get(`${base}/messages`).then((r) => r.data)
 export const getConversation  = (tenantId) => http.get(`${base}/messages/${tenantId}`).then((r) => r.data)
 export const sendMessage      = (data) => http.post(`${base}/messages`, data).then((r) => r.data)
+export const reportBug        = (data) => http.post(`${base}/report-bug`, data).then((r) => r.data)

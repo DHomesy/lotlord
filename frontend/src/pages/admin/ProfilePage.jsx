@@ -19,7 +19,9 @@ import HistoryIcon from '@mui/icons-material/History'
 import PeopleIcon from '@mui/icons-material/People'
 import SmsIcon from '@mui/icons-material/Sms'
 import SmartToyIcon from '@mui/icons-material/SmartToy'
+import BugReportIcon from '@mui/icons-material/BugReport'
 import PageContainer from '../../components/layout/PageContainer'
+import ReportBugDialog from '../../components/support/ReportBugDialog'
 import { useAuthStore } from '../../store/authStore'
 import { useUpdateMe, useChangePassword, useMe, useSmsStatus, useProvisionSms, useDeprovisionSms } from '../../hooks/useUsers'
 import { useConnectStatus, useConnectOnboard, useConnectLogin } from '../../hooks/useStripeSetup'
@@ -106,6 +108,7 @@ export default function AdminProfilePage() {
   const [connectBanner,  setConnectBanner]  = useState(null) // 'success' | 'refresh' | null
   const [billingBanner,  setBillingBanner]  = useState(null) // 'success' | 'canceled' | null
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
+  const [reportBugOpen, setReportBugOpen] = useState(false)
   const subscriptionRef = useRef(null)
 
   // Detect return from Stripe Connect onboarding redirect
@@ -227,6 +230,23 @@ export default function AdminProfilePage() {
         />
         <Button type="submit" variant="contained" disabled={changingPw} sx={{ alignSelf: 'flex-start' }}>
           {changingPw ? 'Saving…' : 'Change Password'}
+        </Button>
+      </Stack>
+
+      <Divider sx={{ my: 4 }} />
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'flex-start', sm: 'center' }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="h6">Support</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Found a bug while testing? Send us details with your current page context.
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          startIcon={<BugReportIcon />}
+          onClick={() => setReportBugOpen(true)}
+        >
+          Report a Bug
         </Button>
       </Stack>
 
@@ -630,6 +650,8 @@ export default function AdminProfilePage() {
         existing messages will continue to work throughout.
       </Alert>
       </>)}
+
+      <ReportBugDialog open={reportBugOpen} onClose={() => setReportBugOpen(false)} />
 
       {/* ── AI Settings (landlord only) ── */}
       {isLandlord && canUsePaidComms && (<>

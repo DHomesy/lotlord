@@ -33,6 +33,7 @@ const maintenanceRepo  = require('../dal/maintenanceRepository');
 const notificationService = require('./notificationService');
 const aiPromptAssemblyService = require('./aiPromptAssemblyService');
 const maintenanceTriageService = require('./maintenanceTriageService');
+const ownerQaService = require('./ownerQaService');
 const audit = require('./auditService');
 const openai           = require('../integrations/openai');
 
@@ -241,6 +242,50 @@ async function createMaintenanceRequestFromConversation(conversationId, actorId)
   return {
     conversation: updatedConversation,
     maintenanceRequest: request,
+  };
+}
+
+/**
+ * Run a deterministic owner-scoped portfolio snapshot query from conversation context.
+ */
+async function getOwnerQASnapshotFromConversation(conversationId, actorId, { intent, daysAhead, limit } = {}) {
+  const conv = await convRepo.findById(conversationId);
+  if (!conv) throw Object.assign(new Error('Conversation not found'), { status: 404 });
+  if (!conv.owner_id) {
+    throw Object.assign(new Error('Conversation is not associated with an owner scope'), { status: 409 });
+  }
+
+  const snapshot = await ownerQaService.getOwnerSnapshot({
+    ownerId: conv.owner_id,
+    intent,
+    daysAhead,
+    limit,
+  });
+
+  audit.log({
+    action: 'owner_qa_snapshot_requested',
+    resourceType: 'ai_conversation',
+    resourceId: conv.id,
+    userId: actorId || conv.owner_id || null,
+    metadata: {
+      ownerId: conv.owner_id,
+      intent: snapshot.intent,
+      itemCount: Array.isArray(snapshot.items) ? snapshot.items.length : 0,
+      dateContext: snapshot.dateContext,
+    },
+  });
+
+  await convRepo.appendMessage({
+    id: uuidv4(),
+    conversationId: conv.id,
+    role: 'system',
+    content: `Owner Q&A snapshot generated (${snapshot.intent}). ${snapshot.summary}`,
+    suggested: false,
+  });
+
+  return {
+    conversationId: conv.id,
+    snapshot,
   };
 }
 
@@ -727,6 +772,7 @@ module.exports = {
   reopenConversation,
   escalateConversation,
   createMaintenanceRequestFromConversation,
+  getOwnerQASnapshotFromConversation,
   setAutomationMode,
   markRead,
   approveSuggestedReply,

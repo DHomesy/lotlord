@@ -13,6 +13,7 @@ jest.mock('../../src/dal/ledgerRepository');
 jest.mock('../../src/dal/maintenanceRepository');
 jest.mock('../../src/services/notificationService');
 jest.mock('../../src/services/auditService');
+jest.mock('../../src/services/ownerQaService');
 jest.mock('../../src/integrations/openai');
 jest.mock('uuid', () => ({ v4: jest.fn(() => 'test-uuid') }));
 
@@ -24,6 +25,7 @@ const ledgerRepo         = require('../../src/dal/ledgerRepository');
 const maintenanceRepo    = require('../../src/dal/maintenanceRepository');
 const notificationService = require('../../src/services/notificationService');
 const audit              = require('../../src/services/auditService');
+const ownerQaService     = require('../../src/services/ownerQaService');
 const openai             = require('../../src/integrations/openai');
 const conversationService = require('../../src/services/conversationService');
 
@@ -502,6 +504,64 @@ describe('setAutomationMode', () => {
     await expect(conversationService.setAutomationMode(CONV_ID, 'invalid_mode'))
       .rejects.toMatchObject({ status: 400 });
     expect(convRepo.update).not.toHaveBeenCalled();
+  });
+});
+
+// ── getOwnerQASnapshotFromConversation ───────────────────────────────────────
+
+describe('getOwnerQASnapshotFromConversation', () => {
+  test('returns owner snapshot payload and appends trace message', async () => {
+    convRepo.findById.mockResolvedValue(mockConversation);
+    ownerQaService.getOwnerSnapshot.mockResolvedValue({
+      intent: 'upcoming_dues',
+      summary: 'Found 2 upcoming due charge(s).',
+      dateContext: { type: 'window', daysAhead: 14 },
+      items: [{ charge_id: 'c1' }, { charge_id: 'c2' }],
+    });
+    convRepo.appendMessage.mockResolvedValue({ id: 'trace-msg-id' });
+
+    const result = await conversationService.getOwnerQASnapshotFromConversation(
+      CONV_ID,
+      LANDLORD_ID,
+      { intent: 'upcoming_dues', daysAhead: 14, limit: 10 },
+    );
+
+    expect(ownerQaService.getOwnerSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      ownerId: LANDLORD_ID,
+      intent: 'upcoming_dues',
+      daysAhead: 14,
+      limit: 10,
+    }));
+    expect(convRepo.appendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: CONV_ID,
+      role: 'system',
+      content: expect.stringContaining('Owner Q&A snapshot generated (upcoming_dues)'),
+    }));
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'owner_qa_snapshot_requested',
+      resourceId: CONV_ID,
+      userId: LANDLORD_ID,
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      conversationId: CONV_ID,
+      snapshot: expect.objectContaining({ intent: 'upcoming_dues' }),
+    }));
+  });
+
+  test('throws 404 when conversation is not found', async () => {
+    convRepo.findById.mockResolvedValue(null);
+    await expect(
+      conversationService.getOwnerQASnapshotFromConversation(CONV_ID, LANDLORD_ID, { intent: 'upcoming_dues' }),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(ownerQaService.getOwnerSnapshot).not.toHaveBeenCalled();
+  });
+
+  test('throws 409 when conversation has no owner scope', async () => {
+    convRepo.findById.mockResolvedValue({ ...mockConversation, owner_id: null });
+    await expect(
+      conversationService.getOwnerQASnapshotFromConversation(CONV_ID, LANDLORD_ID, { intent: 'upcoming_dues' }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(ownerQaService.getOwnerSnapshot).not.toHaveBeenCalled();
   });
 });
 

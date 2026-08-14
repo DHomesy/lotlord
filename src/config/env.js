@@ -90,4 +90,6 @@ module.exports = {
 
   // Error alerting — email address to notify on 5xx errors and unhandled rejections
   ALERT_EMAIL: optional('ALERT_EMAIL'),
+  // Optional dedicated destination for in-app bug reports (falls back to ALERT_EMAIL)
+  BUG_REPORT_EMAIL: optional('BUG_REPORT_EMAIL'),
 };

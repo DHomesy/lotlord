@@ -332,6 +332,48 @@ describe('updateConversation', () => {
     expect(res.json).toHaveBeenCalledWith(payload);
   });
 
+  test('action=owner_qa_snapshot delegates to service and returns snapshot payload', async () => {
+    const payload = {
+      conversationId: CONV_ID,
+      snapshot: {
+        intent: 'upcoming_dues',
+        summary: 'Found 1 upcoming due charge(s).',
+        items: [{ charge_id: 'charge-1' }],
+      },
+    };
+    conversationService.getOwnerQASnapshotFromConversation.mockResolvedValue(payload);
+
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'owner_qa_snapshot', intent: 'upcoming_dues', daysAhead: 14, limit: 5 },
+      user: { role: 'landlord', sub: OWNER_ID },
+    });
+    const res = makeRes();
+
+    await updateConversation(req, res, next);
+
+    expect(conversationService.getOwnerQASnapshotFromConversation).toHaveBeenCalledWith(CONV_ID, OWNER_ID, {
+      intent: 'upcoming_dues',
+      daysAhead: 14,
+      limit: 5,
+    });
+    expect(res.json).toHaveBeenCalledWith(payload);
+  });
+
+  test('action=owner_qa_snapshot returns 400 for invalid intent', async () => {
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'owner_qa_snapshot', intent: 'not_real' },
+      user: { role: 'landlord', sub: OWNER_ID },
+    });
+    const res = makeRes();
+
+    await updateConversation(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(conversationService.getOwnerQASnapshotFromConversation).not.toHaveBeenCalled();
+  });
+
   test('direct field update succeeds with valid values', async () => {
     const updated = { ...mockConversation, status: 'resolved', urgency: 2, category: 'maintenance' };
     convRepo.update.mockResolvedValue(updated);
@@ -705,6 +747,34 @@ describe('supervisorUpdateConversation', () => {
 
     expect(conversationService.createMaintenanceRequestFromConversation).toHaveBeenCalledWith(CONV_ID, ADMIN_ID);
     expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(payload);
+  });
+
+  test('action=owner_qa_snapshot delegates to service for supervisor', async () => {
+    const payload = {
+      conversationId: CONV_ID,
+      snapshot: {
+        intent: 'past_due_tenants',
+        summary: 'Found 2 tenant(s) with past-due balances.',
+        items: [],
+      },
+    };
+    conversationService.getOwnerQASnapshotFromConversation.mockResolvedValue(payload);
+
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'owner_qa_snapshot', intent: 'past_due_tenants', limit: 10 },
+      user: { role: 'admin', sub: ADMIN_ID },
+    });
+    const res = makeRes();
+
+    await supervisorUpdateConversation(req, res, next);
+
+    expect(conversationService.getOwnerQASnapshotFromConversation).toHaveBeenCalledWith(CONV_ID, ADMIN_ID, {
+      intent: 'past_due_tenants',
+      daysAhead: undefined,
+      limit: 10,
+    });
     expect(res.json).toHaveBeenCalledWith(payload);
   });
 

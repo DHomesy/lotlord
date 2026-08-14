@@ -1,0 +1,92 @@
+jest.mock('../../src/dal/ownerQaRepository');
+
+const ownerQaRepo = require('../../src/dal/ownerQaRepository');
+const ownerQaService = require('../../src/services/ownerQaService');
+
+describe('ownerQaService.getOwnerSnapshot', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('returns upcoming dues snapshot with deterministic summary and date context', async () => {
+    ownerQaRepo.getUpcomingDues.mockResolvedValue([
+      { charge_id: 'c1', amount_due: '125.50' },
+      { charge_id: 'c2', amount_due: '74.50' },
+    ]);
+
+    const result = await ownerQaService.getOwnerSnapshot({
+      ownerId: 'owner-1',
+      intent: 'upcoming_dues',
+      daysAhead: 10,
+      limit: 5,
+    });
+
+    expect(ownerQaRepo.getUpcomingDues).toHaveBeenCalledWith({ ownerId: 'owner-1', daysAhead: 10, limit: 5 });
+    expect(result.intent).toBe('upcoming_dues');
+    expect(result.summary).toBe('Found 2 upcoming due charge(s) in the next 10 day(s), totaling $200.00.');
+    expect(result.dateContext).toEqual(expect.objectContaining({ type: 'window', daysAhead: 10 }));
+  });
+
+  test('returns past due tenant snapshot', async () => {
+    ownerQaRepo.getPastDueTenants.mockResolvedValue([
+      { tenant_user_id: 'u1', overdue_amount: '500.00' },
+    ]);
+
+    const result = await ownerQaService.getOwnerSnapshot({
+      ownerId: 'owner-1',
+      intent: 'past_due_tenants',
+      limit: 10,
+    });
+
+    expect(ownerQaRepo.getPastDueTenants).toHaveBeenCalledWith({ ownerId: 'owner-1', limit: 10 });
+    expect(result.intent).toBe('past_due_tenants');
+    expect(result.summary).toBe('Found 1 tenant(s) with past-due balances totaling $500.00.');
+    expect(result.dateContext).toEqual(expect.objectContaining({ type: 'as_of' }));
+  });
+
+  test('returns tenant balance snapshot', async () => {
+    ownerQaRepo.getTenantBalances.mockResolvedValue([
+      { tenant_user_id: 'u1', balance: '100.00' },
+      { tenant_user_id: 'u2', balance: '25.00' },
+    ]);
+
+    const result = await ownerQaService.getOwnerSnapshot({
+      ownerId: 'owner-1',
+      intent: 'balance_by_tenant',
+    });
+
+    expect(ownerQaRepo.getTenantBalances).toHaveBeenCalledWith({ ownerId: 'owner-1', limit: 10 });
+    expect(result.summary).toBe('Found 2 tenant balance row(s) with total outstanding balance $125.00.');
+  });
+
+  test('returns maintenance overview snapshot', async () => {
+    ownerQaRepo.getMaintenanceOverview.mockResolvedValue({
+      summary: [
+        { status: 'open', priority: 'high', count: 2 },
+        { status: 'in_progress', priority: 'medium', count: 1 },
+      ],
+      recent: [{ id: 'm1' }],
+    });
+
+    const result = await ownerQaService.getOwnerSnapshot({
+      ownerId: 'owner-1',
+      intent: 'maintenance_overview',
+      limit: 7,
+    });
+
+    expect(ownerQaRepo.getMaintenanceOverview).toHaveBeenCalledWith({ ownerId: 'owner-1', limit: 7 });
+    expect(result.summary).toBe('There are 3 open/in-progress maintenance request(s) in the portfolio.');
+    expect(result.breakdown).toHaveLength(2);
+    expect(result.items).toHaveLength(1);
+  });
+
+  test('throws 400 for unsupported intent', async () => {
+    await expect(ownerQaService.getOwnerSnapshot({ ownerId: 'owner-1', intent: 'unknown_intent' }))
+      .rejects.toMatchObject({ status: 400 });
+  });
+
+  test('throws 400 when ownerId is missing', async () => {
+    await expect(ownerQaService.getOwnerSnapshot({ intent: 'upcoming_dues' }))
+      .rejects.toMatchObject({ status: 400 });
+  });
+});

@@ -6,6 +6,7 @@ const {
   updateTemplateValidators,
   sendNotificationValidators,
   sendSmsValidators,
+  reportBugValidators,
   validate,
 } = require('../middleware/validators');
 
@@ -13,6 +14,7 @@ const {
 const adminOnly = [authenticate, authorize('admin')];
 // Messages and log are accessible to landlords and employees too
 const anyStaff  = [authenticate, authorize('admin', 'landlord', 'employee')];
+const anyAuthed = [authenticate, authorize('admin', 'landlord', 'employee', 'tenant')];
 
 // ── Templates ───────────────────────────────────────────────────────────────
 router.get('/templates',        ...adminOnly,                                          controller.listTemplates);
@@ -33,5 +35,8 @@ router.post('/send-sms',      ...adminOnly, sendSmsValidators, validate,        
 // ── Log ─────────────────────────────────────────────────────────────────────
 router.get('/log',            ...anyStaff,                                           controller.getLog);
 router.get('/log/:id',        ...anyStaff,                                           controller.getLogEntry);
+
+// ── Beta support ───────────────────────────────────────────────────────────
+router.post('/report-bug',    ...anyAuthed, reportBugValidators, validate,          controller.reportBug);
 
 module.exports = router;

@@ -1,5 +1,6 @@
 const notificationService = require('../services/notificationService');
 const notificationRepo    = require('../dal/notificationRepository');
+const bugReportService    = require('../services/bugReportService');
 const { resolveOwnerId } = require('../lib/authHelpers');
 
 // Admin gets a null ownerId (sees everything). Landlords/employees get their own id.
@@ -161,6 +162,21 @@ async function getLogEntry(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function reportBug(req, res, next) {
+  try {
+    const { summary, details, severity, pageUrl } = req.body;
+    const result = await bugReportService.submitBugReport({
+      user: req.user,
+      summary,
+      details,
+      severity,
+      pageUrl,
+      userAgent: req.get('user-agent') || '',
+    });
+    res.status(201).json(result);
+  } catch (err) { next(err); }
+}
+
 module.exports = {
   listTemplates,
   getTemplate,
@@ -174,4 +190,5 @@ module.exports = {
   sendMessage,
   getLog,
   getLogEntry,
+  reportBug,
 };

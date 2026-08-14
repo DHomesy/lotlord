@@ -73,3 +73,9 @@ export function useSendNotification() {
     onSuccess: () => qc.invalidateQueries({ queryKey: NOTIF_LOG_KEY }),
   })
 }
+
+export function useReportBug() {
+  return useMutation({
+    mutationFn: api.reportBug,
+  })
+}
