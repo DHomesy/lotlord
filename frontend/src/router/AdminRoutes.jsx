@@ -17,6 +17,7 @@ const DocumentsPage       = lazy(() => import('../pages/admin/DocumentsPage'))
 const NotificationsPage             = lazy(() => import('../pages/admin/NotificationsPage'))
 const NotificationTemplatesPage     = lazy(() => import('../pages/admin/NotificationTemplatesPage'))
 const MessagesPage                  = lazy(() => import('../pages/admin/MessagesPage'))
+const OwnerAssistantPage            = lazy(() => import('../pages/admin/OwnerAssistantPage'))
 const UsersPage                     = lazy(() => import('../pages/admin/UsersPage'))
 const AdminProfilePage              = lazy(() => import('../pages/admin/ProfilePage'))
 const SubscriptionsPage             = lazy(() => import('../pages/admin/SubscriptionsPage'))
@@ -46,6 +47,7 @@ const adminRoutes = [
   { path: '/notifications',              element: wrap(<NotificationsPage />) },
   { path: '/notifications/templates',    element: wrap(<NotificationTemplatesPage />) },
   { path: '/messages',                   element: wrap(<MessagesPage />) },
+  { path: '/ai-assistant',               element: wrap(<OwnerAssistantPage />) },
   { path: '/users',                      element: wrap(<UsersPage />) },
   { path: '/team',                        element: wrap(<TeamPage />) },
   { path: '/subscriptions',              element: wrap(<SubscriptionsPage />) },

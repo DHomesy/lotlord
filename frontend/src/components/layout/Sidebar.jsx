@@ -24,6 +24,7 @@ import RequestQuoteIcon   from '@mui/icons-material/RequestQuote'
 import BuildIcon          from '@mui/icons-material/Build'
 import FolderIcon         from '@mui/icons-material/Folder'
 import MailIcon           from '@mui/icons-material/Mail'
+import SmartToyIcon       from '@mui/icons-material/SmartToy'
 import ArticleIcon        from '@mui/icons-material/Article'
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts'
 import PersonIcon         from '@mui/icons-material/Person'
@@ -57,6 +58,7 @@ const NAV_GROUPS = [
     label: 'Communication',
     items: [
       { label: 'Messages',  path: '/messages',                icon: <MailIcon /> },
+      { label: 'AI Assistant', path: '/ai-assistant',          icon: <SmartToyIcon />, roles: ['landlord'] },
       { label: 'Templates', path: '/notifications/templates', icon: <ArticleIcon />, roles: ['admin'] },
     ],
   },

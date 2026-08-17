@@ -84,3 +84,9 @@ export function useDismissAiDraft() {
     },
   })
 }
+
+export function useOwnerQaSnapshot() {
+  return useMutation({
+    mutationFn: (data) => api.getOwnerQaSnapshot(data),
+  })
+}

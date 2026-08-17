@@ -7,7 +7,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
-- No unreleased entries yet.
+### Added
+- **Dedicated landlord AI Assistant portal (owner-only)** — Added a standalone admin route/page (`/ai-assistant`) for portfolio Q&A so owner AI workflows are separated from tenant conversation threads.
+- **Owner snapshot API endpoint for portal usage** — Added `POST /api/v1/inbox/owner-qa/snapshot` (landlord-only) to run deterministic owner-scoped Q&A snapshots without binding to a conversation ID.
+
+### Changed
+- **AI surface separation in communication views** — Removed embedded owner Q&A prompt/snapshot widgets from AI Inbox (`MessagesPage`) and Supervisor views to prevent tenant/owner workflow crossover.
+
+### Quality
+- Verified frontend production build with new route/page wiring.
+- Verified targeted backend unit suites with `jest.unit.config.js`.
 
 ---
 ## [1.15.6] — 2026-08-14 — Sprint D.3 Slice: Prompt Auto-Trigger + Snapshot Card POC

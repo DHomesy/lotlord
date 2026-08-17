@@ -1,6 +1,8 @@
 const convRepo           = require('../dal/conversationRepository');
 const unmatchedInboundRepo = require('../dal/unmatchedInboundRepository');
 const conversationService = require('../services/conversationService');
+const ownerQaService = require('../services/ownerQaService');
+const audit = require('../services/auditService');
 const { resolveOwnerId } = require('../lib/authHelpers');
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -89,6 +91,49 @@ async function getUnreadSummary(req, res, next) {
     const ownerId = resolveOwnerId(req.user);
     const summary = await convRepo.getUnreadSummary(ownerId);
     res.json(summary);
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/v1/inbox/owner-qa/snapshot
+ * Owner-only AI snapshot entrypoint that is intentionally decoupled from tenant threads.
+ */
+async function getOwnerQaSnapshot(req, res, next) {
+  try {
+    const ownerId = resolveOwnerId(req.user);
+    if (!ownerId || req.user?.role !== 'landlord') {
+      return res.status(403).json({ error: 'Owner-only endpoint' });
+    }
+
+    const { intent, prompt, daysAhead, limit } = req.body || {};
+    const normalizedIntent = String(intent || '').toLowerCase();
+    if (!VALID_OWNER_QA_INTENTS.includes(normalizedIntent) && !hasOwnerQaPrompt(prompt)) {
+      return res.status(400).json({
+        error: `Provide either prompt text or intent (${VALID_OWNER_QA_INTENTS.join(', ')}).`,
+      });
+    }
+
+    const snapshot = await ownerQaService.getOwnerSnapshot({
+      ownerId,
+      intent: VALID_OWNER_QA_INTENTS.includes(normalizedIntent) ? normalizedIntent : undefined,
+      prompt,
+      daysAhead,
+      limit,
+    });
+
+    audit.log({
+      action: 'owner_qa_portal_snapshot_requested',
+      resourceType: 'owner_qa',
+      resourceId: ownerId,
+      userId: req.user.sub,
+      metadata: {
+        intent: snapshot.intent,
+        promptProvided: !!String(prompt || '').trim(),
+        itemCount: Array.isArray(snapshot.items) ? snapshot.items.length : 0,
+      },
+    });
+
+    res.json({ snapshot });
   } catch (err) { next(err); }
 }
 
@@ -419,6 +464,7 @@ async function updateUnmatchedInbound(req, res, next) {
 module.exports = {
   listConversations,
   getUnreadSummary,
+  getOwnerQaSnapshot,
   getConversation,
   getConversationTrace,
   updateConversation,

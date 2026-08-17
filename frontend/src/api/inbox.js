@@ -4,6 +4,7 @@ const base = '/inbox'
 
 export const getConversations    = (params) => http.get(base, { params }).then((r) => r.data)
 export const getUnreadSummary    = () => http.get(`${base}/unread-summary`).then((r) => r.data)
+export const getOwnerQaSnapshot  = (data) => http.post(`${base}/owner-qa/snapshot`, data).then((r) => r.data)
 export const getConversation     = (id) => http.get(`${base}/${id}`).then((r) => r.data)
 export const getConversationTrace = (id) => http.get(`${base}/${id}/trace`).then((r) => r.data)
 export const updateConversation  = (id, data) => http.patch(`${base}/${id}`, data).then((r) => r.data)
