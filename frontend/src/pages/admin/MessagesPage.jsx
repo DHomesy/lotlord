@@ -30,6 +30,7 @@ import DataTable         from '../../components/common/DataTable'
 import StatusChip        from '../../components/common/StatusChip'
 import LoadingOverlay    from '../../components/common/LoadingOverlay'
 import TenantPicker      from '../../components/pickers/TenantPicker'
+import OwnerQaSnapshotCard from '../../components/ai/OwnerQaSnapshotCard'
 import {
   useConversations,
   useConversation,
@@ -976,6 +977,9 @@ function AiThreadView({ conversationId, onBack }) {
   const messages = Array.isArray(data?.messages) ? data.messages : []
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null)
   const [actionToast, setActionToast] = useState({ open: false, message: '', severity: 'success' })
+  const [ownerQaPrompt, setOwnerQaPrompt] = useState('')
+  const [ownerQaSnapshot, setOwnerQaSnapshot] = useState(null)
+  const [ownerQaLoading, setOwnerQaLoading] = useState(false)
 
   useEffect(() => {
     if (conv?.id && Number(conv.unread_count) > 0) {
@@ -1008,8 +1012,17 @@ function AiThreadView({ conversationId, onBack }) {
   }
 
   const handleAction = (action, extra = {}) => {
+    if (action === 'owner_qa_snapshot') {
+      setOwnerQaLoading(true)
+    }
     updateConv({ id: conv.id, action, ...extra }, {
       onSuccess: (result) => {
+        if (action === 'owner_qa_snapshot') {
+          setOwnerQaLoading(false)
+          setOwnerQaSnapshot(result?.snapshot || null)
+          showToast('Owner Q&A snapshot generated.')
+          return
+        }
         refetch()
         if (action === 'reopen') showToast('Conversation reopened. AI workflow restored.')
         if (action === 'escalate') showToast('Conversation escalated. Human review has been flagged.')
@@ -1023,9 +1036,22 @@ function AiThreadView({ conversationId, onBack }) {
         }
       },
       onError: (err) => {
+        if (action === 'owner_qa_snapshot') {
+          setOwnerQaLoading(false)
+        }
         const msg = err?.response?.data?.error || 'Unable to complete action.'
         showToast(msg, 'error')
       },
+    })
+  }
+
+  const handleOwnerQaPrompt = () => {
+    const prompt = ownerQaPrompt.trim()
+    if (!prompt) return
+    handleAction('owner_qa_snapshot', {
+      prompt,
+      daysAhead: 30,
+      limit: 10,
     })
   }
 
@@ -1200,6 +1226,33 @@ function AiThreadView({ conversationId, onBack }) {
 
       {/* Message list */}
       <Box sx={{ flexGrow: 1, overflowY: 'auto', px: isMobile ? 1 : 2, py: isMobile ? 1 : 1.5 }}>
+        <Paper variant="outlined" sx={{ p: 1.25, mb: 1.25, bgcolor: 'grey.50' }}>
+          <Stack spacing={1}>
+            <Typography variant="caption" fontWeight={700}>
+              Ask AI about this portfolio
+            </Typography>
+            <Stack direction="row" spacing={0.75} alignItems="flex-start">
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Examples: upcoming dues next 30 days, who is past due, tenant balances, maintenance status"
+                value={ownerQaPrompt}
+                onChange={(e) => setOwnerQaPrompt(e.target.value)}
+                disabled={ownerQaLoading}
+              />
+              <Button
+                variant="outlined"
+                onClick={handleOwnerQaPrompt}
+                disabled={ownerQaLoading || !ownerQaPrompt.trim()}
+              >
+                {ownerQaLoading ? 'Running...' : 'Ask AI'}
+              </Button>
+            </Stack>
+          </Stack>
+        </Paper>
+
+        {ownerQaSnapshot && <OwnerQaSnapshotCard snapshot={ownerQaSnapshot} />}
+
         {messages.length === 0 && (
           <Typography variant="body2" color="text.secondary" textAlign="center" mt={4}>
             No messages yet.

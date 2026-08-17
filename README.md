@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.15.5 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.15.6 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -660,6 +660,10 @@ Base URL: `/api/v1`
 | Webhooks | `POST /webhooks/stripe`, `POST /webhooks/aws/sms`, `POST /webhooks/ses` (inbound email from Lambda), `POST /webhooks/ses/bounce` (SNS bounce/complaint) |
 | AI Inbox | `GET /inbox`, `GET /inbox/:id`, `GET /inbox/:id/trace`, `GET /inbox/unread-summary`, `PATCH /inbox/:id` (actions: resolve, escalate, reopen, mark_read, set_mode, create_maintenance_request, owner_qa_snapshot), `POST /inbox/:id/reply`, `POST /inbox/:id/messages/:msgId/approve`, `DELETE /inbox/:id/messages/:msgId` |
 | AI Supervisor | `GET /supervisor/conversations`, `POST /supervisor/conversations/:id/override`, `PATCH /supervisor/conversations/:id` (actions include set_mode, create_maintenance_request, owner_qa_snapshot), `GET /supervisor/unmatched-inbound`, `PATCH /supervisor/unmatched-inbound/:id` (admin only) |
+
+Notes:
+- `owner_qa_snapshot` accepts either explicit `intent` (`upcoming_dues|past_due_tenants|balance_by_tenant|maintenance_overview`) or a natural-language `prompt`.
+- When `prompt` is provided without `intent`, the backend auto-infers the intent and defaults upcoming dues windows to 30 days.
 | AI | `GET /ai/conversations`, `GET /ai/conversations/:id/messages` |
 | Audit Log | `GET /audit` (admin only; query params: `resourceType`, `action`, `userId`, `resourceId`, `startDate`, `endDate`, `page`, `limit`) |
 | Health | `GET /health` → `{ status, version, env }` — unauthenticated; useful for uptime monitoring |

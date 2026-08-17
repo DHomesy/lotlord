@@ -248,7 +248,7 @@ async function createMaintenanceRequestFromConversation(conversationId, actorId)
 /**
  * Run a deterministic owner-scoped portfolio snapshot query from conversation context.
  */
-async function getOwnerQASnapshotFromConversation(conversationId, actorId, { intent, daysAhead, limit } = {}) {
+async function getOwnerQASnapshotFromConversation(conversationId, actorId, { intent, prompt, daysAhead, limit } = {}) {
   const conv = await convRepo.findById(conversationId);
   if (!conv) throw Object.assign(new Error('Conversation not found'), { status: 404 });
   if (!conv.owner_id) {
@@ -258,6 +258,7 @@ async function getOwnerQASnapshotFromConversation(conversationId, actorId, { int
   const snapshot = await ownerQaService.getOwnerSnapshot({
     ownerId: conv.owner_id,
     intent,
+    prompt,
     daysAhead,
     limit,
   });
@@ -270,6 +271,7 @@ async function getOwnerQASnapshotFromConversation(conversationId, actorId, { int
     metadata: {
       ownerId: conv.owner_id,
       intent: snapshot.intent,
+      promptProvided: !!String(prompt || '').trim(),
       itemCount: Array.isArray(snapshot.items) ? snapshot.items.length : 0,
       dateContext: snapshot.dateContext,
     },

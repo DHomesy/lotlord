@@ -17,8 +17,37 @@ function toMoney(n) {
   return Number(n || 0).toFixed(2);
 }
 
-function normalizeIntent(intent) {
+function inferIntentFromPrompt(prompt) {
+  const text = String(prompt || '').toLowerCase();
+  if (!text.trim()) return null;
+
+  if (/maintenance|repair|work order|ticket|completed|in progress|open requests?/.test(text)) {
+    return OWNER_QA_INTENTS.MAINTENANCE_OVERVIEW;
+  }
+  if (/past due|overdue|late rent|delinquent|behind/.test(text)) {
+    return OWNER_QA_INTENTS.PAST_DUE_TENANTS;
+  }
+  if (/balance|outstanding|owe|owed|by tenant|tenant balances?/.test(text)) {
+    return OWNER_QA_INTENTS.BALANCE_BY_TENANT;
+  }
+  if (/upcoming|next|due soon|coming due|next 30|next month|dues/.test(text)) {
+    return OWNER_QA_INTENTS.UPCOMING_DUES;
+  }
+  return null;
+}
+
+function normalizeIntent(intent, prompt) {
   const value = String(intent || '').toLowerCase().trim();
+  if (!value) {
+    const inferred = inferIntentFromPrompt(prompt);
+    if (!inferred) {
+      throw Object.assign(
+        new Error('Could not infer owner Q&A intent from prompt. Provide a clearer prompt or explicit intent.'),
+        { status: 400 },
+      );
+    }
+    return inferred;
+  }
   const valid = Object.values(OWNER_QA_INTENTS);
   if (!valid.includes(value)) {
     throw Object.assign(new Error(`Unsupported owner Q&A intent: ${intent}`), { status: 400 });
@@ -42,19 +71,23 @@ function summarizeBalances(items) {
 }
 
 function summarizeMaintenance(summaryRows) {
-  const totalOpen = summaryRows.reduce((sum, row) => sum + Number(row.count || 0), 0);
-  return `There are ${totalOpen} open/in-progress maintenance request(s) in the portfolio.`;
+  const total = summaryRows.reduce((sum, row) => sum + Number(row.count || 0), 0);
+  const completed = summaryRows
+    .filter((row) => String(row.status || '').toLowerCase() === 'completed')
+    .reduce((sum, row) => sum + Number(row.count || 0), 0);
+  return `There are ${total} maintenance request(s) in scope, including ${completed} completed.`;
 }
 
-async function getOwnerSnapshot({ ownerId, intent, daysAhead, limit }) {
+async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
   if (!ownerId) {
     throw Object.assign(new Error('ownerId is required for owner Q&A'), { status: 400 });
   }
 
-  const normalizedIntent = normalizeIntent(intent);
-  const safeDaysAhead = toIntInRange(daysAhead, 14, 1, 90);
+  const normalizedIntent = normalizeIntent(intent, prompt);
+  const safeDaysAhead = toIntInRange(daysAhead, 30, 1, 90);
   const safeLimit = toIntInRange(limit, 10, 1, 25);
   const generatedAt = new Date().toISOString();
+  const policyNote = 'No maintenance statuses were changed by this snapshot. Status updates require explicit landlord or tenant workflow actions.';
 
   if (normalizedIntent === OWNER_QA_INTENTS.UPCOMING_DUES) {
     const items = await ownerQaRepo.getUpcomingDues({ ownerId, daysAhead: safeDaysAhead, limit: safeLimit });
@@ -68,6 +101,7 @@ async function getOwnerSnapshot({ ownerId, intent, daysAhead, limit }) {
         from: new Date().toISOString().slice(0, 10),
       },
       summary: summarizeUpcomingDues(items, safeDaysAhead),
+      policyNote,
       items,
     };
   }
@@ -83,6 +117,7 @@ async function getOwnerSnapshot({ ownerId, intent, daysAhead, limit }) {
         date: new Date().toISOString().slice(0, 10),
       },
       summary: summarizePastDue(items),
+      policyNote,
       items,
     };
   }
@@ -98,6 +133,7 @@ async function getOwnerSnapshot({ ownerId, intent, daysAhead, limit }) {
         date: new Date().toISOString().slice(0, 10),
       },
       summary: summarizeBalances(items),
+      policyNote,
       items,
     };
   }
@@ -112,6 +148,7 @@ async function getOwnerSnapshot({ ownerId, intent, daysAhead, limit }) {
       date: new Date().toISOString().slice(0, 10),
     },
     summary: summarizeMaintenance(overview.summary),
+    policyNote,
     items: overview.recent,
     breakdown: overview.summary,
   };
@@ -119,5 +156,6 @@ async function getOwnerSnapshot({ ownerId, intent, daysAhead, limit }) {
 
 module.exports = {
   OWNER_QA_INTENTS,
+  inferIntentFromPrompt,
   getOwnerSnapshot,
 };

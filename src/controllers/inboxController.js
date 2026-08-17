@@ -12,6 +12,10 @@ const VALID_AUTOMATION_MODES = ['ai_active', 'ai_assist_only', 'human_only'];
 const VALID_UNMATCHED_STATUSES = ['open', 'resolved'];
 const VALID_OWNER_QA_INTENTS = ['upcoming_dues', 'past_due_tenants', 'balance_by_tenant', 'maintenance_overview'];
 
+function hasOwnerQaPrompt(prompt) {
+  return typeof prompt === 'string' && prompt.trim().length > 0;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function parsePage(query) {
@@ -174,14 +178,16 @@ async function updateConversation(req, res, next) {
       return res.status(201).json(await conversationService.createMaintenanceRequestFromConversation(conv.id, req.user.sub));
     }
     if (action === 'owner_qa_snapshot') {
-      const { intent, daysAhead, limit } = req.body;
-      if (!VALID_OWNER_QA_INTENTS.includes(String(intent || '').toLowerCase())) {
+      const { intent, prompt, daysAhead, limit } = req.body;
+      const normalizedIntent = String(intent || '').toLowerCase();
+      if (!VALID_OWNER_QA_INTENTS.includes(normalizedIntent) && !hasOwnerQaPrompt(prompt)) {
         return res.status(400).json({
-          error: `intent must be one of: ${VALID_OWNER_QA_INTENTS.join(', ')}`,
+          error: `Provide either prompt text or intent (${VALID_OWNER_QA_INTENTS.join(', ')}).`,
         });
       }
       return res.json(await conversationService.getOwnerQASnapshotFromConversation(conv.id, req.user.sub, {
-        intent,
+        intent: VALID_OWNER_QA_INTENTS.includes(normalizedIntent) ? normalizedIntent : undefined,
+        prompt,
         daysAhead,
         limit,
       }));
@@ -335,14 +341,16 @@ async function supervisorUpdateConversation(req, res, next) {
       return res.status(201).json(await conversationService.createMaintenanceRequestFromConversation(conv.id, req.user.sub));
     }
     if (action === 'owner_qa_snapshot') {
-      const { intent, daysAhead, limit } = req.body;
-      if (!VALID_OWNER_QA_INTENTS.includes(String(intent || '').toLowerCase())) {
+      const { intent, prompt, daysAhead, limit } = req.body;
+      const normalizedIntent = String(intent || '').toLowerCase();
+      if (!VALID_OWNER_QA_INTENTS.includes(normalizedIntent) && !hasOwnerQaPrompt(prompt)) {
         return res.status(400).json({
-          error: `intent must be one of: ${VALID_OWNER_QA_INTENTS.join(', ')}`,
+          error: `Provide either prompt text or intent (${VALID_OWNER_QA_INTENTS.join(', ')}).`,
         });
       }
       return res.json(await conversationService.getOwnerQASnapshotFromConversation(conv.id, req.user.sub, {
-        intent,
+        intent: VALID_OWNER_QA_INTENTS.includes(normalizedIntent) ? normalizedIntent : undefined,
+        prompt,
         daysAhead,
         limit,
       }));

@@ -10,6 +10,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - No unreleased entries yet.
 
 ---
+## [1.15.6] — 2026-08-14 — Sprint D.3 Slice: Prompt Auto-Trigger + Snapshot Card POC
+
+### Added
+- **Prompt-driven owner Q&A auto-trigger** — `owner_qa_snapshot` now accepts natural-language prompt input and auto-infers a whitelisted intent when explicit intent is not provided.
+- **Owner Q&A summary card POC UI** — Added concise snapshot cards with optional detail expansion in:
+  - AI Inbox thread view (`MessagesPage`)
+  - AI Supervisor thread view (`SupervisorPage`)
+- **Reusable frontend snapshot renderer** — Added `OwnerQaSnapshotCard` component for consistent summary + detail presentation.
+
+### Changed
+- **Upcoming dues default window updated to 30 days** when prompt-driven owner Q&A infers `upcoming_dues`.
+- **Maintenance overview snapshot expanded** to include `completed` status in addition to `open` and `in_progress` so assistant context reflects completion state.
+- **Explicit no-side-effect policy note in snapshots** — owner Q&A responses now state that maintenance status changes are not performed automatically and require explicit workflow actions.
+
+### Quality
+- Added/updated unit coverage for prompt inference, 30-day defaults, completed-status maintenance summaries, and prompt-only controller action payloads.
+- Verified focused backend unit suites and frontend production build.
+
+---
 ## [1.15.5] — 2026-08-13 — Sprint D.3 Slice: Owner Q&A Query Broker (Initial)
 
 ### Added

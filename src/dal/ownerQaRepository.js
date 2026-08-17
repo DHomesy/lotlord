@@ -107,7 +107,7 @@ async function getMaintenanceOverview({ ownerId, limit = 10 }) {
        JOIN units un ON un.id = mr.unit_id AND un.deleted_at IS NULL
        JOIN properties p ON p.id = un.property_id AND p.deleted_at IS NULL
        WHERE p.owner_id = $1
-         AND mr.status IN ('open', 'in_progress')
+         AND mr.status IN ('open', 'in_progress', 'completed')
        GROUP BY mr.status, mr.priority
        ORDER BY mr.status ASC, mr.priority ASC`,
       [ownerId],
@@ -126,7 +126,7 @@ async function getMaintenanceOverview({ ownerId, limit = 10 }) {
        JOIN units un ON un.id = mr.unit_id AND un.deleted_at IS NULL
        JOIN properties p ON p.id = un.property_id AND p.deleted_at IS NULL
        WHERE p.owner_id = $1
-         AND mr.status IN ('open', 'in_progress')
+         AND mr.status IN ('open', 'in_progress', 'completed')
        ORDER BY mr.created_at DESC
        LIMIT $2`,
       [ownerId, limit],

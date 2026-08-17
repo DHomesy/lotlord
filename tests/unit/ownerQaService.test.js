@@ -64,6 +64,7 @@ describe('ownerQaService.getOwnerSnapshot', () => {
       summary: [
         { status: 'open', priority: 'high', count: 2 },
         { status: 'in_progress', priority: 'medium', count: 1 },
+        { status: 'completed', priority: 'low', count: 4 },
       ],
       recent: [{ id: 'm1' }],
     });
@@ -75,9 +76,22 @@ describe('ownerQaService.getOwnerSnapshot', () => {
     });
 
     expect(ownerQaRepo.getMaintenanceOverview).toHaveBeenCalledWith({ ownerId: 'owner-1', limit: 7 });
-    expect(result.summary).toBe('There are 3 open/in-progress maintenance request(s) in the portfolio.');
-    expect(result.breakdown).toHaveLength(2);
+    expect(result.summary).toBe('There are 7 maintenance request(s) in scope, including 4 completed.');
+    expect(result.breakdown).toHaveLength(3);
     expect(result.items).toHaveLength(1);
+  });
+
+  test('infers intent from prompt and defaults upcoming dues window to 30 days', async () => {
+    ownerQaRepo.getUpcomingDues.mockResolvedValue([]);
+
+    const result = await ownerQaService.getOwnerSnapshot({
+      ownerId: 'owner-1',
+      prompt: 'What charges are coming due soon?',
+    });
+
+    expect(ownerQaRepo.getUpcomingDues).toHaveBeenCalledWith({ ownerId: 'owner-1', daysAhead: 30, limit: 10 });
+    expect(result.intent).toBe('upcoming_dues');
+    expect(result.dateContext).toEqual(expect.objectContaining({ daysAhead: 30 }));
   });
 
   test('throws 400 for unsupported intent', async () => {

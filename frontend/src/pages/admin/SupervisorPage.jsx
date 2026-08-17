@@ -16,6 +16,7 @@ import AutorenewIcon      from '@mui/icons-material/Autorenew'
 
 import PageContainer  from '../../components/layout/PageContainer'
 import LoadingOverlay from '../../components/common/LoadingOverlay'
+import OwnerQaSnapshotCard from '../../components/ai/OwnerQaSnapshotCard'
 import {
   useSupervisorConversations,
   useSupervisorOverride,
@@ -260,6 +261,9 @@ function SupervisorConvList({ conversations, selectedId, onSelect }) {
 // ─── Thread + override panel (right pane) ─────────────────────────────────────
 function SupervisorThread({ conversationId, onBack }) {
   const [overrideText, setOverrideText] = useState('')
+  const [ownerQaPrompt, setOwnerQaPrompt] = useState('')
+  const [ownerQaSnapshot, setOwnerQaSnapshot] = useState(null)
+  const [ownerQaLoading, setOwnerQaLoading] = useState(false)
   const [actionToast, setActionToast] = useState({ open: false, message: '', severity: 'success' })
   const { data, isLoading, isError, refetch } = useInboxConversation(conversationId)
   const { mutate: override, isPending: overriding, error: overrideError, reset: resetOverride } = useSupervisorOverride()
@@ -291,8 +295,17 @@ function SupervisorThread({ conversationId, onBack }) {
   }
 
   const handleUpdate = (action, extra = {}) => {
+    if (action === 'owner_qa_snapshot') {
+      setOwnerQaLoading(true)
+    }
     update({ id: conv.id, action, ...extra }, {
       onSuccess: (result) => {
+        if (action === 'owner_qa_snapshot') {
+          setOwnerQaLoading(false)
+          setOwnerQaSnapshot(result?.snapshot || null)
+          showToast('Owner Q&A snapshot generated.')
+          return
+        }
         refetch()
         if (action === 'reopen') showToast('Conversation reopened. AI workflow restored.')
         if (action === 'escalate') showToast('Conversation escalated. Human review has been flagged.')
@@ -306,9 +319,22 @@ function SupervisorThread({ conversationId, onBack }) {
         }
       },
       onError: (err) => {
+        if (action === 'owner_qa_snapshot') {
+          setOwnerQaLoading(false)
+        }
         const msg = err?.response?.data?.error || 'Unable to complete action.'
         showToast(msg, 'error')
       },
+    })
+  }
+
+  const handleOwnerQaPrompt = () => {
+    const prompt = ownerQaPrompt.trim()
+    if (!prompt) return
+    handleUpdate('owner_qa_snapshot', {
+      prompt,
+      daysAhead: 30,
+      limit: 10,
     })
   }
 
@@ -420,6 +446,33 @@ function SupervisorThread({ conversationId, onBack }) {
 
       {/* Message list */}
       <Box sx={{ flexGrow: 1, overflowY: 'auto', px: 2, py: 1.5 }}>
+        <Paper variant="outlined" sx={{ p: 1.25, mb: 1.25, bgcolor: 'grey.50' }}>
+          <Stack spacing={1}>
+            <Typography variant="caption" fontWeight={700}>
+              Ask AI about landlord portfolio
+            </Typography>
+            <Stack direction="row" spacing={0.75} alignItems="flex-start">
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Examples: upcoming dues next 30 days, who is past due, maintenance completed"
+                value={ownerQaPrompt}
+                onChange={(e) => setOwnerQaPrompt(e.target.value)}
+                disabled={ownerQaLoading}
+              />
+              <Button
+                variant="outlined"
+                onClick={handleOwnerQaPrompt}
+                disabled={ownerQaLoading || !ownerQaPrompt.trim()}
+              >
+                {ownerQaLoading ? 'Running...' : 'Ask AI'}
+              </Button>
+            </Stack>
+          </Stack>
+        </Paper>
+
+        {ownerQaSnapshot && <OwnerQaSnapshotCard snapshot={ownerQaSnapshot} />}
+
         {messages.length === 0 && (
           <Typography variant="body2" color="text.secondary" textAlign="center" mt={4}>
             No messages yet.

@@ -374,6 +374,31 @@ describe('updateConversation', () => {
     expect(conversationService.getOwnerQASnapshotFromConversation).not.toHaveBeenCalled();
   });
 
+  test('action=owner_qa_snapshot accepts prompt-only payload and delegates', async () => {
+    const payload = {
+      conversationId: CONV_ID,
+      snapshot: { intent: 'upcoming_dues', summary: 'Found 0 upcoming due charge(s).' },
+    };
+    conversationService.getOwnerQASnapshotFromConversation.mockResolvedValue(payload);
+
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'owner_qa_snapshot', prompt: 'Show me upcoming dues for the next month' },
+      user: { role: 'landlord', sub: OWNER_ID },
+    });
+    const res = makeRes();
+
+    await updateConversation(req, res, next);
+
+    expect(conversationService.getOwnerQASnapshotFromConversation).toHaveBeenCalledWith(CONV_ID, OWNER_ID, {
+      intent: undefined,
+      prompt: 'Show me upcoming dues for the next month',
+      daysAhead: undefined,
+      limit: undefined,
+    });
+    expect(res.json).toHaveBeenCalledWith(payload);
+  });
+
   test('direct field update succeeds with valid values', async () => {
     const updated = { ...mockConversation, status: 'resolved', urgency: 2, category: 'maintenance' };
     convRepo.update.mockResolvedValue(updated);
@@ -774,6 +799,35 @@ describe('supervisorUpdateConversation', () => {
       intent: 'past_due_tenants',
       daysAhead: undefined,
       limit: 10,
+    });
+    expect(res.json).toHaveBeenCalledWith(payload);
+  });
+
+  test('action=owner_qa_snapshot accepts prompt-only payload for supervisor', async () => {
+    const payload = {
+      conversationId: CONV_ID,
+      snapshot: {
+        intent: 'maintenance_overview',
+        summary: 'There are 3 maintenance request(s) in scope.',
+        items: [],
+      },
+    };
+    conversationService.getOwnerQASnapshotFromConversation.mockResolvedValue(payload);
+
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'owner_qa_snapshot', prompt: 'How many maintenance tickets are completed?' },
+      user: { role: 'admin', sub: ADMIN_ID },
+    });
+    const res = makeRes();
+
+    await supervisorUpdateConversation(req, res, next);
+
+    expect(conversationService.getOwnerQASnapshotFromConversation).toHaveBeenCalledWith(CONV_ID, ADMIN_ID, {
+      intent: undefined,
+      prompt: 'How many maintenance tickets are completed?',
+      daysAhead: undefined,
+      limit: undefined,
     });
     expect(res.json).toHaveBeenCalledWith(payload);
   });
