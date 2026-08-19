@@ -17,4 +17,21 @@ async function getDashboard(req, res, next) {
   }
 }
 
-module.exports = { getDashboard };
+/**
+ * GET /api/v1/analytics/owner-qa-quality
+ * Returns owner QA quality/fallback metrics.
+ * - Admin: system-wide aggregate
+ * - Landlord/Employee: owner-scoped aggregate
+ */
+async function getOwnerQaQuality(req, res, next) {
+  try {
+    const ownerId = req.user.role === 'admin' ? null : resolveOwnerId(req.user);
+    const { days } = req.query;
+    const data = await analyticsRepo.getOwnerQaQualityMetrics(ownerId, { days });
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getDashboard, getOwnerQaQuality };

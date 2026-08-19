@@ -83,6 +83,15 @@ export default function OwnerQaSnapshotCard({ snapshot }) {
               sx={{ height: 18, fontSize: 10, textTransform: 'lowercase' }}
             />
           )}
+          {snapshot.quality?.policy?.fallbackRecommended && (
+            <Chip
+              size="small"
+              label="fallback recommended"
+              color="warning"
+              variant="outlined"
+              sx={{ height: 18, fontSize: 10, textTransform: 'lowercase' }}
+            />
+          )}
         </Stack>
 
         <Typography variant="body2">{snapshot.summary}</Typography>
@@ -106,6 +115,12 @@ export default function OwnerQaSnapshotCard({ snapshot }) {
         {!!snapshot.quality?.rationale && (
           <Typography variant="caption" color="text.secondary">
             Quality: {snapshot.quality.rationale}
+          </Typography>
+        )}
+
+        {snapshot.quality?.policy && (
+          <Typography variant="caption" color="text.secondary">
+            Policy: score {snapshot.quality.policy.score.toFixed(2)} vs threshold {snapshot.quality.policy.threshold.toFixed(2)}
           </Typography>
         )}
 

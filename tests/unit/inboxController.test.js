@@ -210,6 +210,19 @@ describe('owner QA portal endpoints', () => {
     expect(res.status).toHaveBeenCalledWith(201);
   });
 
+  test('getOwnerQaSnapshot returns 400 when prompt exceeds max length', async () => {
+    const req = makeReq({
+      user: { role: 'landlord', sub: OWNER_ID },
+      body: { prompt: 'x'.repeat(2001) },
+    });
+    const res = makeRes();
+
+    await getOwnerQaSnapshot(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(ownerQaService.getOwnerSnapshot).not.toHaveBeenCalled();
+  });
+
   test('getOwnerQaSession returns detail payload', async () => {
     ownerAssistantService.getOwnerSessionDetail.mockResolvedValue({
       session: { id: 'sess-4', owner_id: OWNER_ID },
@@ -568,6 +581,20 @@ describe('updateConversation', () => {
       limit: undefined,
     });
     expect(res.json).toHaveBeenCalledWith(payload);
+  });
+
+  test('action=owner_qa_snapshot returns 400 when prompt exceeds max length', async () => {
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'owner_qa_snapshot', prompt: 'x'.repeat(2001) },
+      user: { role: 'landlord', sub: OWNER_ID },
+    });
+    const res = makeRes();
+
+    await updateConversation(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(conversationService.getOwnerQASnapshotFromConversation).not.toHaveBeenCalled();
   });
 
   test('direct field update succeeds with valid values', async () => {
@@ -1001,6 +1028,20 @@ describe('supervisorUpdateConversation', () => {
       limit: undefined,
     });
     expect(res.json).toHaveBeenCalledWith(payload);
+  });
+
+  test('action=owner_qa_snapshot returns 400 for supervisor when prompt exceeds max length', async () => {
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'owner_qa_snapshot', prompt: 'x'.repeat(2001) },
+      user: { role: 'admin', sub: ADMIN_ID },
+    });
+    const res = makeRes();
+
+    await supervisorUpdateConversation(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(conversationService.getOwnerQASnapshotFromConversation).not.toHaveBeenCalled();
   });
 
   test('direct field update with valid values succeeds', async () => {

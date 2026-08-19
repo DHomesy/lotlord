@@ -117,4 +117,48 @@ async function getDashboardMetrics(ownerId = null) {
   };
 }
 
-module.exports = { getDashboardMetrics };
+async function getOwnerQaQualityMetrics(ownerId, { days = 30 } = {}) {
+  const safeDays = Math.min(365, Math.max(1, Number.parseInt(String(days || 30), 10) || 30));
+  const params = [safeDays];
+  const ownerFilter = ownerId ? `AND owner_id = $${params.push(ownerId)}` : '';
+
+  const summaryPromise = db.query(
+    `SELECT
+       intent,
+       SUM(sample_count)::INT AS total_samples,
+       SUM(CASE WHEN fallback_recommended THEN sample_count ELSE 0 END)::INT AS fallback_samples,
+       ROUND(
+         100.0 * SUM(CASE WHEN fallback_recommended THEN sample_count ELSE 0 END)
+         / NULLIF(SUM(sample_count), 0),
+         2
+       ) AS fallback_rate_pct
+     FROM owner_qa_quality_metrics
+     WHERE bucket_date >= CURRENT_DATE - ($1::int * INTERVAL '1 day')
+     ${ownerFilter}
+     GROUP BY intent
+     ORDER BY intent ASC`,
+    params,
+  );
+
+  const confidencePromise = db.query(
+    `SELECT
+       intent,
+       confidence,
+       SUM(sample_count)::INT AS samples
+     FROM owner_qa_quality_metrics
+     WHERE bucket_date >= CURRENT_DATE - ($1::int * INTERVAL '1 day')
+     ${ownerFilter}
+     GROUP BY intent, confidence
+     ORDER BY intent ASC, confidence ASC`,
+    params,
+  );
+
+  const [summaryResult, confidenceResult] = await Promise.all([summaryPromise, confidencePromise]);
+  return {
+    days: safeDays,
+    byIntent: summaryResult.rows,
+    confidenceDistribution: confidenceResult.rows,
+  };
+}
+
+module.exports = { getDashboardMetrics, getOwnerQaQualityMetrics };

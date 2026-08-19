@@ -2,7 +2,13 @@ const { query } = require('../config/db');
 
 async function getUpcomingDues({ ownerId, daysAhead = 14, limit = 10 }) {
   const { rows } = await query(
-    `SELECT
+    `WITH paid_by_charge AS (
+       SELECT rp.charge_id, COALESCE(SUM(rp.amount_paid), 0) AS total_paid
+       FROM rent_payments rp
+       WHERE rp.status = 'completed'
+       GROUP BY rp.charge_id
+     )
+     SELECT
        rc.id AS charge_id,
        COALESCE(u.id, t.user_id) AS tenant_user_id,
        TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS tenant_name,
@@ -16,12 +22,7 @@ async function getUpcomingDues({ ownerId, daysAhead = 14, limit = 10 }) {
      LEFT JOIN leases l ON l.id = rc.lease_id
      LEFT JOIN tenants t ON t.id = COALESCE(rc.tenant_id, l.tenant_id)
      LEFT JOIN users u ON u.id = t.user_id
-     LEFT JOIN LATERAL (
-       SELECT COALESCE(SUM(rp.amount_paid), 0) AS total_paid
-       FROM rent_payments rp
-       WHERE rp.charge_id = rc.id
-         AND rp.status = 'completed'
-     ) paid ON TRUE
+     LEFT JOIN paid_by_charge paid ON paid.charge_id = rc.id
      WHERE p.owner_id = $1
        AND rc.voided_at IS NULL
        AND rc.due_date >= CURRENT_DATE
@@ -36,7 +37,13 @@ async function getUpcomingDues({ ownerId, daysAhead = 14, limit = 10 }) {
 
 async function getPastDueTenants({ ownerId, limit = 10 }) {
   const { rows } = await query(
-    `SELECT
+    `WITH paid_by_charge AS (
+       SELECT rp.charge_id, COALESCE(SUM(rp.amount_paid), 0) AS total_paid
+       FROM rent_payments rp
+       WHERE rp.status = 'completed'
+       GROUP BY rp.charge_id
+     )
+     SELECT
        COALESCE(u.id, t.user_id) AS tenant_user_id,
        TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS tenant_name,
        COUNT(*)::INT AS overdue_charges,
@@ -48,12 +55,7 @@ async function getPastDueTenants({ ownerId, limit = 10 }) {
      LEFT JOIN leases l ON l.id = rc.lease_id
      LEFT JOIN tenants t ON t.id = COALESCE(rc.tenant_id, l.tenant_id)
      LEFT JOIN users u ON u.id = t.user_id
-     LEFT JOIN LATERAL (
-       SELECT COALESCE(SUM(rp.amount_paid), 0) AS total_paid
-       FROM rent_payments rp
-       WHERE rp.charge_id = rc.id
-         AND rp.status = 'completed'
-     ) paid ON TRUE
+     LEFT JOIN paid_by_charge paid ON paid.charge_id = rc.id
      WHERE p.owner_id = $1
        AND rc.voided_at IS NULL
        AND rc.due_date < CURRENT_DATE
@@ -68,7 +70,14 @@ async function getPastDueTenants({ ownerId, limit = 10 }) {
 
 async function getTenantBalances({ ownerId, limit = 10 }) {
   const { rows } = await query(
-    `SELECT
+    `WITH latest_ledger AS (
+       SELECT DISTINCT ON (le.lease_id)
+         le.lease_id,
+         le.balance_after
+       FROM ledger_entries le
+       ORDER BY le.lease_id, le.created_at DESC
+     )
+     SELECT
        u.id AS tenant_user_id,
        TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS tenant_name,
        p.name AS property_name,
@@ -79,13 +88,7 @@ async function getTenantBalances({ ownerId, limit = 10 }) {
      JOIN users u ON u.id = t.user_id
      JOIN units un ON un.id = l.unit_id AND un.deleted_at IS NULL
      JOIN properties p ON p.id = un.property_id AND p.deleted_at IS NULL
-     JOIN LATERAL (
-       SELECT le.balance_after
-       FROM ledger_entries le
-       WHERE le.lease_id = l.id
-       ORDER BY le.created_at DESC
-       LIMIT 1
-     ) latest ON TRUE
+     JOIN latest_ledger latest ON latest.lease_id = l.id
      WHERE p.owner_id = $1
        AND l.status IN ('active', 'pending')
        AND latest.balance_after > 0
@@ -98,19 +101,20 @@ async function getTenantBalances({ ownerId, limit = 10 }) {
 
 async function getAgingSummary({ ownerId }) {
   const { rows } = await query(
-    `WITH overdue AS (
+    `WITH paid_by_charge AS (
+       SELECT rp.charge_id, COALESCE(SUM(rp.amount_paid), 0) AS total_paid
+       FROM rent_payments rp
+       WHERE rp.status = 'completed'
+       GROUP BY rp.charge_id
+     ),
+     overdue AS (
        SELECT
          GREATEST(rc.amount - COALESCE(paid.total_paid, 0), 0)::NUMERIC AS amount_due,
          (CURRENT_DATE - rc.due_date)::INT AS days_overdue
        FROM rent_charges rc
        JOIN units un ON un.id = rc.unit_id AND un.deleted_at IS NULL
        JOIN properties p ON p.id = un.property_id AND p.deleted_at IS NULL
-       LEFT JOIN LATERAL (
-         SELECT COALESCE(SUM(rp.amount_paid), 0) AS total_paid
-         FROM rent_payments rp
-         WHERE rp.charge_id = rc.id
-           AND rp.status = 'completed'
-       ) paid ON TRUE
+       LEFT JOIN paid_by_charge paid ON paid.charge_id = rc.id
        WHERE p.owner_id = $1
          AND rc.voided_at IS NULL
          AND rc.due_date < CURRENT_DATE

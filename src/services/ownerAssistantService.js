@@ -133,6 +133,9 @@ async function runSessionSnapshot({ ownerId, sessionId, intent, prompt, daysAhea
       itemCount: Array.isArray(snapshot.items) ? snapshot.items.length : 0,
       messageId: message?.id || null,
       contextMode: contextSnapshot.mode,
+      fallbackRecommended: !!snapshot?.quality?.policy?.fallbackRecommended,
+      fallbackRoute: snapshot?.quality?.policy?.fallbackRoute || null,
+      protocolAction: snapshot?.protocol?.action || null,
     },
   });
 

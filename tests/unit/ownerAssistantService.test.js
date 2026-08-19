@@ -29,7 +29,15 @@ describe('ownerAssistantService', () => {
       intent: 'aging_summary',
       summary: 'Aging summary includes 2 charges.',
       items: [{ bucket: '1-30', charge_count: 2, total_amount: '120.00' }],
-      quality: { confidence: 'high', rationale: 'deterministic owner-scoped query returned direct records' },
+      protocol: {
+        action: 'owner_qa_snapshot',
+        fallback: { required: false, route: null, reason: null },
+      },
+      quality: {
+        confidence: 'high',
+        rationale: 'deterministic owner-scoped query returned direct records',
+        policy: { fallbackRecommended: false, fallbackRoute: null },
+      },
     });
     ownerAssistantRepo.appendSnapshot.mockResolvedValue({ id: 'msg-1' });
 

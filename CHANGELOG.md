@@ -7,7 +7,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
-- No unreleased entries yet.
+### Added
+- _No entries yet._
+
+---
+## [1.15.8] — 2026-08-19 — Sprint D.4 Audit Hardening + Performance Slice
+
+### Added
+- **Owner AI UI fallback indicator** — Snapshot cards now surface threshold comparison and fallback recommendation signals for operator visibility.
+- **Durable owner QA quality metrics table** — Added migration `040_owner_qa_quality_metrics.sql` to store per-day owner-scoped quality samples by intent/confidence/fallback flag.
+- **Owner QA quality analytics endpoint** — Added `GET /api/v1/analytics/owner-qa-quality` (admin system-wide, landlord/employee owner-scoped) for fallback-rate and confidence-distribution reporting.
+- **Owner QA query/search performance index migration** — Added `041_owner_qa_query_perf_and_search_indexes.sql` to provision owner-QA query support indexes and trigram search indexes for owner AI session discovery.
+- **Owner QA route-level abuse controls** — Added owner-QA-specific rate limiters for landlord portal snapshots and snapshot actions in landlord/admin conversation update routes.
+
+### Changed
+- **Owner Q&A governance policy metadata expanded** — Added explicit per-intent confidence thresholds, policy scores, and fallback recommendation flags (`fallbackRecommended`, `fallbackRoute`, `fallbackReason`) in snapshot quality payloads.
+- **Owner Q&A protocol payload expanded** — Snapshot responses now include explicit protocol metadata (`action`, deterministic execution marker, fallback requirement/reason) for dashboard-ready tracking.
+- **Owner Q&A response hardening** — Removed process-local quality counters from snapshot payloads to avoid cross-owner/process-instance telemetry leakage and inconsistent values.
+- **Owner Q&A prompt validation hardening** — Enforced prompt type/length validation (max 2000 chars) across owner portal and conversation action entrypoints.
+- **Owner QA metrics persistence moved to DB-backed aggregation** — Snapshot generation now records best-effort quality outcomes to durable storage instead of relying only on process-memory counters.
+- **Owner QA data retrieval queries optimized** — Replaced repeated per-row lateral payment aggregation with set-based charge-payment rollups and switched latest-ledger lookup to a set-based strategy for better scale behavior.
+
+### Quality
+- Re-ran backend and frontend production dependency audits (`npm audit --omit=dev --audit-level=moderate`) with 0 vulnerabilities reported.
+- Verified focused unit suites for owner QA, inbox/supervisor actions, conversation service, and analytics controller.
 
 ---
 ## [1.15.7] — 2026-08-19 — Sprint D.3/D.4 Owner AI Continuity + Governance Slice
@@ -218,6 +241,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - **AI Inbox thread white-screen crash** — Resolved a React hook-order issue in the AI thread view that could blank the Messages page when opening a conversation after inbound data loaded.
 - **Thread payload safety guards** — Added defensive handling for missing conversation/message payload shape to prevent runtime render crashes on partial responses.
 
+- **Owner QA query/search performance index migration** — Added `041_owner_qa_query_perf_and_search_indexes.sql` to provision owner-QA query support indexes and trigram search indexes for owner AI session discovery.
 ### Quality
 - Verified frontend production build after AI Inbox thread stability fix.
 
@@ -225,6 +249,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [1.14.3] — 2026-08-09 — Infra Hardening + Inbound Reliability
 
 ### Added
+- **Owner QA data retrieval queries optimized** — Replaced repeated per-row lateral payment aggregation with set-based charge-payment rollups and switched latest-ledger lookup to a set-based strategy for better scale behavior.
+- **Owner QA abuse controls tightened** — Added owner-QA-specific route/action rate limiters for landlord portal snapshots, landlord conversation snapshot actions, and supervisor snapshot actions.
 - **Stage-aware infra config** — CDK now supports explicit `test` / `prod` stage config resolution for webhook wiring and prevents implicit drift across environments.
 - **Deploy guardrails for webhook targets** — Infra deploy now fails fast when webhook `apiUrl` or `webhookSecret` is missing, blocks ephemeral ngrok hosts by default, and enforces HTTPS on `prod` stage.
 - **Stage config scaffolding** — Added `context.environments.test/prod` placeholders in `infra/cdk.json` for deterministic per-environment deploy settings.

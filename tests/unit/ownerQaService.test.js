@@ -1,6 +1,8 @@
 jest.mock('../../src/dal/ownerQaRepository');
+jest.mock('../../src/dal/ownerQaQualityRepository');
 
 const ownerQaRepo = require('../../src/dal/ownerQaRepository');
+const ownerQaQualityRepo = require('../../src/dal/ownerQaQualityRepository');
 const ownerQaService = require('../../src/services/ownerQaService');
 
 describe('ownerQaService.getOwnerSnapshot', () => {
@@ -25,6 +27,24 @@ describe('ownerQaService.getOwnerSnapshot', () => {
     expect(result.intent).toBe('upcoming_dues');
     expect(result.summary).toBe('Found 2 upcoming due charge(s) in the next 10 day(s), totaling $200.00.');
     expect(result.dateContext).toEqual(expect.objectContaining({ type: 'window', daysAhead: 10 }));
+    expect(result.quality.policy).toEqual(expect.objectContaining({
+      threshold: 0.7,
+      score: 0.9,
+      metThreshold: true,
+      fallbackRecommended: false,
+    }));
+    expect(result.protocol).toEqual(expect.objectContaining({
+      action: 'owner_qa_snapshot',
+      intent: 'upcoming_dues',
+      execution: 'deterministic_query_broker',
+      fallback: expect.objectContaining({ required: false }),
+    }));
+    expect(ownerQaQualityRepo.recordOutcome).toHaveBeenCalledWith(expect.objectContaining({
+      ownerId: 'owner-1',
+      intent: 'upcoming_dues',
+      confidence: 'high',
+      fallbackRecommended: false,
+    }));
   });
 
   test('returns past due tenant snapshot', async () => {
@@ -109,6 +129,20 @@ describe('ownerQaService.getOwnerSnapshot', () => {
     expect(ownerQaRepo.getUpcomingDues).toHaveBeenCalledWith({ ownerId: 'owner-1', daysAhead: 30, limit: 10 });
     expect(result.intent).toBe('upcoming_dues');
     expect(result.dateContext).toEqual(expect.objectContaining({ daysAhead: 30 }));
+    expect(result.quality.policy).toEqual(expect.objectContaining({
+      metThreshold: false,
+      fallbackRecommended: true,
+      fallbackRoute: 'human_review',
+      fallbackReason: 'confidence_below_threshold',
+    }));
+    expect(result.protocol).toEqual(expect.objectContaining({
+      action: 'owner_qa_snapshot',
+      fallback: expect.objectContaining({
+        required: true,
+        route: 'human_review',
+        reason: 'confidence_below_threshold',
+      }),
+    }));
   });
 
   test('infers aging summary intent from prompt', async () => {
@@ -131,5 +165,12 @@ describe('ownerQaService.getOwnerSnapshot', () => {
   test('throws 400 when ownerId is missing', async () => {
     await expect(ownerQaService.getOwnerSnapshot({ intent: 'upcoming_dues' }))
       .rejects.toMatchObject({ status: 400 });
+  });
+
+  test('throws 400 when prompt exceeds max length', async () => {
+    await expect(ownerQaService.getOwnerSnapshot({
+      ownerId: 'owner-1',
+      prompt: 'x'.repeat(2001),
+    })).rejects.toMatchObject({ status: 400 });
   });
 });

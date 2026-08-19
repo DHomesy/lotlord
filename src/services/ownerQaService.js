@@ -1,4 +1,5 @@
 const ownerQaRepo = require('../dal/ownerQaRepository');
+const ownerQaQualityRepo = require('../dal/ownerQaQualityRepository');
 
 const OWNER_QA_INTENTS = {
   UPCOMING_DUES: 'upcoming_dues',
@@ -6,6 +7,20 @@ const OWNER_QA_INTENTS = {
   BALANCE_BY_TENANT: 'balance_by_tenant',
   AGING_SUMMARY: 'aging_summary',
   MAINTENANCE_OVERVIEW: 'maintenance_overview',
+};
+
+const INTENT_CONFIDENCE_THRESHOLDS = {
+  [OWNER_QA_INTENTS.UPCOMING_DUES]: 0.7,
+  [OWNER_QA_INTENTS.PAST_DUE_TENANTS]: 0.7,
+  [OWNER_QA_INTENTS.BALANCE_BY_TENANT]: 0.7,
+  [OWNER_QA_INTENTS.AGING_SUMMARY]: 0.7,
+  [OWNER_QA_INTENTS.MAINTENANCE_OVERVIEW]: 0.75,
+};
+
+const CONFIDENCE_SCORE = {
+  high: 0.9,
+  medium: 0.6,
+  low: 0.35,
 };
 
 function toIntInRange(value, fallback, min, max) {
@@ -62,6 +77,16 @@ function normalizeIntent(intent, prompt) {
   return value;
 }
 
+function validatePrompt(prompt) {
+  if (prompt === undefined || prompt === null) return;
+  if (typeof prompt !== 'string') {
+    throw Object.assign(new Error('prompt must be a string'), { status: 400 });
+  }
+  if (prompt.length > 2000) {
+    throw Object.assign(new Error('prompt must be 2000 characters or fewer'), { status: 400 });
+  }
+}
+
 function summarizeUpcomingDues(items, daysAhead) {
   const total = items.reduce((sum, row) => sum + Number(row.amount_due || 0), 0);
   return `Found ${items.length} upcoming due charge(s) in the next ${daysAhead} day(s), totaling $${toMoney(total)}.`;
@@ -104,6 +129,11 @@ function buildQuality({ intent, items, generatedAt }) {
     rationale = 'query succeeded but returned no matching records for current filters/time window';
   }
 
+  const score = CONFIDENCE_SCORE[confidence] ?? 0.6;
+  const threshold = INTENT_CONFIDENCE_THRESHOLDS[intent] ?? 0.7;
+  const metThreshold = score >= threshold;
+  const fallbackRecommended = !metThreshold;
+
   return {
     confidence,
     rationale,
@@ -111,7 +141,50 @@ function buildQuality({ intent, items, generatedAt }) {
     generatedAt,
     broker: 'owner_qa_deterministic_v1',
     promptReplay: 'none',
+    policy: {
+      threshold,
+      score,
+      metThreshold,
+      fallbackRecommended,
+      fallbackRoute: metThreshold ? null : 'human_review',
+      fallbackReason: metThreshold ? null : 'confidence_below_threshold',
+    },
   };
+}
+
+function buildProtocol({ intent, quality }) {
+  const fallback = quality?.policy?.fallbackRecommended
+    ? {
+      route: quality.policy.fallbackRoute || 'human_review',
+      reason: quality.policy.fallbackReason || 'confidence_below_threshold',
+      required: true,
+    }
+    : {
+      route: null,
+      reason: null,
+      required: false,
+    };
+
+  return {
+    action: 'owner_qa_snapshot',
+    intent,
+    execution: 'deterministic_query_broker',
+    fallback,
+  };
+}
+
+async function persistQualityOutcome({ ownerId, intent, quality }) {
+  try {
+    await ownerQaQualityRepo.recordOutcome({
+      ownerId,
+      intent,
+      confidence: quality?.confidence || 'medium',
+      fallbackRecommended: !!quality?.policy?.fallbackRecommended,
+    });
+  } catch (err) {
+    // Metrics persistence is best-effort and must not fail owner-facing queries.
+    console.warn('[ownerQaService] Failed to persist quality metric:', err.message);
+  }
 }
 
 async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
@@ -119,6 +192,7 @@ async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
     throw Object.assign(new Error('ownerId is required for owner Q&A'), { status: 400 });
   }
 
+  validatePrompt(prompt);
   const normalizedIntent = normalizeIntent(intent, prompt);
   const safeDaysAhead = toIntInRange(daysAhead, 30, 1, 90);
   const safeLimit = toIntInRange(limit, 10, 1, 25);
@@ -127,6 +201,8 @@ async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
 
   if (normalizedIntent === OWNER_QA_INTENTS.UPCOMING_DUES) {
     const items = await ownerQaRepo.getUpcomingDues({ ownerId, daysAhead: safeDaysAhead, limit: safeLimit });
+    const quality = buildQuality({ intent: normalizedIntent, items, generatedAt });
+    await persistQualityOutcome({ ownerId, intent: normalizedIntent, quality });
     return {
       intent: normalizedIntent,
       title: 'Upcoming Dues Snapshot',
@@ -138,13 +214,16 @@ async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
       },
       summary: summarizeUpcomingDues(items, safeDaysAhead),
       policyNote,
-      quality: buildQuality({ intent: normalizedIntent, items, generatedAt }),
+      protocol: buildProtocol({ intent: normalizedIntent, quality }),
+      quality,
       items,
     };
   }
 
   if (normalizedIntent === OWNER_QA_INTENTS.PAST_DUE_TENANTS) {
     const items = await ownerQaRepo.getPastDueTenants({ ownerId, limit: safeLimit });
+    const quality = buildQuality({ intent: normalizedIntent, items, generatedAt });
+    await persistQualityOutcome({ ownerId, intent: normalizedIntent, quality });
     return {
       intent: normalizedIntent,
       title: 'Past-Due Tenants Snapshot',
@@ -155,13 +234,16 @@ async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
       },
       summary: summarizePastDue(items),
       policyNote,
-      quality: buildQuality({ intent: normalizedIntent, items, generatedAt }),
+      protocol: buildProtocol({ intent: normalizedIntent, quality }),
+      quality,
       items,
     };
   }
 
   if (normalizedIntent === OWNER_QA_INTENTS.BALANCE_BY_TENANT) {
     const items = await ownerQaRepo.getTenantBalances({ ownerId, limit: safeLimit });
+    const quality = buildQuality({ intent: normalizedIntent, items, generatedAt });
+    await persistQualityOutcome({ ownerId, intent: normalizedIntent, quality });
     return {
       intent: normalizedIntent,
       title: 'Tenant Balance Snapshot',
@@ -172,13 +254,16 @@ async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
       },
       summary: summarizeBalances(items),
       policyNote,
-      quality: buildQuality({ intent: normalizedIntent, items, generatedAt }),
+      protocol: buildProtocol({ intent: normalizedIntent, quality }),
+      quality,
       items,
     };
   }
 
   if (normalizedIntent === OWNER_QA_INTENTS.AGING_SUMMARY) {
     const items = await ownerQaRepo.getAgingSummary({ ownerId });
+    const quality = buildQuality({ intent: normalizedIntent, items, generatedAt });
+    await persistQualityOutcome({ ownerId, intent: normalizedIntent, quality });
     return {
       intent: normalizedIntent,
       title: 'Aging Summary Snapshot',
@@ -189,12 +274,15 @@ async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
       },
       summary: summarizeAging(items),
       policyNote,
-      quality: buildQuality({ intent: normalizedIntent, items, generatedAt }),
+      protocol: buildProtocol({ intent: normalizedIntent, quality }),
+      quality,
       items,
     };
   }
 
   const overview = await ownerQaRepo.getMaintenanceOverview({ ownerId, limit: safeLimit });
+  const quality = buildQuality({ intent: normalizedIntent, items: overview.recent, generatedAt });
+  await persistQualityOutcome({ ownerId, intent: normalizedIntent, quality });
   return {
     intent: normalizedIntent,
     title: 'Maintenance Overview Snapshot',
@@ -205,7 +293,8 @@ async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
     },
     summary: summarizeMaintenance(overview.summary),
     policyNote,
-    quality: buildQuality({ intent: normalizedIntent, items: overview.recent, generatedAt }),
+    protocol: buildProtocol({ intent: normalizedIntent, quality }),
+    quality,
     items: overview.recent,
     breakdown: overview.summary,
   };

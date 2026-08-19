@@ -9,6 +9,7 @@ const { resolveOwnerId } = require('../lib/authHelpers');
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const MAX_CONTENT_LENGTH = 5000;
+const MAX_OWNER_QA_PROMPT_LENGTH = 2000;
 const VALID_STATUSES     = ['open', 'resolved', 'escalated'];
 const VALID_CATEGORIES   = ['maintenance', 'payment', 'lease', 'general'];
 const VALID_AUTOMATION_MODES = ['ai_active', 'ai_assist_only', 'human_only'];
@@ -17,6 +18,15 @@ const VALID_OWNER_QA_INTENTS = ['upcoming_dues', 'past_due_tenants', 'balance_by
 
 function hasOwnerQaPrompt(prompt) {
   return typeof prompt === 'string' && prompt.trim().length > 0;
+}
+
+function validateOwnerQaPrompt(prompt) {
+  if (prompt === undefined || prompt === null) return null;
+  if (typeof prompt !== 'string') return 'prompt must be a string';
+  if (prompt.length > MAX_OWNER_QA_PROMPT_LENGTH) {
+    return `prompt must be ${MAX_OWNER_QA_PROMPT_LENGTH} characters or fewer`;
+  }
+  return null;
 }
 
 function isLandlordUser(req) {
@@ -111,6 +121,9 @@ async function getOwnerQaSnapshot(req, res, next) {
     }
 
     const { intent, prompt, daysAhead, limit } = req.body || {};
+    const promptErr = validateOwnerQaPrompt(prompt);
+    if (promptErr) return res.status(400).json({ error: promptErr });
+
     const normalizedIntent = String(intent || '').toLowerCase();
     if (!VALID_OWNER_QA_INTENTS.includes(normalizedIntent) && !hasOwnerQaPrompt(prompt)) {
       return res.status(400).json({
@@ -240,6 +253,9 @@ async function createOwnerQaSessionSnapshot(req, res, next) {
     }
     const ownerId = resolveOwnerId(req.user);
     const { intent, prompt, daysAhead, limit } = req.body || {};
+    const promptErr = validateOwnerQaPrompt(prompt);
+    if (promptErr) return res.status(400).json({ error: promptErr });
+
     const normalizedIntent = String(intent || '').toLowerCase();
     if (!VALID_OWNER_QA_INTENTS.includes(normalizedIntent) && !hasOwnerQaPrompt(prompt)) {
       return res.status(400).json({
@@ -346,6 +362,9 @@ async function updateConversation(req, res, next) {
     }
     if (action === 'owner_qa_snapshot') {
       const { intent, prompt, daysAhead, limit } = req.body;
+      const promptErr = validateOwnerQaPrompt(prompt);
+      if (promptErr) return res.status(400).json({ error: promptErr });
+
       const normalizedIntent = String(intent || '').toLowerCase();
       if (!VALID_OWNER_QA_INTENTS.includes(normalizedIntent) && !hasOwnerQaPrompt(prompt)) {
         return res.status(400).json({
@@ -509,6 +528,9 @@ async function supervisorUpdateConversation(req, res, next) {
     }
     if (action === 'owner_qa_snapshot') {
       const { intent, prompt, daysAhead, limit } = req.body;
+      const promptErr = validateOwnerQaPrompt(prompt);
+      if (promptErr) return res.status(400).json({ error: promptErr });
+
       const normalizedIntent = String(intent || '').toLowerCase();
       if (!VALID_OWNER_QA_INTENTS.includes(normalizedIntent) && !hasOwnerQaPrompt(prompt)) {
         return res.status(400).json({
