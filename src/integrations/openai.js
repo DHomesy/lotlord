@@ -15,6 +15,7 @@
 
 const OpenAI = require('openai');
 const env = require('../config/env');
+const modelRoutingPolicy = require('../services/modelRoutingPolicy');
 
 let openai;
 
@@ -51,7 +52,7 @@ Always be professional, concise, and friendly.
  *                                        (lease details, balance, property info from conversationService)
  * @returns {Promise<{ reply: string, tokensUsed: number, model: string }>}
  */
-async function generateReply({ history, newMessage, systemContext = '' }) {
+async function generateReply({ history, newMessage, systemContext = '', routingContext = {} }) {
   // Truncate to 2000 chars — same limit as classifyMessage — to cap token cost
   // and constrain prompt injection via tenant-controlled message content.
   const safeNewMessage = String(newMessage).substring(0, 2000);
@@ -66,8 +67,16 @@ async function generateReply({ history, newMessage, systemContext = '' }) {
     { role: 'user', content: safeNewMessage },
   ];
 
+  const route = modelRoutingPolicy.resolveModel({
+    operation: 'generation',
+    riskState: routingContext.riskState,
+    needsHumanReview: routingContext.needsHumanReview,
+    messageLength: safeNewMessage.length,
+    historySize: Array.isArray(history) ? history.length : 0,
+  });
+
   const response = await getClient().chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: route.model,
     messages,
     max_tokens: 300,
     temperature: 0.4,
@@ -93,8 +102,13 @@ async function generateReply({ history, newMessage, systemContext = '' }) {
 async function classifyMessage(content) {
   // Truncate to 2000 chars — limits cost and constrains prompt injection blast radius
   const safeContent = String(content).substring(0, 2000);
+  const route = modelRoutingPolicy.resolveModel({
+    operation: 'classification',
+    messageLength: safeContent.length,
+  });
+
   const response = await getClient().chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: route.model,
     messages: [
       {
         role: 'system',

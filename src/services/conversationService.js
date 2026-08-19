@@ -603,6 +603,10 @@ async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, c
     history:    promptEnvelope.history,
     newMessage: content,
     systemContext: promptEnvelope.systemContext,
+    routingContext: {
+      riskState: conv.risk_state,
+      needsHumanReview: !!conv.needs_human_review || !!softTrigger,
+    },
   });
 
   const draft = await convRepo.appendMessage({

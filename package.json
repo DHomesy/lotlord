@@ -12,6 +12,7 @@
     "seed": "node seeds/dev_seed.js",
     "create-admin": "node scripts/create-admin.js",
     "update-admin": "node scripts/update-admin.js",
+    "signoff:sprint-d:staging": "powershell -ExecutionPolicy Bypass -File scripts/sprint-d-staging-signoff.ps1",
     "test": "cross-env NODE_ENV=test jest --runInBand --forceExit",
     "test:unit": "jest --config jest.unit.config.js --no-coverage",
     "lint": "eslint src/**/*.js",

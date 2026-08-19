@@ -8,7 +8,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ### Added
-- _No entries yet._
+- **Model routing policy matrix (D.4 closeout)** — Added `src/services/modelRoutingPolicy.js` and integrated risk/review/complexity-aware model selection for tenant AI generation/classification.
+- **Owner AI quality dashboard section** — Admin dashboard now renders owner-QA quality analytics (`samples`, `fallback rate`, `confidence mix`) from `/api/v1/analytics/owner-qa-quality`.
+- **Sprint D closeout runbook** — Added `SPRINT-D-CLOSEOUT-RUNBOOK.md` with incident response, routing policy controls, and staging load/perf validation checklist.
+- **Sprint D staging signoff toolkit** — Added `scripts/sprint-d-staging-signoff.ps1`, npm shortcut `signoff:sprint-d:staging`, and `SPRINT-D-STAGING-SIGNOFF-REPORT-TEMPLATE.md` for repeatable load/perf execution and reporting.
+
+### Changed
+- **Sprint D status tracking updated** — `SPRINT-D-AI-WORKFLOWS.md` now reflects D.1-D.3 shipped, D.4 closeout execution state, and explicit signoff gate.
 
 ---
 ## [1.15.8] — 2026-08-19 — Sprint D.4 Audit Hardening + Performance Slice

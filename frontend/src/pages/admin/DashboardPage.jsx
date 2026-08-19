@@ -30,7 +30,7 @@ import LockIcon          from '@mui/icons-material/Lock'
 import PageContainer     from '../../components/layout/PageContainer'
 import LoadingOverlay    from '../../components/common/LoadingOverlay'
 import LandlordSetupCard from '../../components/common/LandlordSetupCard'
-import { useDashboard }  from '../../hooks/useAnalytics'
+import { useDashboard, useOwnerQaQuality }  from '../../hooks/useAnalytics'
 import { useConnectStatus } from '../../hooks/useStripeSetup'
 import { useMySubscription } from '../../hooks/useBilling'
 import { hasStarter } from '../../lib/plans'
@@ -156,6 +156,7 @@ function ActivityTable({ head, children, empty, isMobile, mobileRows }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { data, isLoading, isError, error } = useDashboard()
+  const { data: qaQuality, isError: qaQualityError } = useOwnerQaQuality(30)
   const { data: connectStatus } = useConnectStatus()
   const { data: subscription } = useMySubscription()
   const user = useAuthStore((s) => s.user)
@@ -263,6 +264,19 @@ export default function DashboardPage() {
     recentPayments    = [],
     recentMaintenance = [],
   } = data
+
+  const byIntent = Array.isArray(qaQuality?.byIntent) ? qaQuality.byIntent : []
+  const confidenceRows = Array.isArray(qaQuality?.confidenceDistribution) ? qaQuality.confidenceDistribution : []
+
+  const confidenceForIntent = (intent) => {
+    const rows = confidenceRows.filter((row) => row.intent === intent)
+    const total = rows.reduce((sum, row) => sum + Number(row.samples || 0), 0)
+    if (!total) return []
+    return rows.map((row) => ({
+      confidence: row.confidence,
+      pct: Math.round((Number(row.samples || 0) / total) * 100),
+    }))
+  }
 
   const connectOnboarded = connectStatus?.onboarded === true
 
@@ -405,6 +419,76 @@ export default function DashboardPage() {
               </TableRow>
             ))}
           </ActivityTable>
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={3} mt={0.5}>
+        <Grid item xs={12}>
+          <Typography variant="subtitle2" fontWeight={600} mb={1}>
+            Owner AI Quality (30-day window)
+          </Typography>
+          <ActivityTable
+            head={['Intent', 'Samples', 'Fallback Rate', 'Confidence Mix']}
+            empty={byIntent.length === 0 ? 'No owner AI quality samples yet' : undefined}
+            isMobile={isMobile}
+            mobileRows={byIntent.map((row) => {
+              const chips = confidenceForIntent(row.intent)
+              return (
+                <Box key={row.intent} sx={{ py: 1 }}>
+                  <Typography variant="body2" fontWeight={600}>{row.intent.replace(/_/g, ' ')}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    samples: {row.total_samples} · fallback rate: {Number(row.fallback_rate_pct || 0).toFixed(1)}%
+                  </Typography>
+                  <Stack direction="row" spacing={0.75} mt={0.75} flexWrap="wrap" useFlexGap>
+                    {chips.map((chip) => (
+                      <Chip
+                        key={`${row.intent}-${chip.confidence}`}
+                        size="small"
+                        variant="outlined"
+                        color={chip.confidence === 'high' ? 'success' : chip.confidence === 'medium' ? 'warning' : 'default'}
+                        label={`${chip.confidence}: ${chip.pct}%`}
+                      />
+                    ))}
+                  </Stack>
+                </Box>
+              )
+            })}
+          >
+            {byIntent.map((row) => {
+              const chips = confidenceForIntent(row.intent)
+              return (
+                <TableRow key={row.intent} hover>
+                  <TableCell sx={{ textTransform: 'capitalize' }}>{row.intent.replace(/_/g, ' ')}</TableCell>
+                  <TableCell>{row.total_samples}</TableCell>
+                  <TableCell>
+                    <Chip
+                      size="small"
+                      color={Number(row.fallback_rate_pct || 0) >= 25 ? 'warning' : 'success'}
+                      label={`${Number(row.fallback_rate_pct || 0).toFixed(1)}%`}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                      {chips.map((chip) => (
+                        <Chip
+                          key={`${row.intent}-${chip.confidence}`}
+                          size="small"
+                          variant="outlined"
+                          color={chip.confidence === 'high' ? 'success' : chip.confidence === 'medium' ? 'warning' : 'default'}
+                          label={`${chip.confidence}: ${chip.pct}%`}
+                        />
+                      ))}
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </ActivityTable>
+          {qaQualityError && (
+            <Alert severity="warning" sx={{ mt: 1.5 }}>
+              Unable to load owner AI quality metrics right now.
+            </Alert>
+          )}
         </Grid>
       </Grid>
     </PageContainer>
