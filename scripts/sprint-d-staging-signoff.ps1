@@ -43,11 +43,36 @@ function Invoke-TimedRequest {
     }
   } catch {
     $sw.Stop()
+
+    $statusCode = $null
+    $responseBody = $null
+    try {
+      $resp = $_.Exception.Response
+      if ($null -ne $resp) {
+        if ($resp.StatusCode) {
+          $statusCode = [int]$resp.StatusCode
+        }
+        $stream = $resp.GetResponseStream()
+        if ($null -ne $stream) {
+          $reader = New-Object System.IO.StreamReader($stream)
+          $responseBody = $reader.ReadToEnd()
+        }
+      }
+    } catch {
+      # Ignore nested parsing errors; keep original message.
+    }
+
+    $errorPayload = [PSCustomObject]@{
+      message = $_.Exception.Message
+      statusCode = $statusCode
+      responseBody = $responseBody
+    }
+
     return [PSCustomObject]@{
       ok = $false
       ms = [math]::Round($sw.Elapsed.TotalMilliseconds, 2)
       response = $null
-      error = $_.Exception.Message
+      error = $errorPayload
     }
   }
 }
@@ -129,11 +154,11 @@ $report = [PSCustomObject]@{
     ownerQaConversationAction = if ($conversationActionRows.Count -gt 0) { Summarize -Rows $conversationActionRows } else { $null }
   }
   errors = [PSCustomObject]@{
-    dashboard = @($dashboardRows | Where-Object { -not $_.ok } | Select-Object -ExpandProperty error -Unique)
-    ownerQaQuality = @($qualityRows | Where-Object { -not $_.ok } | Select-Object -ExpandProperty error -Unique)
-    ownerQaPortalSnapshot = @($portalSnapshotRows | Where-Object { -not $_.ok } | Select-Object -ExpandProperty error -Unique)
-    ownerQaSessionSnapshot = @($sessionSnapshotRows | Where-Object { -not $_.ok } | Select-Object -ExpandProperty error -Unique)
-    ownerQaConversationAction = @($conversationActionRows | Where-Object { -not $_.ok } | Select-Object -ExpandProperty error -Unique)
+    dashboard = @($dashboardRows | Where-Object { -not $_.ok } | ForEach-Object { $_.error })
+    ownerQaQuality = @($qualityRows | Where-Object { -not $_.ok } | ForEach-Object { $_.error })
+    ownerQaPortalSnapshot = @($portalSnapshotRows | Where-Object { -not $_.ok } | ForEach-Object { $_.error })
+    ownerQaSessionSnapshot = @($sessionSnapshotRows | Where-Object { -not $_.ok } | ForEach-Object { $_.error })
+    ownerQaConversationAction = @($conversationActionRows | Where-Object { -not $_.ok } | ForEach-Object { $_.error })
   }
 }
 

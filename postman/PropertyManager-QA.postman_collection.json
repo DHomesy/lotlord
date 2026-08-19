@@ -1,0 +1,323 @@
+{
+  "info": {
+    "name": "Property Manager QA Runner",
+    "description": "QA-focused collection for repeatable verification across auth, inbox, owner QA, analytics, and key admin flows.\n\nHow to use:\n1. Set baseUrl and credentials variables.\n2. Run Auth/Login to set authToken.\n3. Run Inbox/List Conversations to auto-set conversationId.\n4. Run Owner QA/Create Session to auto-set ownerQaSessionId.\n5. Run the rest in order or via Collection Runner.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://testapi.lotlord.app", "type": "string" },
+    { "key": "email", "value": "", "type": "string" },
+    { "key": "password", "value": "", "type": "string" },
+    { "key": "authToken", "value": "", "type": "string" },
+    { "key": "conversationId", "value": "", "type": "string" },
+    { "key": "ownerQaSessionId", "value": "", "type": "string" },
+    { "key": "ownerQaIntent", "value": "upcoming_dues", "type": "string" },
+    { "key": "days", "value": "30", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["pm.test('Health is 200/503', function () { pm.expect([200,503]).to.include(pm.response.code); });"] }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /api/v1/auth/login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login succeeds', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "if (json && json.token) { pm.collectionVariables.set('authToken', json.token); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/v1/auth/refresh",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "refresh"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inbox Conversations",
+      "item": [
+        {
+          "name": "GET /api/v1/inbox",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/inbox?page=1&limit=30",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "inbox"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "30" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Inbox list succeeds', function () { pm.response.to.have.status(200); });",
+                  "const rows = pm.response.json();",
+                  "if (Array.isArray(rows) && rows.length && rows[0].id) {",
+                  "  pm.collectionVariables.set('conversationId', rows[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/v1/inbox/{{conversationId}}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/inbox/{{conversationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "inbox", "{{conversationId}}"]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/inbox/{{conversationId}}/trace",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/inbox/{{conversationId}}/trace",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "inbox", "{{conversationId}}", "trace"]
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/v1/inbox/{{conversationId}} (owner_qa_snapshot action)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/inbox/{{conversationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "inbox", "{{conversationId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"owner_qa_snapshot\",\n  \"intent\": \"{{ownerQaIntent}}\",\n  \"daysAhead\": 30,\n  \"limit\": 10\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Owner QA Sessions",
+      "item": [
+        {
+          "name": "POST /api/v1/inbox/owner-qa/sessions",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/inbox/owner-qa/sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "inbox", "owner-qa", "sessions"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"QA Session\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Create owner QA session succeeds', function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "if (json && json.session && json.session.id) {",
+                  "  pm.collectionVariables.set('ownerQaSessionId', json.session.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/v1/inbox/owner-qa/sessions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/inbox/owner-qa/sessions?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "inbox", "owner-qa", "sessions"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/inbox/owner-qa/snapshot",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/inbox/owner-qa/snapshot",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "inbox", "owner-qa", "snapshot"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"intent\": \"{{ownerQaIntent}}\",\n  \"daysAhead\": 30,\n  \"limit\": 10\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/inbox/owner-qa/sessions/{{ownerQaSessionId}}/snapshot",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/inbox/owner-qa/sessions/{{ownerQaSessionId}}/snapshot",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "inbox", "owner-qa", "sessions", "{{ownerQaSessionId}}", "snapshot"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"intent\": \"{{ownerQaIntent}}\",\n  \"daysAhead\": 30,\n  \"limit\": 10\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "GET /api/v1/analytics/dashboard",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "analytics", "dashboard"]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/analytics/owner-qa-quality",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/owner-qa-quality?days={{days}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "analytics", "owner-qa-quality"],
+              "query": [
+                { "key": "days", "value": "{{days}}" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Supervisor",
+      "item": [
+        {
+          "name": "GET /api/v1/supervisor/conversations",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/supervisor/conversations?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "supervisor", "conversations"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/v1/supervisor/conversations/{{conversationId}} (owner_qa_snapshot action)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/supervisor/conversations/{{conversationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "supervisor", "conversations", "{{conversationId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"owner_qa_snapshot\",\n  \"intent\": \"{{ownerQaIntent}}\",\n  \"limit\": 10\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
