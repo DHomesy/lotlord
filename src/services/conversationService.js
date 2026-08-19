@@ -37,18 +37,32 @@ const ownerQaService = require('./ownerQaService');
 const audit = require('./auditService');
 const openai           = require('../integrations/openai');
 
-// Hard escalation: immediately stop AI handling for this inbound turn.
-const HARD_ESCALATION_TRIGGERS = [
-  'fire', 'gas leak', 'lawyer', 'attorney', 'sue', 'lawsuit', 'eviction', 'court',
+// Hard escalation: severe safety/legal signals that require urgent human intervention.
+const HARD_ESCALATION_PATTERNS = [
+  { label: 'active_fire', pattern: /\b(active\s+fire|house\s+on\s+fire|building\s+on\s+fire|fire\s+alarm\s+going\s+off)\b/i },
+  { label: 'gas_leak', pattern: /\b(gas\s+leak|smell\s+gas|carbon\s+monoxide)\b/i },
+  { label: 'severe_injury', pattern: /\b(someone\s+is\s+hurt|medical\s+emergency|ambulance)\b/i },
+  { label: 'legal_threat', pattern: /\b(lawsuit|i\s+will\s+sue|attorney\s+letter|court\s+order|restraining\s+order)\b/i },
 ];
 
-// Soft review: keep AI triage active (mode permitting), but flag human review.
-const SOFT_REVIEW_TRIGGERS = [
-  'emergency', 'flood', 'no heat', 'mold', 'uninhabitable',
+// Soft review: keep AI triage active (mode permitting), while notifying for attention.
+const SOFT_REVIEW_PATTERNS = [
+  { label: 'emergency_wording', pattern: /\bemergency\b/i },
+  { label: 'flood_or_leak', pattern: /\b(flood|burst\s+pipe|major\s+leak|water\s+coming\s+through)\b/i },
+  { label: 'habitability', pattern: /\b(no\s+heat|no\s+hot\s+water|mold|uninhabitable)\b/i },
 ];
 
 const AI_RATE_LIMIT_PER_DAY = 5;
 const AUTOMATION_MODES = ['ai_active', 'ai_assist_only', 'human_only'];
+
+function findPolicyTrigger(text, definitions) {
+  return definitions.find((entry) => entry.pattern.test(text || '')) || null;
+}
+
+function buildEmergencyDraft(triggerLabel) {
+  const reason = triggerLabel ? triggerLabel.replace(/_/g, ' ') : 'safety concern';
+  return `Thanks for reporting this quickly. This appears to be urgent (${reason}), so I am escalating it to the property manager for immediate follow-up. If there is any immediate danger, please call emergency services and move to a safe location first.`;
+}
 
 // ── Public entry points (called from webhooks) ────────────────────────────────
 
@@ -277,13 +291,18 @@ async function getOwnerQASnapshotFromConversation(conversationId, actorId, { int
     },
   });
 
-  await convRepo.appendMessage({
-    id: uuidv4(),
-    conversationId: conv.id,
-    role: 'system',
-    content: `Owner Q&A snapshot generated (${snapshot.intent}). ${snapshot.summary}`,
-    suggested: false,
-  });
+  try {
+    await convRepo.appendMessage({
+      id: uuidv4(),
+      conversationId: conv.id,
+      role: 'system',
+      content: `Owner Q&A snapshot generated (${snapshot.intent}). ${snapshot.summary}`,
+      suggested: false,
+    });
+  } catch (err) {
+    // Snapshot generation should still succeed even if a trace message write fails.
+    console.warn('[conversationService] Failed to append owner QA trace message:', err.message);
+  }
 
   return {
     conversationId: conv.id,
@@ -523,19 +542,26 @@ async function _handleInbound({ tenantUserId, landlordId, content, logEntryId, c
 
   // Check escalation/review policy first.
   const lower = content.toLowerCase();
-  const hardTrigger = HARD_ESCALATION_TRIGGERS.find((t) => lower.includes(t));
+  const hardTrigger = findPolicyTrigger(lower, HARD_ESCALATION_PATTERNS);
   if (hardTrigger) {
-    console.warn(`[conversationService] Escalation trigger "${hardTrigger}" in conversation ${conv.id}`);
+    console.warn(`[conversationService] Escalation trigger "${hardTrigger.label}" in conversation ${conv.id}`);
+    await convRepo.appendMessage({
+      id: uuidv4(),
+      conversationId: conv.id,
+      role: 'assistant',
+      content: buildEmergencyDraft(hardTrigger.label),
+      suggested: true,
+    });
     await escalateConversation(conv.id, resolvedLandlordId);
     return;
   }
 
-  const softTrigger = SOFT_REVIEW_TRIGGERS.find((t) => lower.includes(t));
+  const softTrigger = findPolicyTrigger(lower, SOFT_REVIEW_PATTERNS);
   if (softTrigger) {
     await convRepo.update(conv.id, {
       risk_state: 'elevated',
       needs_human_review: true,
-      review_reason: `soft_review_trigger:${softTrigger}`,
+      review_reason: `soft_review_trigger:${softTrigger.label}`,
     });
   }
 

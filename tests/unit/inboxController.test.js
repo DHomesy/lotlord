@@ -544,6 +544,34 @@ describe('updateConversation', () => {
     expect(res.json).toHaveBeenCalledWith(payload);
   });
 
+  test('action=owner_qa_snapshot accepts portfolio_overview intent', async () => {
+    const payload = {
+      conversationId: CONV_ID,
+      snapshot: {
+        intent: 'portfolio_overview',
+        summary: 'Portfolio snapshot generated.',
+      },
+    };
+    conversationService.getOwnerQASnapshotFromConversation.mockResolvedValue(payload);
+
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'owner_qa_snapshot', intent: 'portfolio_overview' },
+      user: { role: 'landlord', sub: OWNER_ID },
+    });
+    const res = makeRes();
+
+    await updateConversation(req, res, next);
+
+    expect(conversationService.getOwnerQASnapshotFromConversation).toHaveBeenCalledWith(CONV_ID, OWNER_ID, {
+      intent: 'portfolio_overview',
+      prompt: undefined,
+      daysAhead: undefined,
+      limit: undefined,
+    });
+    expect(res.json).toHaveBeenCalledWith(payload);
+  });
+
   test('action=owner_qa_snapshot returns 400 for invalid intent', async () => {
     const req = makeReq({
       params: { id: CONV_ID },

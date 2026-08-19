@@ -120,19 +120,22 @@ async function getAgingSummary({ ownerId }) {
          AND rc.due_date < CURRENT_DATE
          AND GREATEST(rc.amount - COALESCE(paid.total_paid, 0), 0) > 0
      )
-     SELECT
-       CASE
-         WHEN days_overdue BETWEEN 1 AND 30 THEN '1-30'
-         WHEN days_overdue BETWEEN 31 AND 60 THEN '31-60'
-         WHEN days_overdue BETWEEN 61 AND 90 THEN '61-90'
-         ELSE '90+'
-       END AS bucket,
-       COUNT(*)::INT AS charge_count,
-       SUM(amount_due)::NUMERIC AS total_amount
-     FROM overdue
-     GROUP BY 1
+     SELECT bucket, charge_count, total_amount
+     FROM (
+       SELECT
+         CASE
+           WHEN days_overdue BETWEEN 1 AND 30 THEN '1-30'
+           WHEN days_overdue BETWEEN 31 AND 60 THEN '31-60'
+           WHEN days_overdue BETWEEN 61 AND 90 THEN '61-90'
+           ELSE '90+'
+         END AS bucket,
+         COUNT(*)::INT AS charge_count,
+         SUM(amount_due)::NUMERIC AS total_amount
+       FROM overdue
+       GROUP BY 1
+     ) buckets
      ORDER BY
-       CASE bucket
+       CASE buckets.bucket
          WHEN '1-30' THEN 1
          WHEN '31-60' THEN 2
          WHEN '61-90' THEN 3

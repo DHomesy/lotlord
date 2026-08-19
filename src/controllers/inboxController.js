@@ -14,7 +14,7 @@ const VALID_STATUSES     = ['open', 'resolved', 'escalated'];
 const VALID_CATEGORIES   = ['maintenance', 'payment', 'lease', 'general'];
 const VALID_AUTOMATION_MODES = ['ai_active', 'ai_assist_only', 'human_only'];
 const VALID_UNMATCHED_STATUSES = ['open', 'resolved'];
-const VALID_OWNER_QA_INTENTS = ['upcoming_dues', 'past_due_tenants', 'balance_by_tenant', 'aging_summary', 'maintenance_overview'];
+const VALID_OWNER_QA_INTENTS = ['portfolio_overview', 'upcoming_dues', 'past_due_tenants', 'balance_by_tenant', 'aging_summary', 'maintenance_overview'];
 
 function hasOwnerQaPrompt(prompt) {
   return typeof prompt === 'string' && prompt.trim().length > 0;

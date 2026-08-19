@@ -210,7 +210,7 @@ describe('handleInboundSms', () => {
     expect(openai.generateReply).not.toHaveBeenCalled();
   });
 
-  test('escalates conversation on trigger word', async () => {
+  test('escalates conversation on hard trigger and appends emergency assistant draft', async () => {
     tenantRepo.findByUserId.mockResolvedValue(mockTenantRecord);
     convRepo.findActive.mockResolvedValue(mockConversation);
     convRepo.appendMessage.mockResolvedValue({ id: 'msg-1' });
@@ -221,7 +221,7 @@ describe('handleInboundSms', () => {
 
     await conversationService.handleInboundSms({
       tenantUserId: TENANT_USER_ID, landlordId: LANDLORD_ID,
-      content: 'I am going to sue you!', logEntryId: LOG_ENTRY_ID,
+      content: 'There is an active fire in the unit right now!', logEntryId: LOG_ENTRY_ID,
     });
 
     expect(convRepo.update).toHaveBeenCalledWith(CONV_ID, expect.objectContaining({
@@ -229,6 +229,11 @@ describe('handleInboundSms', () => {
       urgency: 5,
       risk_state: 'elevated',
       needs_human_review: true,
+    }));
+    expect(convRepo.appendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      role: 'assistant',
+      suggested: true,
+      content: expect.stringContaining('I am escalating it to the property manager for immediate follow-up'),
     }));
     expect(openai.generateReply).not.toHaveBeenCalled();
   });

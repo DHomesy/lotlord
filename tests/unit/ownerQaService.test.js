@@ -157,6 +157,27 @@ describe('ownerQaService.getOwnerSnapshot', () => {
     expect(result.intent).toBe('aging_summary');
   });
 
+  test('falls back to portfolio overview for ambiguous prompts', async () => {
+    ownerQaRepo.getUpcomingDues.mockResolvedValue([]);
+    ownerQaRepo.getPastDueTenants.mockResolvedValue([]);
+    ownerQaRepo.getTenantBalances.mockResolvedValue([]);
+    ownerQaRepo.getAgingSummary.mockResolvedValue([]);
+    ownerQaRepo.getMaintenanceOverview.mockResolvedValue({ summary: [], recent: [] });
+
+    const result = await ownerQaService.getOwnerSnapshot({
+      ownerId: 'owner-1',
+      prompt: 'How is the portfolio doing overall?',
+    });
+
+    expect(result.intent).toBe('portfolio_overview');
+    expect(result.title).toBe('Portfolio Overview Snapshot');
+    expect(ownerQaRepo.getUpcomingDues).toHaveBeenCalledWith({ ownerId: 'owner-1', daysAhead: 30, limit: 5 });
+    expect(ownerQaRepo.getPastDueTenants).toHaveBeenCalledWith({ ownerId: 'owner-1', limit: 5 });
+    expect(ownerQaRepo.getTenantBalances).toHaveBeenCalledWith({ ownerId: 'owner-1', limit: 5 });
+    expect(ownerQaRepo.getAgingSummary).toHaveBeenCalledWith({ ownerId: 'owner-1' });
+    expect(ownerQaRepo.getMaintenanceOverview).toHaveBeenCalledWith({ ownerId: 'owner-1', limit: 5 });
+  });
+
   test('throws 400 for unsupported intent', async () => {
     await expect(ownerQaService.getOwnerSnapshot({ ownerId: 'owner-1', intent: 'unknown_intent' }))
       .rejects.toMatchObject({ status: 400 });

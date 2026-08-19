@@ -2,6 +2,7 @@ const ownerQaRepo = require('../dal/ownerQaRepository');
 const ownerQaQualityRepo = require('../dal/ownerQaQualityRepository');
 
 const OWNER_QA_INTENTS = {
+  PORTFOLIO_OVERVIEW: 'portfolio_overview',
   UPCOMING_DUES: 'upcoming_dues',
   PAST_DUE_TENANTS: 'past_due_tenants',
   BALANCE_BY_TENANT: 'balance_by_tenant',
@@ -10,6 +11,7 @@ const OWNER_QA_INTENTS = {
 };
 
 const INTENT_CONFIDENCE_THRESHOLDS = {
+  [OWNER_QA_INTENTS.PORTFOLIO_OVERVIEW]: 0.72,
   [OWNER_QA_INTENTS.UPCOMING_DUES]: 0.7,
   [OWNER_QA_INTENTS.PAST_DUE_TENANTS]: 0.7,
   [OWNER_QA_INTENTS.BALANCE_BY_TENANT]: 0.7,
@@ -37,6 +39,10 @@ function inferIntentFromPrompt(prompt) {
   const text = String(prompt || '').toLowerCase();
   if (!text.trim()) return null;
 
+  if (/overview|portfolio summary|how am i doing|what should i know|health check|snapshot|summarize|what is going on/.test(text)) {
+    return OWNER_QA_INTENTS.PORTFOLIO_OVERVIEW;
+  }
+
   if (/maintenance|repair|work order|ticket|completed|in progress|open requests?/.test(text)) {
     return OWNER_QA_INTENTS.MAINTENANCE_OVERVIEW;
   }
@@ -62,13 +68,8 @@ function normalizeIntent(intent, prompt) {
   const value = String(intent || '').toLowerCase().trim();
   if (!value) {
     const inferred = inferIntentFromPrompt(prompt);
-    if (!inferred) {
-      throw Object.assign(
-        new Error('Could not infer owner Q&A intent from prompt. Provide a clearer prompt or explicit intent.'),
-        { status: 400 },
-      );
-    }
-    return inferred;
+    // Favor a deterministic broad summary when a prompt is ambiguous.
+    return inferred || OWNER_QA_INTENTS.PORTFOLIO_OVERVIEW;
   }
   const valid = Object.values(OWNER_QA_INTENTS);
   if (!valid.includes(value)) {
@@ -114,6 +115,22 @@ function summarizeMaintenance(summaryRows) {
     .filter((row) => String(row.status || '').toLowerCase() === 'completed')
     .reduce((sum, row) => sum + Number(row.count || 0), 0);
   return `There are ${total} maintenance request(s) in scope, including ${completed} completed.`;
+}
+
+function summarizePortfolioOverview({ upcoming, pastDue, balances, aging, maintenance }) {
+  const upcomingTotal = upcoming.reduce((sum, row) => sum + Number(row.amount_due || 0), 0);
+  const pastDueTotal = pastDue.reduce((sum, row) => sum + Number(row.overdue_amount || 0), 0);
+  const balanceTotal = balances.reduce((sum, row) => sum + Number(row.balance || 0), 0);
+  const openMaintenance = (maintenance.summary || [])
+    .filter((row) => ['open', 'in_progress'].includes(String(row.status || '').toLowerCase()))
+    .reduce((sum, row) => sum + Number(row.count || 0), 0);
+
+  return [
+    `Portfolio snapshot: ${upcoming.length} upcoming due charge(s) totaling $${toMoney(upcomingTotal)} in the next 30 days.`,
+    `${pastDue.length} tenant(s) are currently past due totaling $${toMoney(pastDueTotal)}.`,
+    `Outstanding tenant balances total $${toMoney(balanceTotal)} across ${balances.length} tenant row(s).`,
+    `Aging has ${aging.length} active bucket(s), and there are ${openMaintenance} open/in-progress maintenance request(s).`,
+  ].join(' ');
 }
 
 function buildQuality({ intent, items, generatedAt }) {
@@ -198,6 +215,54 @@ async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
   const safeLimit = toIntInRange(limit, 10, 1, 25);
   const generatedAt = new Date().toISOString();
   const policyNote = 'No maintenance statuses were changed by this snapshot. Status updates require explicit landlord or tenant workflow actions.';
+
+  if (normalizedIntent === OWNER_QA_INTENTS.PORTFOLIO_OVERVIEW) {
+    const [upcoming, pastDue, balances, aging, maintenance] = await Promise.all([
+      ownerQaRepo.getUpcomingDues({ ownerId, daysAhead: 30, limit: 5 }),
+      ownerQaRepo.getPastDueTenants({ ownerId, limit: 5 }),
+      ownerQaRepo.getTenantBalances({ ownerId, limit: 5 }),
+      ownerQaRepo.getAgingSummary({ ownerId }),
+      ownerQaRepo.getMaintenanceOverview({ ownerId, limit: 5 }),
+    ]);
+
+    const overviewRows = [
+      { metric: 'upcoming_dues_count', value: upcoming.length },
+      { metric: 'past_due_tenants_count', value: pastDue.length },
+      { metric: 'tenant_balance_rows', value: balances.length },
+      { metric: 'aging_bucket_count', value: aging.length },
+      {
+        metric: 'open_maintenance_count',
+        value: (maintenance.summary || [])
+          .filter((row) => ['open', 'in_progress'].includes(String(row.status || '').toLowerCase()))
+          .reduce((sum, row) => sum + Number(row.count || 0), 0),
+      },
+    ];
+
+    const quality = buildQuality({ intent: normalizedIntent, items: overviewRows, generatedAt });
+    await persistQualityOutcome({ ownerId, intent: normalizedIntent, quality });
+    return {
+      intent: normalizedIntent,
+      title: 'Portfolio Overview Snapshot',
+      generatedAt,
+      dateContext: {
+        type: 'as_of',
+        date: new Date().toISOString().slice(0, 10),
+      },
+      summary: summarizePortfolioOverview({ upcoming, pastDue, balances, aging, maintenance }),
+      policyNote,
+      protocol: buildProtocol({ intent: normalizedIntent, quality }),
+      quality,
+      items: overviewRows,
+      portfolio: {
+        upcoming,
+        pastDue,
+        balances,
+        aging,
+        maintenance: maintenance.recent,
+      },
+      breakdown: maintenance.summary,
+    };
+  }
 
   if (normalizedIntent === OWNER_QA_INTENTS.UPCOMING_DUES) {
     const items = await ownerQaRepo.getUpcomingDues({ ownerId, daysAhead: safeDaysAhead, limit: safeLimit });
