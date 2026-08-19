@@ -15,6 +15,7 @@ function fmtMoney(v) {
 }
 
 function getRowLabel(item) {
+  if (item.bucket) return `${item.bucket} days`
   if (item.tenant_name) return item.tenant_name
   if (item.title) return item.title
   if (item.charge_id) return `Charge ${item.charge_id.slice(0, 8)}`
@@ -22,6 +23,9 @@ function getRowLabel(item) {
 }
 
 function getRowMeta(item) {
+  if (item.bucket && item.total_amount !== undefined) {
+    return `${item.charge_count || 0} charge(s) - ${fmtMoney(item.total_amount)}`
+  }
   if (item.amount_due !== undefined) {
     return `Due ${item.due_date || ''} - ${fmtMoney(item.amount_due)}`
   }
@@ -70,6 +74,15 @@ export default function OwnerQaSnapshotCard({ snapshot }) {
             variant="outlined"
             sx={{ height: 18, fontSize: 10, textTransform: 'lowercase' }}
           />
+          {snapshot.quality?.confidence && (
+            <Chip
+              size="small"
+              label={`confidence: ${snapshot.quality.confidence}`}
+              color={snapshot.quality.confidence === 'high' ? 'success' : 'warning'}
+              variant="outlined"
+              sx={{ height: 18, fontSize: 10, textTransform: 'lowercase' }}
+            />
+          )}
         </Stack>
 
         <Typography variant="body2">{snapshot.summary}</Typography>
@@ -88,6 +101,12 @@ export default function OwnerQaSnapshotCard({ snapshot }) {
           <Alert severity="info" sx={{ py: 0.25 }}>
             {snapshot.policyNote}
           </Alert>
+        )}
+
+        {!!snapshot.quality?.rationale && (
+          <Typography variant="caption" color="text.secondary">
+            Quality: {snapshot.quality.rationale}
+          </Typography>
         )}
 
         <Button
@@ -130,6 +149,21 @@ export default function OwnerQaSnapshotCard({ snapshot }) {
                     />
                   ))}
                 </Stack>
+              </Box>
+            )}
+            {snapshot.contextSnapshot && (
+              <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 0.6 }}>
+                <Typography variant="caption" fontWeight={700}>
+                  Session context
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  Mode: {snapshot.contextSnapshot.mode} · Messages: {snapshot.contextSnapshot.messageCount || 0}
+                </Typography>
+                {snapshot.contextSnapshot.lastIntent && (
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Last intent: {snapshot.contextSnapshot.lastIntent}
+                  </Typography>
+                )}
               </Box>
             )}
           </Stack>

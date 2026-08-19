@@ -2,6 +2,7 @@ const convRepo           = require('../dal/conversationRepository');
 const unmatchedInboundRepo = require('../dal/unmatchedInboundRepository');
 const conversationService = require('../services/conversationService');
 const ownerQaService = require('../services/ownerQaService');
+const ownerAssistantService = require('../services/ownerAssistantService');
 const audit = require('../services/auditService');
 const { resolveOwnerId } = require('../lib/authHelpers');
 
@@ -12,10 +13,14 @@ const VALID_STATUSES     = ['open', 'resolved', 'escalated'];
 const VALID_CATEGORIES   = ['maintenance', 'payment', 'lease', 'general'];
 const VALID_AUTOMATION_MODES = ['ai_active', 'ai_assist_only', 'human_only'];
 const VALID_UNMATCHED_STATUSES = ['open', 'resolved'];
-const VALID_OWNER_QA_INTENTS = ['upcoming_dues', 'past_due_tenants', 'balance_by_tenant', 'maintenance_overview'];
+const VALID_OWNER_QA_INTENTS = ['upcoming_dues', 'past_due_tenants', 'balance_by_tenant', 'aging_summary', 'maintenance_overview'];
 
 function hasOwnerQaPrompt(prompt) {
   return typeof prompt === 'string' && prompt.trim().length > 0;
+}
+
+function isLandlordUser(req) {
+  return req.user?.role === 'landlord' && !!resolveOwnerId(req.user);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -101,7 +106,7 @@ async function getUnreadSummary(req, res, next) {
 async function getOwnerQaSnapshot(req, res, next) {
   try {
     const ownerId = resolveOwnerId(req.user);
-    if (!ownerId || req.user?.role !== 'landlord') {
+    if (!isLandlordUser(req)) {
       return res.status(403).json({ error: 'Owner-only endpoint' });
     }
 
@@ -134,6 +139,123 @@ async function getOwnerQaSnapshot(req, res, next) {
     });
 
     res.json({ snapshot });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/v1/inbox/owner-qa/sessions
+ * Owner-only list of persisted AI sessions.
+ */
+async function listOwnerQaSessions(req, res, next) {
+  try {
+    if (!isLandlordUser(req)) {
+      return res.status(403).json({ error: 'Owner-only endpoint' });
+    }
+    const ownerId = resolveOwnerId(req.user);
+    const { limit, page, q } = req.query;
+    const result = await ownerAssistantService.listOwnerSessions(ownerId, {
+      limit,
+      page,
+      search: q,
+    });
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/v1/inbox/owner-qa/sessions
+ * Owner-only session creation.
+ */
+async function createOwnerQaSession(req, res, next) {
+  try {
+    if (!isLandlordUser(req)) {
+      return res.status(403).json({ error: 'Owner-only endpoint' });
+    }
+    const ownerId = resolveOwnerId(req.user);
+    const { title } = req.body || {};
+    const session = await ownerAssistantService.createOwnerSession(ownerId, { title });
+    res.status(201).json({ session });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/v1/inbox/owner-qa/sessions/:sessionId
+ * Owner-only session detail with recent snapshot messages.
+ */
+async function getOwnerQaSession(req, res, next) {
+  try {
+    if (!isLandlordUser(req)) {
+      return res.status(403).json({ error: 'Owner-only endpoint' });
+    }
+    const ownerId = resolveOwnerId(req.user);
+    const { limit, page } = req.query;
+    const detail = await ownerAssistantService.getOwnerSessionDetail(ownerId, req.params.sessionId, { limit, page });
+    res.json(detail);
+  } catch (err) { next(err); }
+}
+
+/**
+ * PATCH /api/v1/inbox/owner-qa/sessions/:sessionId
+ * Owner-only session title update.
+ */
+async function updateOwnerQaSession(req, res, next) {
+  try {
+    if (!isLandlordUser(req)) {
+      return res.status(403).json({ error: 'Owner-only endpoint' });
+    }
+    const ownerId = resolveOwnerId(req.user);
+    const { title } = req.body || {};
+    if (!String(title || '').trim()) {
+      return res.status(400).json({ error: 'title is required' });
+    }
+    const session = await ownerAssistantService.renameOwnerSession(ownerId, req.params.sessionId, { title });
+    res.json({ session });
+  } catch (err) { next(err); }
+}
+
+/**
+ * DELETE /api/v1/inbox/owner-qa/sessions/:sessionId
+ * Owner-only session deletion.
+ */
+async function deleteOwnerQaSession(req, res, next) {
+  try {
+    if (!isLandlordUser(req)) {
+      return res.status(403).json({ error: 'Owner-only endpoint' });
+    }
+    const ownerId = resolveOwnerId(req.user);
+    const deleted = await ownerAssistantService.removeOwnerSession(ownerId, req.params.sessionId);
+    if (!deleted) return res.status(404).json({ error: 'Session not found' });
+    return res.status(204).end();
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/v1/inbox/owner-qa/sessions/:sessionId/snapshot
+ * Owner-only snapshot generation that persists into the selected session.
+ */
+async function createOwnerQaSessionSnapshot(req, res, next) {
+  try {
+    if (!isLandlordUser(req)) {
+      return res.status(403).json({ error: 'Owner-only endpoint' });
+    }
+    const ownerId = resolveOwnerId(req.user);
+    const { intent, prompt, daysAhead, limit } = req.body || {};
+    const normalizedIntent = String(intent || '').toLowerCase();
+    if (!VALID_OWNER_QA_INTENTS.includes(normalizedIntent) && !hasOwnerQaPrompt(prompt)) {
+      return res.status(400).json({
+        error: `Provide either prompt text or intent (${VALID_OWNER_QA_INTENTS.join(', ')}).`,
+      });
+    }
+
+    const result = await ownerAssistantService.runSessionSnapshot({
+      ownerId,
+      sessionId: req.params.sessionId,
+      intent: VALID_OWNER_QA_INTENTS.includes(normalizedIntent) ? normalizedIntent : undefined,
+      prompt,
+      daysAhead,
+      limit,
+    });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 }
 
@@ -465,6 +587,12 @@ module.exports = {
   listConversations,
   getUnreadSummary,
   getOwnerQaSnapshot,
+  listOwnerQaSessions,
+  createOwnerQaSession,
+  getOwnerQaSession,
+  updateOwnerQaSession,
+  deleteOwnerQaSession,
+  createOwnerQaSessionSnapshot,
   getConversation,
   getConversationTrace,
   updateConversation,

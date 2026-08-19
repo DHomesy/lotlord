@@ -7,15 +7,27 @@
 
 jest.mock('../../src/dal/conversationRepository');
 jest.mock('../../src/services/conversationService');
+jest.mock('../../src/services/ownerQaService');
+jest.mock('../../src/services/ownerAssistantService');
+jest.mock('../../src/services/auditService');
 jest.mock('../../src/lib/authHelpers');
 
 const convRepo            = require('../../src/dal/conversationRepository');
 const conversationService = require('../../src/services/conversationService');
+const ownerQaService = require('../../src/services/ownerQaService');
+const ownerAssistantService = require('../../src/services/ownerAssistantService');
 const { resolveOwnerId }  = require('../../src/lib/authHelpers');
 
 const {
   listConversations,
   getUnreadSummary,
+  getOwnerQaSnapshot,
+  listOwnerQaSessions,
+  createOwnerQaSession,
+  getOwnerQaSession,
+  updateOwnerQaSession,
+  deleteOwnerQaSession,
+  createOwnerQaSessionSnapshot,
   getConversation,
   getConversationTrace,
   updateConversation,
@@ -123,6 +135,137 @@ describe('getUnreadSummary', () => {
     expect(resolveOwnerId).toHaveBeenCalledWith(req.user);
     expect(convRepo.getUnreadSummary).toHaveBeenCalledWith(OWNER_ID);
     expect(res.json).toHaveBeenCalledWith({ totalUnread: 7, threadsWithUnread: 3 });
+  });
+});
+
+// ── owner QA portal endpoints ────────────────────────────────────────────────
+
+describe('owner QA portal endpoints', () => {
+  test('getOwnerQaSnapshot returns 403 for non-landlord roles', async () => {
+    const req = makeReq({ user: { role: 'admin', sub: ADMIN_ID }, body: { prompt: 'upcoming dues' } });
+    const res = makeRes();
+
+    await getOwnerQaSnapshot(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(ownerQaService.getOwnerSnapshot).not.toHaveBeenCalled();
+  });
+
+  test('listOwnerQaSessions returns sessions for owner', async () => {
+    ownerAssistantService.listOwnerSessions.mockResolvedValue({
+      sessions: [{ id: 'sess-1', title: 'Owner AI Session' }],
+      pagination: { page: 1, limit: 5, total: 1, hasMore: false },
+    });
+    const req = makeReq({ user: { role: 'landlord', sub: OWNER_ID }, query: { limit: '5', page: '1', q: 'owner' } });
+    const res = makeRes();
+
+    await listOwnerQaSessions(req, res, next);
+
+    expect(ownerAssistantService.listOwnerSessions).toHaveBeenCalledWith(OWNER_ID, {
+      limit: '5',
+      page: '1',
+      search: 'owner',
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      sessions: [{ id: 'sess-1', title: 'Owner AI Session' }],
+      pagination: { page: 1, limit: 5, total: 1, hasMore: false },
+    });
+  });
+
+  test('createOwnerQaSession returns 201 and created session', async () => {
+    ownerAssistantService.createOwnerSession.mockResolvedValue({ id: 'sess-2', title: 'Owner AI Session' });
+    const req = makeReq({ user: { role: 'landlord', sub: OWNER_ID }, body: { title: 'Q&A' } });
+    const res = makeRes();
+
+    await createOwnerQaSession(req, res, next);
+
+    expect(ownerAssistantService.createOwnerSession).toHaveBeenCalledWith(OWNER_ID, { title: 'Q&A' });
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith({ session: { id: 'sess-2', title: 'Owner AI Session' } });
+  });
+
+  test('createOwnerQaSessionSnapshot validates prompt-or-intent and persists snapshot', async () => {
+    ownerAssistantService.runSessionSnapshot.mockResolvedValue({
+      sessionId: 'sess-3',
+      snapshot: { intent: 'upcoming_dues', items: [] },
+      message: { id: 'msg-1' },
+    });
+    const req = makeReq({
+      user: { role: 'landlord', sub: OWNER_ID },
+      params: { sessionId: 'sess-3' },
+      body: { prompt: 'who is past due?', limit: 5 },
+    });
+    const res = makeRes();
+
+    await createOwnerQaSessionSnapshot(req, res, next);
+
+    expect(ownerAssistantService.runSessionSnapshot).toHaveBeenCalledWith({
+      ownerId: OWNER_ID,
+      sessionId: 'sess-3',
+      intent: undefined,
+      prompt: 'who is past due?',
+      daysAhead: undefined,
+      limit: 5,
+    });
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  test('getOwnerQaSession returns detail payload', async () => {
+    ownerAssistantService.getOwnerSessionDetail.mockResolvedValue({
+      session: { id: 'sess-4', owner_id: OWNER_ID },
+      messages: [],
+    });
+    const req = makeReq({ user: { role: 'landlord', sub: OWNER_ID }, params: { sessionId: 'sess-4' }, query: { limit: '10' } });
+    const res = makeRes();
+
+    await getOwnerQaSession(req, res, next);
+
+    expect(ownerAssistantService.getOwnerSessionDetail).toHaveBeenCalledWith(OWNER_ID, 'sess-4', { limit: '10', page: undefined });
+    expect(res.json).toHaveBeenCalledWith({
+      session: { id: 'sess-4', owner_id: OWNER_ID },
+      messages: [],
+    });
+  });
+
+  test('updateOwnerQaSession returns 400 when title missing', async () => {
+    const req = makeReq({
+      user: { role: 'landlord', sub: OWNER_ID },
+      params: { sessionId: 'sess-4' },
+      body: { title: '   ' },
+    });
+    const res = makeRes();
+
+    await updateOwnerQaSession(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(ownerAssistantService.renameOwnerSession).not.toHaveBeenCalled();
+  });
+
+  test('updateOwnerQaSession renames and returns session', async () => {
+    ownerAssistantService.renameOwnerSession.mockResolvedValue({ id: 'sess-4', title: 'Portfolio Weekly' });
+    const req = makeReq({
+      user: { role: 'landlord', sub: OWNER_ID },
+      params: { sessionId: 'sess-4' },
+      body: { title: 'Portfolio Weekly' },
+    });
+    const res = makeRes();
+
+    await updateOwnerQaSession(req, res, next);
+
+    expect(ownerAssistantService.renameOwnerSession).toHaveBeenCalledWith(OWNER_ID, 'sess-4', { title: 'Portfolio Weekly' });
+    expect(res.json).toHaveBeenCalledWith({ session: { id: 'sess-4', title: 'Portfolio Weekly' } });
+  });
+
+  test('deleteOwnerQaSession returns 204 when deleted', async () => {
+    ownerAssistantService.removeOwnerSession.mockResolvedValue({ id: 'sess-4' });
+    const req = makeReq({ user: { role: 'landlord', sub: OWNER_ID }, params: { sessionId: 'sess-4' } });
+    const res = makeRes();
+
+    await deleteOwnerQaSession(req, res, next);
+
+    expect(ownerAssistantService.removeOwnerSession).toHaveBeenCalledWith(OWNER_ID, 'sess-4');
+    expect(res.status).toHaveBeenCalledWith(204);
+    expect(res.end).toHaveBeenCalled();
   });
 });
 
@@ -356,6 +499,34 @@ describe('updateConversation', () => {
       intent: 'upcoming_dues',
       daysAhead: 14,
       limit: 5,
+    });
+    expect(res.json).toHaveBeenCalledWith(payload);
+  });
+
+  test('action=owner_qa_snapshot accepts aging_summary intent', async () => {
+    const payload = {
+      conversationId: CONV_ID,
+      snapshot: {
+        intent: 'aging_summary',
+        summary: 'Aging summary includes 2 overdue charge(s).',
+      },
+    };
+    conversationService.getOwnerQASnapshotFromConversation.mockResolvedValue(payload);
+
+    const req = makeReq({
+      params: { id: CONV_ID },
+      body: { action: 'owner_qa_snapshot', intent: 'aging_summary' },
+      user: { role: 'landlord', sub: OWNER_ID },
+    });
+    const res = makeRes();
+
+    await updateConversation(req, res, next);
+
+    expect(conversationService.getOwnerQASnapshotFromConversation).toHaveBeenCalledWith(CONV_ID, OWNER_ID, {
+      intent: 'aging_summary',
+      prompt: undefined,
+      daysAhead: undefined,
+      limit: undefined,
     });
     expect(res.json).toHaveBeenCalledWith(payload);
   });

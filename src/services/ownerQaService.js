@@ -4,6 +4,7 @@ const OWNER_QA_INTENTS = {
   UPCOMING_DUES: 'upcoming_dues',
   PAST_DUE_TENANTS: 'past_due_tenants',
   BALANCE_BY_TENANT: 'balance_by_tenant',
+  AGING_SUMMARY: 'aging_summary',
   MAINTENANCE_OVERVIEW: 'maintenance_overview',
 };
 
@@ -25,7 +26,13 @@ function inferIntentFromPrompt(prompt) {
     return OWNER_QA_INTENTS.MAINTENANCE_OVERVIEW;
   }
   if (/past due|overdue|late rent|delinquent|behind/.test(text)) {
+    if (/aging|age bucket|1-30|31-60|61-90|90\+/.test(text)) {
+      return OWNER_QA_INTENTS.AGING_SUMMARY;
+    }
     return OWNER_QA_INTENTS.PAST_DUE_TENANTS;
+  }
+  if (/aging|age bucket|arrears aging|overdue buckets?/.test(text)) {
+    return OWNER_QA_INTENTS.AGING_SUMMARY;
   }
   if (/balance|outstanding|owe|owed|by tenant|tenant balances?/.test(text)) {
     return OWNER_QA_INTENTS.BALANCE_BY_TENANT;
@@ -70,12 +77,41 @@ function summarizeBalances(items) {
   return `Found ${items.length} tenant balance row(s) with total outstanding balance $${toMoney(total)}.`;
 }
 
+function summarizeAging(items) {
+  const total = items.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
+  const charges = items.reduce((sum, row) => sum + Number(row.charge_count || 0), 0);
+  return `Aging summary includes ${charges} overdue charge(s) totaling $${toMoney(total)} across ${items.length} bucket(s).`;
+}
+
 function summarizeMaintenance(summaryRows) {
   const total = summaryRows.reduce((sum, row) => sum + Number(row.count || 0), 0);
   const completed = summaryRows
     .filter((row) => String(row.status || '').toLowerCase() === 'completed')
     .reduce((sum, row) => sum + Number(row.count || 0), 0);
   return `There are ${total} maintenance request(s) in scope, including ${completed} completed.`;
+}
+
+function buildQuality({ intent, items, generatedAt }) {
+  const count = Array.isArray(items) ? items.length : 0;
+  let confidence = 'high';
+  let rationale = 'deterministic owner-scoped query returned direct records';
+
+  if (intent === OWNER_QA_INTENTS.MAINTENANCE_OVERVIEW || intent === OWNER_QA_INTENTS.AGING_SUMMARY) {
+    confidence = count > 0 ? 'high' : 'medium';
+  }
+  if (count === 0) {
+    confidence = 'medium';
+    rationale = 'query succeeded but returned no matching records for current filters/time window';
+  }
+
+  return {
+    confidence,
+    rationale,
+    itemCount: count,
+    generatedAt,
+    broker: 'owner_qa_deterministic_v1',
+    promptReplay: 'none',
+  };
 }
 
 async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
@@ -102,6 +138,7 @@ async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
       },
       summary: summarizeUpcomingDues(items, safeDaysAhead),
       policyNote,
+      quality: buildQuality({ intent: normalizedIntent, items, generatedAt }),
       items,
     };
   }
@@ -118,6 +155,7 @@ async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
       },
       summary: summarizePastDue(items),
       policyNote,
+      quality: buildQuality({ intent: normalizedIntent, items, generatedAt }),
       items,
     };
   }
@@ -134,6 +172,24 @@ async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
       },
       summary: summarizeBalances(items),
       policyNote,
+      quality: buildQuality({ intent: normalizedIntent, items, generatedAt }),
+      items,
+    };
+  }
+
+  if (normalizedIntent === OWNER_QA_INTENTS.AGING_SUMMARY) {
+    const items = await ownerQaRepo.getAgingSummary({ ownerId });
+    return {
+      intent: normalizedIntent,
+      title: 'Aging Summary Snapshot',
+      generatedAt,
+      dateContext: {
+        type: 'as_of',
+        date: new Date().toISOString().slice(0, 10),
+      },
+      summary: summarizeAging(items),
+      policyNote,
+      quality: buildQuality({ intent: normalizedIntent, items, generatedAt }),
       items,
     };
   }
@@ -149,6 +205,7 @@ async function getOwnerSnapshot({ ownerId, intent, prompt, daysAhead, limit }) {
     },
     summary: summarizeMaintenance(overview.summary),
     policyNote,
+    quality: buildQuality({ intent: normalizedIntent, items: overview.recent, generatedAt }),
     items: overview.recent,
     breakdown: overview.summary,
   };

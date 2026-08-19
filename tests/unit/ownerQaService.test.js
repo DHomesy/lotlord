@@ -59,6 +59,23 @@ describe('ownerQaService.getOwnerSnapshot', () => {
     expect(result.summary).toBe('Found 2 tenant balance row(s) with total outstanding balance $125.00.');
   });
 
+  test('returns aging summary snapshot', async () => {
+    ownerQaRepo.getAgingSummary.mockResolvedValue([
+      { bucket: '1-30', charge_count: 2, total_amount: '210.00' },
+      { bucket: '31-60', charge_count: 1, total_amount: '90.00' },
+    ]);
+
+    const result = await ownerQaService.getOwnerSnapshot({
+      ownerId: 'owner-1',
+      intent: 'aging_summary',
+    });
+
+    expect(ownerQaRepo.getAgingSummary).toHaveBeenCalledWith({ ownerId: 'owner-1' });
+    expect(result.intent).toBe('aging_summary');
+    expect(result.summary).toBe('Aging summary includes 3 overdue charge(s) totaling $300.00 across 2 bucket(s).');
+    expect(result.dateContext).toEqual(expect.objectContaining({ type: 'as_of' }));
+  });
+
   test('returns maintenance overview snapshot', async () => {
     ownerQaRepo.getMaintenanceOverview.mockResolvedValue({
       summary: [
@@ -92,6 +109,18 @@ describe('ownerQaService.getOwnerSnapshot', () => {
     expect(ownerQaRepo.getUpcomingDues).toHaveBeenCalledWith({ ownerId: 'owner-1', daysAhead: 30, limit: 10 });
     expect(result.intent).toBe('upcoming_dues');
     expect(result.dateContext).toEqual(expect.objectContaining({ daysAhead: 30 }));
+  });
+
+  test('infers aging summary intent from prompt', async () => {
+    ownerQaRepo.getAgingSummary.mockResolvedValue([]);
+
+    const result = await ownerQaService.getOwnerSnapshot({
+      ownerId: 'owner-1',
+      prompt: 'Show an aging summary by overdue bucket',
+    });
+
+    expect(ownerQaRepo.getAgingSummary).toHaveBeenCalledWith({ ownerId: 'owner-1' });
+    expect(result.intent).toBe('aging_summary');
   });
 
   test('throws 400 for unsupported intent', async () => {

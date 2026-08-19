@@ -96,6 +96,49 @@ async function getTenantBalances({ ownerId, limit = 10 }) {
   return rows;
 }
 
+async function getAgingSummary({ ownerId }) {
+  const { rows } = await query(
+    `WITH overdue AS (
+       SELECT
+         GREATEST(rc.amount - COALESCE(paid.total_paid, 0), 0)::NUMERIC AS amount_due,
+         (CURRENT_DATE - rc.due_date)::INT AS days_overdue
+       FROM rent_charges rc
+       JOIN units un ON un.id = rc.unit_id AND un.deleted_at IS NULL
+       JOIN properties p ON p.id = un.property_id AND p.deleted_at IS NULL
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(SUM(rp.amount_paid), 0) AS total_paid
+         FROM rent_payments rp
+         WHERE rp.charge_id = rc.id
+           AND rp.status = 'completed'
+       ) paid ON TRUE
+       WHERE p.owner_id = $1
+         AND rc.voided_at IS NULL
+         AND rc.due_date < CURRENT_DATE
+         AND GREATEST(rc.amount - COALESCE(paid.total_paid, 0), 0) > 0
+     )
+     SELECT
+       CASE
+         WHEN days_overdue BETWEEN 1 AND 30 THEN '1-30'
+         WHEN days_overdue BETWEEN 31 AND 60 THEN '31-60'
+         WHEN days_overdue BETWEEN 61 AND 90 THEN '61-90'
+         ELSE '90+'
+       END AS bucket,
+       COUNT(*)::INT AS charge_count,
+       SUM(amount_due)::NUMERIC AS total_amount
+     FROM overdue
+     GROUP BY 1
+     ORDER BY
+       CASE bucket
+         WHEN '1-30' THEN 1
+         WHEN '31-60' THEN 2
+         WHEN '61-90' THEN 3
+         ELSE 4
+       END`,
+    [ownerId],
+  );
+  return rows;
+}
+
 async function getMaintenanceOverview({ ownerId, limit = 10 }) {
   const [summaryResult, recentResult] = await Promise.all([
     query(
@@ -143,5 +186,6 @@ module.exports = {
   getUpcomingDues,
   getPastDueTenants,
   getTenantBalances,
+  getAgingSummary,
   getMaintenanceOverview,
 };

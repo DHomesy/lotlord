@@ -7,16 +7,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
+- No unreleased entries yet.
+
+---
+## [1.15.7] — 2026-08-19 — Sprint D.3/D.4 Owner AI Continuity + Governance Slice
+
 ### Added
 - **Dedicated landlord AI Assistant portal (owner-only)** — Added a standalone admin route/page (`/ai-assistant`) for portfolio Q&A so owner AI workflows are separated from tenant conversation threads.
 - **Owner snapshot API endpoint for portal usage** — Added `POST /api/v1/inbox/owner-qa/snapshot` (landlord-only) to run deterministic owner-scoped Q&A snapshots without binding to a conversation ID.
+- **Persistent owner AI sessions** — Added owner session/message persistence and compact rolling summaries for cost-aware context continuity.
+- **Owner AI session management endpoints** — Added owner-only APIs to list/search sessions, rename sessions, delete sessions, and fetch paginated session history.
+- **Aging summary owner-Q&A intent** — Added deterministic `aging_summary` support with overdue buckets (`1-30`, `31-60`, `61-90`, `90+`) and totals.
+- **Structured session context snapshot payload** — Owner session snapshots now include compact continuity metadata (rolling summary + recent intent histogram) without full history replay.
 
 ### Changed
 - **AI surface separation in communication views** — Removed embedded owner Q&A prompt/snapshot widgets from AI Inbox (`MessagesPage`) and Supervisor views to prevent tenant/owner workflow crossover.
+- **Owner AI portal now uses backend persistence** — Replaced local browser-only history with server-backed session records and paginated snapshot history.
+- **Owner Q&A responses now include quality metadata** — Added deterministic confidence/rationale metadata for governance visibility and operator trust calibration.
 
 ### Quality
 - Verified frontend production build with new route/page wiring.
 - Verified targeted backend unit suites with `jest.unit.config.js`.
+- Added/updated focused unit tests for new owner session controller handlers (list/search, rename, delete, paginated detail args).
+- Added focused unit coverage for owner assistant context snapshot enrichment and aging summary intent inference.
 
 ---
 ## [1.15.6] — 2026-08-14 — Sprint D.3 Slice: Prompt Auto-Trigger + Snapshot Card POC

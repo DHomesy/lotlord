@@ -10,6 +10,12 @@ router.use(authenticate, authorize('landlord', 'employee', 'admin'), requiresSta
 // ── Conversation list + detail ────────────────────────────────────────────────
 router.get('/unread-summary', controller.getUnreadSummary);
 router.post('/owner-qa/snapshot', authorize('landlord'), controller.getOwnerQaSnapshot);
+router.get('/owner-qa/sessions', authorize('landlord'), controller.listOwnerQaSessions);
+router.post('/owner-qa/sessions', authorize('landlord'), controller.createOwnerQaSession);
+router.get('/owner-qa/sessions/:sessionId', authorize('landlord'), controller.getOwnerQaSession);
+router.patch('/owner-qa/sessions/:sessionId', authorize('landlord'), controller.updateOwnerQaSession);
+router.delete('/owner-qa/sessions/:sessionId', authorize('landlord'), controller.deleteOwnerQaSession);
+router.post('/owner-qa/sessions/:sessionId/snapshot', authorize('landlord'), controller.createOwnerQaSessionSnapshot);
 router.get('/',    controller.listConversations);
 router.get('/:id/trace', controller.getConversationTrace);
 router.get('/:id', controller.getConversation);

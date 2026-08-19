@@ -3,6 +3,7 @@ import * as api from '../api/inbox'
 
 export const INBOX_KEY = ['inbox']
 export const INBOX_SUMMARY_KEY = ['inbox-unread-summary']
+export const OWNER_QA_SESSIONS_KEY = ['owner-qa-sessions']
 
 export function useInboxConversations(params) {
   return useQuery({
@@ -88,5 +89,63 @@ export function useDismissAiDraft() {
 export function useOwnerQaSnapshot() {
   return useMutation({
     mutationFn: (data) => api.getOwnerQaSnapshot(data),
+  })
+}
+
+export function useOwnerQaSessions(params) {
+  return useQuery({
+    queryKey: [...OWNER_QA_SESSIONS_KEY, params],
+    queryFn: () => api.getOwnerQaSessions(params),
+  })
+}
+
+export function useOwnerQaSession(sessionId, params) {
+  return useQuery({
+    queryKey: [...OWNER_QA_SESSIONS_KEY, sessionId, params],
+    queryFn: () => api.getOwnerQaSession(sessionId, params),
+    enabled: !!sessionId,
+  })
+}
+
+export function useCreateOwnerQaSession() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data) => api.createOwnerQaSession(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: OWNER_QA_SESSIONS_KEY })
+    },
+  })
+}
+
+export function useCreateOwnerQaSessionSnapshot() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ sessionId, ...data }) => api.createOwnerQaSessionSnapshot(sessionId, data),
+    onSuccess: (_data, { sessionId }) => {
+      qc.invalidateQueries({ queryKey: OWNER_QA_SESSIONS_KEY })
+      qc.invalidateQueries({ queryKey: [...OWNER_QA_SESSIONS_KEY, sessionId] })
+    },
+  })
+}
+
+export function useUpdateOwnerQaSession() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ sessionId, ...data }) => api.updateOwnerQaSession(sessionId, data),
+    onSuccess: (_data, { sessionId }) => {
+      qc.invalidateQueries({ queryKey: OWNER_QA_SESSIONS_KEY })
+      qc.invalidateQueries({ queryKey: [...OWNER_QA_SESSIONS_KEY, sessionId] })
+    },
+  })
+}
+
+export function useDeleteOwnerQaSession() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ sessionId }) => api.deleteOwnerQaSession(sessionId),
+    onSuccess: (_data, { sessionId }) => {
+      qc.invalidateQueries({ queryKey: OWNER_QA_SESSIONS_KEY })
+      qc.removeQueries({ queryKey: [...OWNER_QA_SESSIONS_KEY, sessionId] })
+    },
   })
 }
