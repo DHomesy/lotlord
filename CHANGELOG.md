@@ -8,6 +8,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.12.8] — 2026-09-02 — AI Feature Flag + Beta Copy Cleanup
+
+### Changed
+- **AI backend routes feature-flagged** — `/api/v1/ai`, `/api/v1/inbox`, and `/api/v1/supervisor` now mount only when `AI_FEATURE_ENABLED=true`.
+- **AI webhook handoff feature-flagged** — inbound SMS and inbound email logging still run, but AI conversation automation is skipped unless `AI_FEATURE_ENABLED=true`.
+- **Landing page pricing simplified** — removed multi-tier pricing cards and aligned to Free + Paid ($10/mo) copy.
+- **Landing FAQ updated** — free limits now reflect beta policy (2 properties, up to 4 units per property), and commercial access copy now references the paid plan.
+- **README updated** — AI endpoints are now labeled feature-flagged with a beta-default note.
+
+### Versioning
+- Root package version bumped to `1.12.8`.
+- Frontend package version bumped to `1.12.8`.
+
+---
+## [1.12.7] — 2026-09-02 — UI Simplification for Beta
+
+### Changed
+- **Profile page simplified** — removed landlord-facing AI Assistant and SMS Number configuration sections from the profile UI to keep onboarding focused on core workflows.
+- **Messages page simplified** — removed AI Inbox tab and all AI-specific indicators/actions from the admin messages experience.
+- **Admin route surface reduced** — removed the direct `/supervisor` admin route from the active UI route table for the beta branch.
+- **Messaging copy updated** — automation and upgrade language now references the single paid tier at $10/month.
+
+### Versioning
+- Root package version bumped to `1.12.7`.
+- Frontend package version bumped to `1.12.7`.
+
+---
 ## [1.12.6] — 2026-09-02 — Beta Paygates + Pricing Simplification
 
 ### Changed

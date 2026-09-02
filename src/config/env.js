@@ -70,6 +70,9 @@ module.exports = {
 
   // OpenAI
   OPENAI_API_KEY: optional('OPENAI_API_KEY'),
+  // Feature flag for beta: disable AI surfaces and AI message automation by default.
+  // Set to 'true' to re-enable /ai, /inbox, and /supervisor routes plus AI webhook handoff.
+  AI_FEATURE_ENABLED: optional('AI_FEATURE_ENABLED', 'false'),
 
   // Error alerting — email address to notify on 5xx errors and unhandled rejections
   ALERT_EMAIL: optional('ALERT_EMAIL'),

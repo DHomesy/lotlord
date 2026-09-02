@@ -34,6 +34,7 @@
 
 const { v4: uuidv4 }         = require('uuid');
 const { query }               = require('../config/db');
+const env                     = require('../config/env');
 const userRepo                = require('../dal/userRepository');
 const notificationRepo        = require('../dal/notificationRepository');
 const conversationService     = require('./conversationService');
@@ -125,15 +126,17 @@ async function processInboundEmail(msg) {
     console.info(`[emailInbox] Routing reply to conversationId=${conversationId} via In-Reply-To`);
   }
 
-  // 5. AI agent hook
-  conversationService.handleInboundEmail({
-    tenantUserId:  sender.id,
-    landlordId:    null,  // resolved inside service from active lease
-    content:       msg.text || (msg.html ? stripHtml(msg.html) : ''),
-    logEntryId:    logEntry.id,
-    channel:       'email',
-    conversationId,
-  }).catch((err) => console.error('[emailInbox] AI handling failed:', err.message));
+  // 5. Optional AI handoff. Inbound email logging always remains active.
+  if (String(env.AI_FEATURE_ENABLED).toLowerCase() === 'true') {
+    conversationService.handleInboundEmail({
+      tenantUserId:  sender.id,
+      landlordId:    null,  // resolved inside service from active lease
+      content:       msg.text || (msg.html ? stripHtml(msg.html) : ''),
+      logEntryId:    logEntry.id,
+      channel:       'email',
+      conversationId,
+    }).catch((err) => console.error('[emailInbox] AI handling failed:', err.message));
+  }
 
   return logEntry;
 }

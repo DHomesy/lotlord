@@ -105,7 +105,7 @@ app.use('/api/v1/auth', authRoutes);
 // Auth routes are excluded so resend-verification and verify-email always work.
 // Unauthenticated requests pass through here and fail at the route-level authenticate middleware.
 const jwt = require('jsonwebtoken');
-const { JWT_SECRET } = require('./config/env');
+const { JWT_SECRET, AI_FEATURE_ENABLED } = require('./config/env');
 app.use('/api/v1', (req, res, next) => {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) return next();
@@ -134,12 +134,16 @@ app.use('/api/v1/maintenance', maintenanceRoutes);
 app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
-app.use('/api/v1/ai', aiRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/billing', billingRoutes);
 app.use('/api/v1/audit', auditRoutes);
-app.use('/api/v1/inbox', inboxRoutes);
-app.use('/api/v1/supervisor', supervisorRoutes);
+
+const isAiEnabled = String(AI_FEATURE_ENABLED).toLowerCase() === 'true';
+if (isAiEnabled) {
+  app.use('/api/v1/ai', aiRoutes);
+  app.use('/api/v1/inbox', inboxRoutes);
+  app.use('/api/v1/supervisor', supervisorRoutes);
+}
 
 // 404 & global error handler — must be last
 app.use(notFound);

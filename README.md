@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.12.6 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.12.8 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -648,9 +648,11 @@ Base URL: `/api/v1`
 | Notifications | `POST /notifications/send` (email, ad-hoc or template), `POST /notifications/send-sms` (ad-hoc SMS), `GET /notifications/log`, `GET /notifications/log/:id` |
 | Messages | `GET /notifications/messages` (conversation list), `POST /notifications/messages` (send message to tenant), `GET /notifications/messages/:tenantId` (conversation thread) |
 | Webhooks | `POST /webhooks/stripe`, `POST /webhooks/twilio/sms`, `POST /webhooks/ses` (inbound email from Lambda), `POST /webhooks/ses/bounce` (SNS bounce/complaint) |
-| AI Inbox | `GET /inbox`, `GET /inbox/:id`, `PATCH /inbox/:id` (resolve/escalate), `POST /inbox/:id/reply`, `POST /inbox/:id/messages/:msgId/approve`, `DELETE /inbox/:id/messages/:msgId` |
-| AI Supervisor | `GET /supervisor/conversations`, `POST /supervisor/conversations/:id/override`, `PATCH /supervisor/conversations/:id` (admin only) |
-| AI | `GET /ai/conversations`, `GET /ai/conversations/:id/messages` |
+| AI Inbox (feature-flagged) | `GET /inbox`, `GET /inbox/:id`, `PATCH /inbox/:id` (resolve/escalate), `POST /inbox/:id/reply`, `POST /inbox/:id/messages/:msgId/approve`, `DELETE /inbox/:id/messages/:msgId` |
+| AI Supervisor (feature-flagged) | `GET /supervisor/conversations`, `POST /supervisor/conversations/:id/override`, `PATCH /supervisor/conversations/:id` (admin only) |
+| AI (feature-flagged) | `GET /ai/conversations`, `GET /ai/conversations/:id/messages` |
+
+> Beta note: AI routes are disabled by default on master. Set `AI_FEATURE_ENABLED=true` to enable AI routes and webhook AI handoff.
 | Audit Log | `GET /audit` (admin only; query params: `resourceType`, `action`, `userId`, `resourceId`, `startDate`, `endDate`, `page`, `limit`) |
 | Health | `GET /health` → `{ status, version, env }` — unauthenticated; useful for uptime monitoring |
 
@@ -1099,6 +1101,7 @@ STRIPE_PRICE_ID_COMMERCIAL_UNIT=price_...
 
 # OpenAI
 OPENAI_API_KEY=
+AI_FEATURE_ENABLED=false        # beta default: keep AI routes and AI automation disabled
 
 # Error alerting (production only)
 ALERT_EMAIL=

@@ -6,10 +6,8 @@ import { z } from 'zod'
 import {
   TextField, Stack, Button, Alert, Typography,
   Card, CardContent, CardActionArea, Divider, Box, CircularProgress, Chip, Grid,
-  FormControlLabel, Switch, FormGroup, Checkbox,
 } from '@mui/material'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import CardMembershipIcon from '@mui/icons-material/CardMembership'
@@ -17,96 +15,44 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts'
 import HistoryIcon from '@mui/icons-material/History'
 import PeopleIcon from '@mui/icons-material/People'
-import SmsIcon from '@mui/icons-material/Sms'
-import SmartToyIcon from '@mui/icons-material/SmartToy'
 import PageContainer from '../../components/layout/PageContainer'
 import { useAuthStore } from '../../store/authStore'
-import { useUpdateMe, useChangePassword, useMe, useSmsStatus, useProvisionSms, useDeprovisionSms } from '../../hooks/useUsers'
+import { useUpdateMe, useChangePassword } from '../../hooks/useUsers'
 import { useConnectStatus, useConnectOnboard, useConnectLogin } from '../../hooks/useStripeSetup'
 import { useMySubscription, useCreateCheckoutSession, useCreateBillingPortalSession } from '../../hooks/useBilling'
-import { useProperties } from '../../hooks/useProperties'
-import { PLANS, hasStarter, hasCommercial, planTier } from '../../lib/plans'
+import { PLANS, hasStarter } from '../../lib/plans'
 
 const profileSchema = z.object({
-  name:  z.string().min(1, 'Name is required'),
+  name: z.string().min(1, 'Name is required'),
   phone: z.string().optional(),
 })
 
 const passwordSchema = z.object({
   current_password: z.string().min(1, 'Required'),
-  new_password:     z.string().min(8, 'Min 8 characters'),
+  new_password: z.string().min(8, 'Min 8 characters'),
 })
 
 export default function AdminProfilePage() {
   const user = useAuthStore((s) => s.user)
-  const navigate   = useNavigate()
-  const isAdmin    = user?.role === 'admin'
+  const navigate = useNavigate()
+  const isAdmin = user?.role === 'admin'
   const isLandlord = user?.role === 'landlord'
   const isEmployee = user?.role === 'employee'
 
-  const { mutate: updateMe,       isPending: savingProfile, isSuccess: profileSaved }               = useUpdateMe()
-  const { mutate: changePassword, isPending: changingPw,   isSuccess: pwChanged, isError: pwError } = useChangePassword()
-  const { data: connectStatus }       = useConnectStatus()
+  const { mutate: updateMe, isPending: savingProfile, isSuccess: profileSaved } = useUpdateMe()
+  const { mutate: changePassword, isPending: changingPw, isSuccess: pwChanged, isError: pwError } = useChangePassword()
+  const { data: connectStatus } = useConnectStatus()
   const { mutate: startOnboard, isPending: onboarding, error: onboardError } = useConnectOnboard()
   const { mutate: openDashboard, isPending: openingDashboard } = useConnectLogin()
-  const { data: subscription, isLoading: loadingSubscription }               = useMySubscription()
-  const { mutate: startCheckout,  isPending: startingCheckout, isError: checkoutFailed  } = useCreateCheckoutSession()
-  const { mutate: openPortal,     isPending: openingPortal     }             = useCreateBillingPortalSession()
+  const { data: subscription, isLoading: loadingSubscription } = useMySubscription()
+  const { mutate: startCheckout, isPending: startingCheckout, isError: checkoutFailed } = useCreateCheckoutSession()
+  const { mutate: openPortal, isPending: openingPortal } = useCreateBillingPortalSession()
 
-  // SMS provisioning
-  const { data: smsStatus, isLoading: loadingSms } = useSmsStatus(isLandlord)
-  const { mutate: provisionSms, isPending: provisioning, error: provisionError } = useProvisionSms()
-  const { mutate: deprovisionSms, isPending: deprovisioning } = useDeprovisionSms()
-
-  // Properties — for area code pre-fill
-  const { data: propertiesData } = useProperties({ limit: 1 })
-  const firstZip = propertiesData?.properties?.[0]?.zip || propertiesData?.[0]?.zip || ''
-  const defaultAreaCode = firstZip.replace(/\D/g, '').substring(0, 3)
-
-  const [areaCode, setAreaCode] = useState('')
-
-  // Pre-fill area code once properties load
-  useEffect(() => {
-    if (defaultAreaCode && !areaCode) setAreaCode(defaultAreaCode)
-  }, [defaultAreaCode])
-
-  // AI config local state — initialised from server via useMe() so it reflects saved values.
-  // Auth store user object does not include AI config fields.
-  const { data: meData } = useMe()
-  const [aiEnabled,        setAiEnabled]        = useState(true)
-  const [aiReplyMode,      setAiReplyMode]      = useState('approval')
-  const [aiNotifyOnSend,   setAiNotifyOnSend]   = useState(true)
-  const [aiNotifyChannels, setAiNotifyChannels] = useState(['email'])
-  const [aiSaveSuccess,    setAiSaveSuccess]    = useState(false)
-  const { mutate: saveAiConfig, isPending: savingAi } = useUpdateMe()
-
-  // Sync AI state from server once the /me response loads
-  useEffect(() => {
-    if (!meData) return
-    setAiEnabled(meData.ai_enabled        ?? true)
-    setAiReplyMode(meData.ai_reply_mode    ?? 'approval')
-    setAiNotifyOnSend(meData.ai_notify_on_send ?? true)
-    setAiNotifyChannels(meData.ai_notify_channels ?? ['email'])
-  }, [meData?.id])
-
-  function handleSaveAi() {
-    saveAiConfig(
-      { aiEnabled, aiReplyMode, aiNotifyOnSend, aiNotifyChannels },
-      { onSuccess: () => { setAiSaveSuccess(true); setTimeout(() => setAiSaveSuccess(false), 3000) } },
-    )
-  }
-
-  function toggleAiChannel(channel) {
-    setAiNotifyChannels((prev) =>
-      prev.includes(channel) ? prev.filter((c) => c !== channel) : [...prev, channel],
-    )
-  }
-  const [connectBanner,  setConnectBanner]  = useState(null) // 'success' | 'refresh' | null
-  const [billingBanner,  setBillingBanner]  = useState(null) // 'success' | 'canceled' | null
+  const [connectBanner, setConnectBanner] = useState(null)
+  const [billingBanner, setBillingBanner] = useState(null)
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
   const subscriptionRef = useRef(null)
 
-  // Detect return from Stripe Connect onboarding redirect
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const connect = params.get('connect')
@@ -122,7 +68,6 @@ export default function AdminProfilePage() {
     if (params.get('upgrade') === '1') {
       setShowUpgradePrompt(true)
       window.history.replaceState({}, '', window.location.pathname)
-      // Scroll after a short delay to allow the page to render
       setTimeout(() => subscriptionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
     }
   }, [])
@@ -141,8 +86,6 @@ export default function AdminProfilePage() {
 
   return (
     <PageContainer title="My Profile">
-
-      {/* ── Connect onboarding prompt — shown until landlord completes payout setup ── */}
       {isLandlord && connectStatus && !connectStatus.onboarded && (
         <Alert
           severity="warning"
@@ -157,7 +100,7 @@ export default function AdminProfilePage() {
               disabled={onboarding}
               sx={{ whiteSpace: 'nowrap' }}
             >
-              {onboarding ? 'Redirecting…' : connectStatus.connected ? 'Continue Setup' : 'Set Up Payouts'}
+              {onboarding ? 'Redirecting...' : connectStatus.connected ? 'Continue Setup' : 'Set Up Payouts'}
             </Button>
           }
         >
@@ -166,7 +109,6 @@ export default function AdminProfilePage() {
         </Alert>
       )}
 
-      {/* ── Free-tier upgrade prompt (landlord only, shown when subscription is loaded and free) ── */}
       {isLandlord && subscription !== undefined && !hasStarter(subscription) && (
         <Alert
           severity="info"
@@ -183,8 +125,7 @@ export default function AdminProfilePage() {
             </Button>
           }
         >
-          You&apos;re on the <strong>Free plan</strong>. Upgrade to Starter to unlock more
-          properties, team members, and portfolio analytics.
+          You&apos;re on the <strong>Free plan</strong>. Upgrade to Paid ($10/mo) to unlock higher limits.
         </Alert>
       )}
 
@@ -199,15 +140,14 @@ export default function AdminProfilePage() {
         />
         <TextField label="Phone" {...profileForm.register('phone')} />
         <Button type="submit" variant="contained" disabled={savingProfile} sx={{ alignSelf: 'flex-start' }}>
-          {savingProfile ? 'Saving…' : 'Save Profile'}
+          {savingProfile ? 'Saving...' : 'Save Profile'}
         </Button>
       </Stack>
 
-      {/* ── Change Password ── */}
       <Divider sx={{ mb: 3 }} />
       <Typography variant="h6" sx={{ mb: 2 }}>Change Password</Typography>
       {pwChanged && <Alert severity="success" sx={{ mb: 2 }}>Password changed!</Alert>}
-      {pwError   && <Alert severity="error"   sx={{ mb: 2 }}>Incorrect current password.</Alert>}
+      {pwError && <Alert severity="error" sx={{ mb: 2 }}>Incorrect current password.</Alert>}
       <Stack component="form" onSubmit={passwordForm.handleSubmit(changePassword)} spacing={2} sx={{ maxWidth: 440 }}>
         <TextField
           label="Current Password"
@@ -224,11 +164,10 @@ export default function AdminProfilePage() {
           helperText={passwordForm.formState.errors.new_password?.message}
         />
         <Button type="submit" variant="contained" disabled={changingPw} sx={{ alignSelf: 'flex-start' }}>
-          {changingPw ? 'Saving…' : 'Change Password'}
+          {changingPw ? 'Saving...' : 'Change Password'}
         </Button>
       </Stack>
 
-      {/* ── Admin Account (admin only) ── */}
       {isAdmin && (
         <>
           <Divider sx={{ my: 4 }} />
@@ -242,11 +181,10 @@ export default function AdminProfilePage() {
           </Typography>
           <Grid container spacing={2} sx={{ maxWidth: 600 }}>
             {[
-              { label: 'User Management',  desc: 'Create and manage user accounts',                   icon: <ManageAccountsIcon color="action" />, path: '/users' },
-              { label: 'Audit Log',        desc: 'Review all system activity',                          icon: <HistoryIcon color="action" />,        path: '/audit' },
-              { label: 'Subscriptions',    desc: 'View landlord subscription statuses',                 icon: <CardMembershipIcon color="action" />, path: '/subscriptions' },
-              { label: 'Team Members',     desc: 'Manage employee invitations',                         icon: <PeopleIcon color="action" />,         path: '/team' },
-              { label: 'AI Supervisor',    desc: 'Monitor and guide AI conversations across all landlords', icon: <SmartToyIcon color="action" />,   path: '/supervisor' },
+              { label: 'User Management', desc: 'Create and manage user accounts', icon: <ManageAccountsIcon color="action" />, path: '/users' },
+              { label: 'Audit Log', desc: 'Review all system activity', icon: <HistoryIcon color="action" />, path: '/audit' },
+              { label: 'Subscriptions', desc: 'View landlord subscription statuses', icon: <CardMembershipIcon color="action" />, path: '/subscriptions' },
+              { label: 'Team Members', desc: 'Manage employee invitations', icon: <PeopleIcon color="action" />, path: '/team' },
             ].map(({ label, desc, icon, path }) => (
               <Grid item xs={12} sm={6} key={path}>
                 <Card variant="outlined" sx={{ height: '100%', '&:hover': { borderColor: 'primary.main' } }}>
@@ -266,7 +204,6 @@ export default function AdminProfilePage() {
         </>
       )}
 
-      {/* ── Employee info (employee only) ── */}
       {isEmployee && (
         <>
           <Divider sx={{ my: 4 }} />
@@ -277,460 +214,219 @@ export default function AdminProfilePage() {
         </>
       )}
 
-      {/* ── Payout Setup (landlord only — Stripe Connect Express) ── */}
-      {isLandlord && (<>
-      <Divider sx={{ my: 4 }} />
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
-        <Box>
-          <Typography variant="h6">Payout Account</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Connect your bank account so rent payments from tenants are deposited directly to you.
-            Stripe handles secure bank verification and payouts (0.8% fee, capped at $5 per payment).
-          </Typography>
-        </Box>
-        {connectStatus?.onboarded ? (
-          <Chip
-            icon={<CheckCircleIcon />}
-            label="Connected"
-            color="success"
-            variant="outlined"
-            sx={{ ml: 2, flexShrink: 0 }}
-          />
-        ) : (
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={onboarding ? <CircularProgress size={14} color="inherit" /> : <AccountBalanceIcon />}
-            onClick={handleStartOnboard}
-            disabled={onboarding}
-            sx={{ ml: 2, flexShrink: 0 }}
-          >
-            {onboarding ? 'Redirecting…' : connectStatus?.connected ? 'Continue Setup' : 'Setup Payouts'}
-          </Button>
-        )}
-      </Stack>
-
-      {/* Return from Stripe banners */}
-      {connectBanner === 'success' && (
-        <Alert severity="success" sx={{ maxWidth: 460, mt: 1 }} onClose={() => setConnectBanner(null)}>
-          Payout account setup complete! Rent payments will now be deposited to your bank.
-        </Alert>
-      )}
-      {connectBanner === 'refresh' && (
-        <Alert severity="info" sx={{ maxWidth: 460, mt: 1 }} onClose={() => setConnectBanner(null)}>
-          The setup link expired. Click "Continue Setup" to resume where you left off.
-        </Alert>
-      )}
-      {onboardError && (
-        <Alert severity="error" sx={{ maxWidth: 460, mt: 1 }}>
-          {onboardError?.response?.data?.error ?? 'Failed to start payout setup. Please try again.'}
-        </Alert>
-      )}
-
-      {/* Status details when connected but not fully complete */}
-      {connectStatus?.connected && !connectStatus?.onboarded && !connectBanner && (
-        <Alert severity="warning" sx={{ maxWidth: 460, mt: 1 }}>
-          Setup incomplete — click "Continue Setup" to finish verifying your account so payouts can be enabled.
-        </Alert>
-      )}
-
-      {connectStatus?.onboarded && (
-        <Stack spacing={1} sx={{ maxWidth: 460, mt: 2 }}>
-          <Card variant="outlined">
-            <CardContent sx={{ py: '8px !important', display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <CheckCircleIcon fontSize="small" color="success" />
-              <Box sx={{ flex: 1 }}>
-                <Typography variant="body2" fontWeight={500}>Bank account verified</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Payouts {connectStatus.payoutsEnabled ? 'enabled' : 'pending activation'}
-                </Typography>
-              </Box>
-              <Button
-                size="small"
-                endIcon={<OpenInNewIcon fontSize="small" />}
-                onClick={() => openDashboard(undefined, { onSuccess: (d) => { window.location.href = d.url } })}
-                disabled={openingDashboard}
-              >
-                {openingDashboard ? 'Loading…' : 'Manage'}
-              </Button>
-            </CardContent>
-          </Card>
-        </Stack>
-      )}
-      </>)}
-
-      {/* ── Subscription (landlord only — SaaS plan) ── */}
-      {isLandlord && (<>
-      <Divider sx={{ my: 4 }} ref={subscriptionRef} />
-
-      {showUpgradePrompt && !hasStarter(subscription) && (
-        <Alert severity="info" sx={{ mb: 2 }} onClose={() => setShowUpgradePrompt(false)}>
-          Choose a plan below to unlock analytics, more properties, and additional features.
-        </Alert>
-      )}
-
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
-        <Box>
-          <Typography variant="h6">Subscription</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Choose a plan to unlock additional features. Manage your payment method or
-            download invoices at any time.
-          </Typography>
-        </Box>
-        <Chip
-          icon={<CardMembershipIcon />}
-          label={subscription?.plan ? subscription.plan : (subscription?.status ?? 'free')}
-          color={
-            subscription?.status === 'active'   ? 'success' :
-            subscription?.status === 'trialing' ? 'info' :
-            subscription?.status === 'past_due' ? 'warning' :
-            subscription?.status === 'canceled' ? 'error' : 'default'
-          }
-          variant="outlined"
-          sx={{ ml: 2, flexShrink: 0, textTransform: 'capitalize' }}
-        />
-      </Stack>
-
-      {/* Loading state — show spinner until subscription status is known */}
-      {loadingSubscription && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
-          <CircularProgress size={16} />
-          <Typography variant="body2" color="text.secondary">Loading plan options…</Typography>
-        </Box>
-      )}
-
-      {/* Return from Stripe Checkout */}
-      {billingBanner === 'success' && (
-        <Alert severity="success" sx={{ maxWidth: 560, mt: 1 }} onClose={() => setBillingBanner(null)}>
-          You’re subscribed! Your plan is now active.
-        </Alert>
-      )}
-      {billingBanner === 'canceled' && (
-        <Alert severity="info" sx={{ maxWidth: 560, mt: 1 }} onClose={() => setBillingBanner(null)}>
-          Checkout canceled — you have not been charged.
-        </Alert>
-      )}
-
-      {/* past_due: warning + portal CTA to update payment method */}
-      {subscription?.status === 'past_due' && (
-        <Box sx={{ mt: 1 }}>
-          <Alert severity="warning" sx={{ maxWidth: 560 }}>
-            Your last payment failed. Please update your payment method to restore full access.
-          </Alert>
-          <Button
-            variant="contained"
-            color="warning"
-            endIcon={<OpenInNewIcon fontSize="small" />}
-            sx={{ mt: 1.5 }}
-            onClick={() => openPortal()}
-            disabled={openingPortal}
-          >
-            {openingPortal ? 'Loading…' : 'Update Payment Method'}
-          </Button>
-        </Box>
-      )}
-
-      {/* Plan picker — shown for any non-active, non-past_due state (none, canceled, incomplete, unpaid, error, etc.) */}
-      {!loadingSubscription && !hasStarter(subscription) && subscription?.status !== 'past_due' && (
+      {isLandlord && (
         <>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2, maxWidth: 720 }}>
-            {Object.values(PLANS).map(({ key, label, price, unitAddon, description, features }) => (
-              <Card
-                key={key}
+          <Divider sx={{ my: 4 }} />
+          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
+            <Box>
+              <Typography variant="h6">Payout Account</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                Connect your bank account so rent payments from tenants are deposited directly to you.
+                Stripe handles secure bank verification and payouts (0.8% fee, capped at $5 per payment).
+              </Typography>
+            </Box>
+            {connectStatus?.onboarded ? (
+              <Chip
+                icon={<CheckCircleIcon />}
+                label="Connected"
+                color="success"
                 variant="outlined"
-                sx={{
-                  flex: 1,
-                  transition: 'border-color 0.15s',
-                  '&:hover': { borderColor: 'primary.main' },
-                }}
+                sx={{ ml: 2, flexShrink: 0 }}
+              />
+            ) : (
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={onboarding ? <CircularProgress size={14} color="inherit" /> : <AccountBalanceIcon />}
+                onClick={handleStartOnboard}
+                disabled={onboarding}
+                sx={{ ml: 2, flexShrink: 0 }}
               >
-                <CardContent>
-                  <Typography variant="subtitle1" fontWeight={700}>{label}</Typography>
-                  <Typography variant="h5" fontWeight={800} color="primary.main" sx={{ my: 0.5 }}>
-                    ${price}<Typography component="span" variant="caption" color="text.secondary">/mo{unitAddon ? ` + $${unitAddon}/unit` : ''}</Typography>
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                    {description}
-                  </Typography>
-                  {features.map((f) => (
-                    <Typography key={f} variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
-                      ✓ {f}
+                {onboarding ? 'Redirecting...' : connectStatus?.connected ? 'Continue Setup' : 'Setup Payouts'}
+              </Button>
+            )}
+          </Stack>
+
+          {connectBanner === 'success' && (
+            <Alert severity="success" sx={{ maxWidth: 460, mt: 1 }} onClose={() => setConnectBanner(null)}>
+              Payout account setup complete! Rent payments will now be deposited to your bank.
+            </Alert>
+          )}
+          {connectBanner === 'refresh' && (
+            <Alert severity="info" sx={{ maxWidth: 460, mt: 1 }} onClose={() => setConnectBanner(null)}>
+              The setup link expired. Click "Continue Setup" to resume where you left off.
+            </Alert>
+          )}
+          {onboardError && (
+            <Alert severity="error" sx={{ maxWidth: 460, mt: 1 }}>
+              {onboardError?.response?.data?.error ?? 'Failed to start payout setup. Please try again.'}
+            </Alert>
+          )}
+
+          {connectStatus?.connected && !connectStatus?.onboarded && !connectBanner && (
+            <Alert severity="warning" sx={{ maxWidth: 460, mt: 1 }}>
+              Setup incomplete - click "Continue Setup" to finish verifying your account so payouts can be enabled.
+            </Alert>
+          )}
+
+          {connectStatus?.onboarded && (
+            <Stack spacing={1} sx={{ maxWidth: 460, mt: 2 }}>
+              <Card variant="outlined">
+                <CardContent sx={{ py: '8px !important', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <CheckCircleIcon fontSize="small" color="success" />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body2" fontWeight={500}>Bank account verified</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Payouts {connectStatus.payoutsEnabled ? 'enabled' : 'pending activation'}
                     </Typography>
-                  ))}
+                  </Box>
                   <Button
-                    variant="contained"
                     size="small"
-                    fullWidth
-                    sx={{ mt: 2 }}
-                    disabled={startingCheckout}
-                    onClick={() => startCheckout(key)}
+                    endIcon={<OpenInNewIcon fontSize="small" />}
+                    onClick={() => openDashboard(undefined, { onSuccess: (d) => { window.location.href = d.url } })}
+                    disabled={openingDashboard}
                   >
-                    {startingCheckout ? 'Redirecting…' : `Subscribe to ${label}`}
+                    {openingDashboard ? 'Loading...' : 'Manage'}
                   </Button>
                 </CardContent>
               </Card>
-            ))}
-          </Stack>
-          {checkoutFailed && (
-            <Alert severity="error" sx={{ mt: 2, maxWidth: 720 }}>
-              Could not start checkout — please try again or contact support.
-            </Alert>
+            </Stack>
           )}
         </>
       )}
 
-      {/* Active / trialing: current plan info + manage button + upgrade path */}
-      {hasStarter(subscription) && (
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            Current plan: <strong style={{ textTransform: 'capitalize' }}>{subscription?.plan ?? 'active'}</strong>
-          </Typography>
-          {hasCommercial(subscription) && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              Your Commercial plan includes an automatic $2/unit/mo add-on for each commercial unit across all your properties. The add-on quantity is updated in real-time as you add or remove units.
-            </Typography>
-          )}
-          <Button
-            variant="outlined"
-            endIcon={<OpenInNewIcon fontSize="small" />}
-            onClick={() => openPortal()}
-            disabled={openingPortal}
-          >
-            {openingPortal ? 'Loading…' : 'Manage Subscription'}
-          </Button>
+      {isLandlord && (
+        <>
+          <Divider sx={{ my: 4 }} ref={subscriptionRef} />
 
-          {/* Upgrade options — only show plans at a higher tier than current */}
-          {Object.values(PLANS).some(({ key }) => planTier(key) > planTier(subscription?.plan)) && (
-            <>
-              <Typography variant="subtitle2" sx={{ mt: 3, mb: 0.5 }}>Upgrade your plan</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Plan upgrades are handled through the billing portal — click any card below to get started.
+          {showUpgradePrompt && !hasStarter(subscription) && (
+            <Alert severity="info" sx={{ mb: 2 }} onClose={() => setShowUpgradePrompt(false)}>
+              Choose the paid plan below to unlock higher limits.
+            </Alert>
+          )}
+
+          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
+            <Box>
+              <Typography variant="h6">Subscription</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                Free includes up to 2 properties and up to 4 units per property. Paid unlocks higher limits.
               </Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ maxWidth: 720 }}>
-                {Object.values(PLANS)
-                  .filter(({ key }) => planTier(key) > planTier(subscription?.plan))
-                  .map(({ key, label, price, unitAddon, description, features }) => (
-                    <Card
-                      key={key}
-                      variant="outlined"
-                      sx={{
-                        flex: 1,
-                        transition: 'border-color 0.15s',
-                        '&:hover': { borderColor: 'primary.main' },
-                      }}
-                    >
-                      <CardContent>
-                        <Typography variant="subtitle1" fontWeight={700}>{label}</Typography>
-                        <Typography variant="h5" fontWeight={800} color="primary.main" sx={{ my: 0.5 }}>
-                          ${price}<Typography component="span" variant="caption" color="text.secondary">/mo{unitAddon ? ` + $${unitAddon}/unit` : ''}</Typography>
+            </Box>
+            <Chip
+              icon={<CardMembershipIcon />}
+              label={subscription?.plan ? subscription.plan : (subscription?.status ?? 'free')}
+              color={
+                subscription?.status === 'active' ? 'success' :
+                subscription?.status === 'trialing' ? 'info' :
+                subscription?.status === 'past_due' ? 'warning' :
+                subscription?.status === 'canceled' ? 'error' : 'default'
+              }
+              variant="outlined"
+              sx={{ ml: 2, flexShrink: 0, textTransform: 'capitalize' }}
+            />
+          </Stack>
+
+          {loadingSubscription && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
+              <CircularProgress size={16} />
+              <Typography variant="body2" color="text.secondary">Loading plan options...</Typography>
+            </Box>
+          )}
+
+          {billingBanner === 'success' && (
+            <Alert severity="success" sx={{ maxWidth: 560, mt: 1 }} onClose={() => setBillingBanner(null)}>
+              You&apos;re subscribed! Your plan is now active.
+            </Alert>
+          )}
+          {billingBanner === 'canceled' && (
+            <Alert severity="info" sx={{ maxWidth: 560, mt: 1 }} onClose={() => setBillingBanner(null)}>
+              Checkout canceled - you have not been charged.
+            </Alert>
+          )}
+
+          {subscription?.status === 'past_due' && (
+            <Box sx={{ mt: 1 }}>
+              <Alert severity="warning" sx={{ maxWidth: 560 }}>
+                Your last payment failed. Please update your payment method to restore full access.
+              </Alert>
+              <Button
+                variant="contained"
+                color="warning"
+                endIcon={<OpenInNewIcon fontSize="small" />}
+                sx={{ mt: 1.5 }}
+                onClick={() => openPortal()}
+                disabled={openingPortal}
+              >
+                {openingPortal ? 'Loading...' : 'Update Payment Method'}
+              </Button>
+            </Box>
+          )}
+
+          {!loadingSubscription && !hasStarter(subscription) && subscription?.status !== 'past_due' && (
+            <>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2, maxWidth: 720 }}>
+                {Object.values(PLANS).map(({ key, label, price, description, features }) => (
+                  <Card
+                    key={key}
+                    variant="outlined"
+                    sx={{
+                      flex: 1,
+                      transition: 'border-color 0.15s',
+                      '&:hover': { borderColor: 'primary.main' },
+                    }}
+                  >
+                    <CardContent>
+                      <Typography variant="subtitle1" fontWeight={700}>{label}</Typography>
+                      <Typography variant="h5" fontWeight={800} color="primary.main" sx={{ my: 0.5 }}>
+                        ${price}<Typography component="span" variant="caption" color="text.secondary">/mo</Typography>
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                        {description}
+                      </Typography>
+                      {features.map((f) => (
+                        <Typography key={f} variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
+                          {`- ${f}`}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                          {description}
-                        </Typography>
-                        {features.map((f) => (
-                          <Typography key={f} variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
-                            ✓ {f}
-                          </Typography>
-                        ))}
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          fullWidth
-                          sx={{ mt: 2 }}
-                          endIcon={<OpenInNewIcon fontSize="small" />}
-                          disabled={openingPortal}
-                          onClick={() => openPortal()}
-                        >
-                          {openingPortal ? 'Loading…' : `Upgrade to ${label}`}
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
+                      ))}
+                      <Button
+                        variant="contained"
+                        size="small"
+                        fullWidth
+                        sx={{ mt: 2 }}
+                        disabled={startingCheckout}
+                        onClick={() => startCheckout()}
+                      >
+                        {startingCheckout ? 'Redirecting...' : `Subscribe to ${label}`}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
               </Stack>
+              {checkoutFailed && (
+                <Alert severity="error" sx={{ mt: 2, maxWidth: 720 }}>
+                  Could not start checkout - please try again or contact support.
+                </Alert>
+              )}
             </>
           )}
-        </Box>
-      )}
-      </>)}
 
-      {/* ── SMS Setup (landlord only) ── */}
-      {isLandlord && (<>
-      <Divider sx={{ my: 4 }} />
-      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
-        <SmsIcon color="primary" />
-        <Typography variant="h6">SMS Number</Typography>
-      </Stack>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Assign a dedicated local phone number to your account. Tenants will see this number
-        when you send them SMS messages, and can reply directly to start a conversation.
-      </Typography>
-
-      {loadingSms ? (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <CircularProgress size={16} />
-          <Typography variant="body2" color="text.secondary">Loading…</Typography>
-        </Box>
-      ) : smsStatus?.provisioned ? (
-        <Stack spacing={1.5} sx={{ maxWidth: 440 }}>
-          <Card variant="outlined">
-            <CardContent sx={{ py: '10px !important', display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <CheckCircleIcon fontSize="small" color="success" />
-              <Box sx={{ flex: 1 }}>
-                <Typography variant="body2" fontWeight={500}>
-                  {smsStatus.phoneNumber.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, '+1 ($1) $2-$3')}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">Your dedicated SMS number</Typography>
-              </Box>
-              <Button
-                size="small"
-                color="error"
-                variant="outlined"
-                onClick={() => deprovisionSms()}
-                disabled={deprovisioning}
-              >
-                {deprovisioning ? 'Releasing…' : 'Release Number'}
-              </Button>
-            </CardContent>
-          </Card>
-        </Stack>
-      ) : (
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="flex-start" sx={{ maxWidth: 440 }}>
-          <TextField
-            label="Area Code"
-            value={areaCode}
-            onChange={(e) => setAreaCode(e.target.value.replace(/\D/g, '').slice(0, 3))}
-            inputProps={{ maxLength: 3 }}
-            size="small"
-            sx={{ width: 120 }}
-            helperText="3 digits, e.g. 512"
-          />
-          <Button
-            variant="contained"
-            disabled={provisioning || areaCode.length !== 3}
-            onClick={() => provisionSms({ areaCode })}
-            sx={{ mt: { xs: 0, sm: '2px' } }}
-          >
-            {provisioning ? 'Setting up…' : 'Set Up SMS Number'}
-          </Button>
-        </Stack>
-      )}
-
-      {provisionError && (
-        <Alert severity="error" sx={{ mt: 1.5, maxWidth: 440 }}>
-          {provisionError?.response?.data?.code === 'NO_NUMBERS_IN_AREA_CODE'
-            ? `No available numbers in area code ${areaCode} — please try a nearby code.`
-            : (provisionError?.response?.data?.error ?? 'Something went wrong. Please try again.')}
-        </Alert>
-      )}
-
-      <Alert severity="info" icon={false} sx={{ mt: 2, maxWidth: 440, fontSize: '0.8rem' }}>
-        Want to use your existing business number? SMS porting is available — contact support
-        and we&apos;ll move your number over. This typically takes 5–7 business days and your
-        existing messages will continue to work throughout.
-      </Alert>
-      </>)}
-
-      {/* ── AI Settings (landlord only) ── */}
-      {isLandlord && (<>
-      <Divider sx={{ my: 4 }} />
-      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 0.5 }}>
-        <SmartToyIcon color="primary" />
-        <Typography variant="h6">AI Assistant</Typography>
-      </Stack>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        The AI assistant drafts replies to tenant messages on your behalf. Configure how it
-        behaves below.
-      </Typography>
-
-      {aiSaveSuccess && <Alert severity="success" sx={{ mb: 2, maxWidth: 440 }}>Settings saved!</Alert>}
-
-      <Stack spacing={2} sx={{ maxWidth: 440 }}>
-        <FormControlLabel
-          control={<Switch checked={aiEnabled} onChange={(e) => setAiEnabled(e.target.checked)} />}
-          label={<><strong>Enable AI Assistant</strong></>}
-        />
-
-        <FormControlLabel
-          control={
-            <Switch
-              checked={aiReplyMode === 'approval'}
-              onChange={(e) => setAiReplyMode(e.target.checked ? 'approval' : 'auto')}
-              disabled={!aiEnabled}
-            />
-          }
-          label={
-            <Box>
-              <Typography variant="body2"><strong>Require approval before sending</strong></Typography>
-              <Typography variant="caption" color="text.secondary">
-                {aiReplyMode === 'approval'
-                  ? 'AI drafts a reply for you to review — nothing sends without your OK.'
-                  : 'AI sends replies automatically without your review.'}
+          {hasStarter(subscription) && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                Current plan: <strong style={{ textTransform: 'capitalize' }}>{subscription?.plan ?? 'active'}</strong>
               </Typography>
-              {aiReplyMode === 'auto' && (
-                <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.25 }}>
-                  We recommend approval mode while you get familiar with the assistant.
-                </Typography>
-              )}
+              <Button
+                variant="outlined"
+                endIcon={<OpenInNewIcon fontSize="small" />}
+                onClick={() => openPortal()}
+                disabled={openingPortal}
+              >
+                {openingPortal ? 'Loading...' : 'Manage Subscription'}
+              </Button>
             </Box>
-          }
-        />
-
-        <FormControlLabel
-          control={
-            <Switch
-              checked={aiNotifyOnSend}
-              onChange={(e) => setAiNotifyOnSend(e.target.checked)}
-              disabled={!aiEnabled || aiReplyMode === 'approval'}
-            />
-          }
-          label={<><strong>Notify me when AI sends a message</strong></>}
-        />
-
-        {aiNotifyOnSend && aiReplyMode === 'auto' && aiEnabled && (
-          <Box sx={{ pl: 1 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
-              Notify via:
-            </Typography>
-            <FormGroup row>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    size="small"
-                    checked={aiNotifyChannels.includes('email')}
-                    onChange={() => toggleAiChannel('email')}
-                  />
-                }
-                label={<Typography variant="body2">Email</Typography>}
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    size="small"
-                    checked={aiNotifyChannels.includes('sms')}
-                    onChange={() => toggleAiChannel('sms')}
-                    disabled={!smsStatus?.provisioned}
-                  />
-                }
-                label={
-                  <Typography variant="body2">
-                    SMS{!smsStatus?.provisioned && <Typography component="span" variant="caption" color="text.secondary"> (set up an SMS number above first)</Typography>}
-                  </Typography>
-                }
-              />
-            </FormGroup>
-          </Box>
-        )}
-
-        <Button
-          variant="contained"
-          onClick={handleSaveAi}
-          disabled={savingAi || !aiEnabled && aiNotifyChannels.length === 0}
-          sx={{ alignSelf: 'flex-start' }}
-        >
-          {savingAi ? 'Saving…' : 'Save AI Settings'}
-        </Button>
-      </Stack>
-      </>)}
+          )}
+        </>
+      )}
     </PageContainer>
   )
 }

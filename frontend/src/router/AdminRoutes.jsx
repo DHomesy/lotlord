@@ -22,7 +22,6 @@ const AdminProfilePage              = lazy(() => import('../pages/admin/ProfileP
 const SubscriptionsPage             = lazy(() => import('../pages/admin/SubscriptionsPage'))
 const TeamPage                      = lazy(() => import('../pages/admin/TeamPage'))
 const AuditLogPage                  = lazy(() => import('../pages/admin/AuditLogPage'))
-const SupervisorPage                = lazy(() => import('../pages/admin/SupervisorPage'))
 
 const wrap = (el) => (
   <ChunkErrorBoundary>
@@ -50,7 +49,6 @@ const adminRoutes = [
   { path: '/team',                        element: wrap(<TeamPage />) },
   { path: '/subscriptions',              element: wrap(<SubscriptionsPage />) },
   { path: '/audit',                      element: wrap(<AuditLogPage />) },
-  { path: '/supervisor',                 element: wrap(<SupervisorPage />) },
   { path: '/profile',                    element: wrap(<AdminProfilePage />) },
 ]
 

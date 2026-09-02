@@ -71,15 +71,15 @@ const STEPS = [
 const FAQ = [
   {
     q: 'Is LotLord really free?',
-    a: 'Yes. The free plan is genuinely free — no trial periods, no hidden fees. You get 1 property and up to 4 units with core features including tenant management, maintenance tracking, and document storage.',
+    a: 'Yes. The free plan is genuinely free - no trial periods, no hidden fees. You get up to 2 properties and up to 4 units per property with core features including tenant management, maintenance tracking, and document storage.',
   },
   {
     q: 'Can I manage commercial properties?',
-    a: 'Yes — the Commercial plan ($79/mo + $2/unit/mo) supports office, retail, industrial, and mixed-use properties with no unit cap. You only pay for the commercial units you have. Residential multi-family properties are included on all paid plans (up to 4 units each).',
+    a: 'Yes. Commercial properties are available on the paid plan.',
   },
   {
     q: "What's included in the free plan?",
-    a: '1 property · up to 4 units · up to 4 active tenants · online ACH rent collection · tenant portal access · lease management · maintenance request tracking · document storage. Portfolio analytics require a Growth or higher plan.',
+    a: 'Up to 2 properties · up to 4 units per property · up to 4 active tenants · online ACH rent collection · tenant portal access · lease management · maintenance request tracking · document storage.',
   },
   {
     q: 'How does online rent collection work?',
@@ -112,45 +112,23 @@ const PLANS = [
     name: 'Free',
     price: '$0',
     period: '/ mo',
-    description: 'Perfect for brand-new landlords with a single property.',
-    features: ['1 property · up to 4 units', 'Up to 4 active tenants', 'Online ACH rent collection', 'Tenant portal access', 'Maintenance tracking', 'Lease & document storage', 'Email notifications'],
+    description: 'Great for getting started with smaller portfolios.',
+    features: ['Up to 2 properties', 'Up to 4 units per property', 'Up to 4 active tenants', 'Online ACH rent collection', 'Tenant portal access', 'Maintenance tracking', 'Lease & document storage', 'Email notifications'],
     cta: 'Get Started Free',
     ctaVariant: 'outlined',
     highlight: false,
     badge: null,
   },
   {
-    name: 'Growth',
-    price: '$15',
+    name: 'Paid',
+    price: '$10',
     period: '/ mo',
-    description: 'Ideal for growing landlords managing multiple properties.',
-    features: ['Up to 25 properties', 'Unlimited units & tenants', 'Dashboard analytics', 'Portfolio income summary', 'Automated rent reminders', 'Everything in Free'],
-    cta: 'Start Free Trial',
+    description: 'For landlords who need higher limits and expanded access.',
+    features: ['Everything in Free', '5+ units per property', 'Commercial property access', 'Expanded analytics and reporting', 'Automated rent reminders'],
+    cta: 'Upgrade to Paid',
     ctaVariant: 'contained',
     highlight: true,
     badge: 'Most Popular',
-  },
-  {
-    name: 'Enterprise',
-    price: '$49',
-    period: '/ mo',
-    description: 'For serious landlords with large or growing residential portfolios.',
-    features: ['Unlimited properties', 'Single & multi-family (up to 4 units each)', 'Team members — add staff & property managers', 'AI features (coming soon)', 'Document signing (coming soon)', 'Everything in Growth'],
-    cta: 'Get Started',
-    ctaVariant: 'outlined',
-    highlight: false,
-    badge: null,
-  },
-  {
-    name: 'Commercial',
-    price: '$79',
-    period: '/ mo + $2 / unit',
-    description: 'For commercial landlords — office, retail, industrial. Unlimited units, pay only for what you use.',
-    features: ['Unlimited commercial properties', 'Unlimited units per property', 'Per-unit billing ($2/unit/mo)', 'Team members — add staff & property managers', 'Multi-family properties included', 'Everything in Enterprise'],
-    cta: 'Get Started',
-    ctaVariant: 'outlined',
-    highlight: false,
-    badge: 'Commercial',
   },
 ]
 
@@ -423,7 +401,7 @@ export default function LandingPage() {
           </Typography>
           <Grid container spacing={3} justifyContent="center" alignItems="stretch">
             {PLANS.map((plan) => (
-              <Grid item xs={12} sm={6} md={3} key={plan.name}>
+              <Grid item xs={12} sm={6} md={6} key={plan.name}>
                 <Card
                   variant="outlined"
                   sx={{

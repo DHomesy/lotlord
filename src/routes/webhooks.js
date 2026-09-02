@@ -106,14 +106,16 @@ router.post('/twilio/sms', async (req, res) => {
       });
       console.info(`[twilio inbound] Matched sender=${sender.id} landlord=${landlord?.id ?? 'none'}`);
 
-      // ── AI agent hook ─────────────────────────────────────────────────────────
-      conversationService.handleInboundSms({
-        tenantUserId: sender.id,
-        landlordId:   landlord?.id ?? null,
-        content:      body,
-        logEntryId:   logEntry.id,
-        channel:      'sms',
-      }).catch((err) => console.error('[twilio] AI handling failed:', err.message));
+      // Optional AI handoff. Keep inbound logging active even when AI is disabled.
+      if (String(env.AI_FEATURE_ENABLED).toLowerCase() === 'true') {
+        conversationService.handleInboundSms({
+          tenantUserId: sender.id,
+          landlordId:   landlord?.id ?? null,
+          content:      body,
+          logEntryId:   logEntry.id,
+          channel:      'sms',
+        }).catch((err) => console.error('[twilio] AI handling failed:', err.message));
+      }
     }
   } catch (err) {
     // Non-fatal — still acknowledge Twilio so they don't retry
