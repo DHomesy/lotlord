@@ -1,28 +1,36 @@
 const { v4: uuidv4 } = require('uuid');
 const unitRepo = require('../dal/unitRepository');
 const propertyRepo = require('../dal/propertyRepository');
+const userRepo = require('../dal/userRepository');
 const { query } = require('../config/db');
 const { resolveOwnerId } = require('../lib/authHelpers');
 
 /**
- * Throws 422 if the property is multi-family and already has 4 units.
+ * Throws 422 if the landlord is on the free tier and the property already has 4 units.
  * Accepts an already-fetched property object to avoid a redundant DB lookup.
- * Commercial properties have no cap at the service layer (Stripe plan gate handles that).
+ * Paid landlords can exceed 4 units per property.
  * Single-family properties have exactly one unit (auto-created on property creation).
  *
  * @param {string} propertyId
+ * @param {object} user
  * @param {object|null} [property] - pre-fetched property row (skips findById if provided)
  */
-async function assertMultiFamilyCap(propertyId, property = null) {
+async function assertMultiFamilyCap(propertyId, user, property = null) {
   const prop = property ?? await propertyRepo.findById(propertyId);
-  if (!prop || prop.property_type !== 'multi') return;
+  if (!prop || prop.property_type === 'single') return;
+
+  if (user?.role !== 'admin') {
+    const billing = await userRepo.findBillingStatus(resolveOwnerId(user));
+    const isPaid = ['active', 'trialing'].includes(billing?.subscription_status);
+    if (isPaid) return;
+  }
 
   const { rows } = await query(
     'SELECT COUNT(*)::int AS cnt FROM units WHERE property_id = $1 AND deleted_at IS NULL',
     [propertyId],
   );
   if ((rows[0]?.cnt ?? 0) >= 4) {
-    const err = new Error('Multi-family properties are limited to 4 units.');
+    const err = new Error('Free tier properties are limited to 4 units. Upgrade to paid ($10/mo) for 5+ units per property.');
     err.status = 422;
     err.code   = 'MULTI_FAMILY_CAP';
     throw err;
@@ -68,7 +76,7 @@ async function createUnit(data, user) {
   }
 
   // Multi-family cap: pass pre-fetched property to avoid a second findById
-  await assertMultiFamilyCap(data.propertyId, property);
+  await assertMultiFamilyCap(data.propertyId, user, property);
 
   const unit = await unitRepo.create({ ...data, id: uuidv4() });
   // Attach property_type so the controller can check it without a second DB query

@@ -35,12 +35,20 @@ qa-checklist.txt
 aws-sms-cutover-checklist.txt
 notification-gateway-design.txt
 # Local planning docs
+BETA-RELEASE-CHECKLIST.md
 SPRINT-AI-COMMS.md
 SPRINT-B-QA.md
 SPRINT-C.md
+SPRINT-D-AI-WORKFLOWS.md
+SPRINT-D-CLOSEOUT-RUNBOOK.md
+SPRINT-D-STAGING-SIGNOFF-REPORT-TEMPLATE.md
+SPRINT-D1-EXECUTION-CHECKLIST.md
 NOTES.md
 grassroots-roadmap.md
 
 # Local notes
 todo.txt
 testingEfforst.txt
+
+# testing artifacts
+artifacts/

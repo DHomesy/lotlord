@@ -10,18 +10,18 @@ import { useCreateCheckoutSession } from '../../hooks/useBilling'
 
 /**
  * Shown when an API call returns 402 (free tier limit hit).
- * Offers an "Upgrade to Pro" CTA that opens the Stripe Checkout flow.
+ * Offers an "Upgrade" CTA that opens the Stripe Checkout flow.
  */
 export default function UpgradePromptDialog({ open, onClose, message }) {
   const { mutate: checkout, isPending } = useCreateCheckoutSession()
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Upgrade to Pro</DialogTitle>
+      <DialogTitle>Upgrade to Paid</DialogTitle>
       <DialogContent>
         <DialogContentText>
           {message || 'You have reached the free plan limit.'}
-          {' '}Upgrade to Pro to remove limits and unlock advanced features.
+          {' '}Upgrade to Paid ($10/mo) to remove limits and unlock expanded access.
         </DialogContentText>
       </DialogContent>
       <DialogActions>
@@ -31,7 +31,7 @@ export default function UpgradePromptDialog({ open, onClose, message }) {
           onClick={() => checkout()}
           disabled={isPending}
         >
-          {isPending ? 'Loading…' : 'Upgrade to Pro'}
+          {isPending ? 'Loading…' : 'Upgrade to Paid'}
         </Button>
       </DialogActions>
     </Dialog>

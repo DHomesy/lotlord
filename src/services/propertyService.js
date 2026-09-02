@@ -6,16 +6,16 @@ const { resolveOwnerId } = require('../lib/authHelpers');
 const ACTIVE_STATUSES = ['active', 'trialing'];
 
 /**
- * Throws 402 if the user is not on the Commercial plan.
+ * Throws 402 if the user is not on an active paid plan.
  * Used by createProperty when propertyType === 'commercial'.
  */
 async function assertCommercialPlan(user) {
   if (user?.role === 'admin') return; // admins bypass all plan checks
   const billing  = await userRepo.findBillingStatus(resolveOwnerId(user));
   const isActive = ACTIVE_STATUSES.includes(billing?.subscription_status);
-  if (!isActive || billing?.subscription_plan !== 'commercial') {
+  if (!isActive) {
     const err = new Error(
-      'Commercial properties require a Commercial plan ($79/mo + $2/unit). Upgrade to continue.',
+      'Commercial properties require the paid plan ($10/mo). Upgrade to continue.',
     );
     err.status = 402;
     err.code   = 'COMMERCIAL_REQUIRED';

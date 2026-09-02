@@ -59,12 +59,12 @@ module.exports = {
   // Stripe
   STRIPE_SECRET_KEY:     optional('STRIPE_SECRET_KEY'),
   STRIPE_WEBHOOK_SECRET: optional('STRIPE_WEBHOOK_SECRET'),
-  // Stripe SaaS — one Price ID per plan tier (create in Stripe Dashboard → Products)
-  // Set the price nickname to 'starter' / 'enterprise' / 'commercial' so the webhook handler stores the right label.
+  // Stripe SaaS (beta) — single paid tier (create in Stripe Dashboard → Products)
+  // Set nickname to 'starter' on the paid price.
   STRIPE_PRICE_ID_STARTER:         optional('STRIPE_PRICE_ID_STARTER'),
+  // Legacy vars retained for backward compatibility with existing deployments.
+  // Current checkout flow on master does not use them.
   STRIPE_PRICE_ID_ENTERPRISE:      optional('STRIPE_PRICE_ID_ENTERPRISE'),
-  // Commercial plan: two price IDs — flat base ($79/mo) and per-unit add-on ($2/unit/mo).
-  // Nickname for base must be 'commercial'; unit add-on nickname: 'commercial_unit'.
   STRIPE_PRICE_ID_COMMERCIAL:      optional('STRIPE_PRICE_ID_COMMERCIAL'),
   STRIPE_PRICE_ID_COMMERCIAL_UNIT: optional('STRIPE_PRICE_ID_COMMERCIAL_UNIT'),
 

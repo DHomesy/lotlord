@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.12.6] — 2026-09-02 — Beta Paygates + Pricing Simplification
+
+### Changed
+- **Two-tier beta pricing on master** — platform subscription model is now Free + one Paid tier.
+- **Free-tier portfolio cap updated** — free landlords can now have up to 2 properties.
+- **Free-tier unit cap changed to per-property** — each property is limited to 4 units on free; creating a 5th unit requires a paid subscription.
+- **Commercial creation gate simplified** — commercial properties now require any active paid subscription (single paid tier behavior).
+- **Checkout path unified** — billing checkout now routes to a single paid plan checkout path (Starter price ID), including normalization of legacy plan requests.
+
+### Docs
+- Updated plan/pricing and Stripe config documentation to reflect the beta model and deployment requirements.
+- Added a dedicated beta release and deployment checklist covering Stripe, Railway env vars, webhook setup, and smoke tests.
+
+---
 ## [1.12.5] — 2026-07-13 — Sprint D Chunk 4: UX Audits, Data & Auth
 
 ### Fixed

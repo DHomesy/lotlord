@@ -664,55 +664,14 @@ async function getOrCreateBillingCustomer(userId) {
   return customer;
 }
 
-async function createCheckoutSession(userId, plan = 'starter') {
-  if (plan === 'commercial') {
-    // Commercial plan requires two price IDs: a flat base + a per-unit add-on
-    const basePriceId = env.STRIPE_PRICE_ID_COMMERCIAL;
-    const unitPriceId = env.STRIPE_PRICE_ID_COMMERCIAL_UNIT;
-    if (!basePriceId || !unitPriceId) {
-      throw Object.assign(
-        new Error('STRIPE_PRICE_ID_COMMERCIAL or STRIPE_PRICE_ID_COMMERCIAL_UNIT is not configured.'),
-        { status: 500 },
-      );
-    }
-    // Count existing commercial units so billing starts correctly
-    const { rows } = await query(
-      `SELECT COUNT(u.id)::int AS cnt
-       FROM units u
-       JOIN properties p ON p.id = u.property_id
-       WHERE p.owner_id = $1
-         AND p.property_type = 'commercial'
-         AND u.deleted_at IS NULL
-         AND p.deleted_at IS NULL`,
-      [userId],
-    );
-    const unitQty = Math.max(rows[0]?.cnt ?? 0, 0);
-
-    const customer = await getOrCreateBillingCustomer(userId);
-    const lineItems = [
-      { price: basePriceId, quantity: 1 },
-    ];
-    if (unitPriceId && unitQty > 0) {
-      lineItems.push({ price: unitPriceId, quantity: unitQty });
-    }
-    const session = await getStripe().checkout.sessions.create({
-      mode:        'subscription',
-      customer:    customer.id,
-      line_items:  lineItems,
-      success_url: `${env.FRONTEND_URL}/profile?billing=success`,
-      cancel_url:  `${env.FRONTEND_URL}/profile?billing=canceled`,
-      metadata:    { userId },
-    });
-    return { url: session.url, sessionId: session.id };
-  }
-
-  const priceId = plan === 'enterprise'
-    ? env.STRIPE_PRICE_ID_ENTERPRISE
-    : env.STRIPE_PRICE_ID_STARTER;
+async function createCheckoutSession(userId) {
+  // Beta model: one paid tier. Legacy inputs still map to starter.
+  const normalizedPlan = 'starter';
+  const priceId = env.STRIPE_PRICE_ID_STARTER;
 
   if (!priceId) {
     throw Object.assign(
-      new Error(`STRIPE_PRICE_ID_${plan.toUpperCase()} is not configured. Create a Product + Price in the Stripe Dashboard, then add the env var to your deployment.`),
+      new Error('STRIPE_PRICE_ID_STARTER is not configured. Create a Product + Price in the Stripe Dashboard, then add the env var to your deployment.'),
       { status: 500 },
     );
   }
@@ -723,7 +682,7 @@ async function createCheckoutSession(userId, plan = 'starter') {
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${env.FRONTEND_URL}/profile?billing=success`,
     cancel_url:  `${env.FRONTEND_URL}/profile?billing=canceled`,
-    metadata:    { userId },
+    metadata:    { userId, requestedPlan: normalizedPlan },
   });
   return { url: session.url, sessionId: session.id };
 }

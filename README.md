@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.11.0 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.12.6 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -31,6 +31,7 @@ A full-stack property management platform built for landlords to manage tenants,
 - [SES Email Setup](#ses-email-setup)
 - [Cost Awareness](#cost-awareness)
 - [Environment Variables](#environment-variables)
+- [Beta Release Checklist](BETA-RELEASE-CHECKLIST.md)
 - [Changelog](CHANGELOG.md)
 
 ---
@@ -319,7 +320,7 @@ properties
   -- property_type notes:
   --   'single'     one unit, auto-created on property creation
   --   'multi'      2–4 units (small multi-family — traditional cap)
-  --   'commercial' unlimited units; requires Enterprise or Commercial plan
+  --   'commercial' requires a paid subscription on the beta model
 
 units
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
@@ -676,12 +677,13 @@ Base URL: `/api/v1`
 The app uses **two completely separate Stripe payment flows** that must never be confused:
 
 #### 1 — SaaS Subscription Billing (Landlord → LotLord platform)
-- Landlord pays for their platform tier (Free / Starter $15 / Enterprise $49)
+- Landlord pays for their platform tier (Free / Paid $10)
 - Handled by: `billingController.js`, `stripeService.createCheckoutSession()`, `stripeService.handleWebhookEvent()` subscription events
 - Stripe entity: landlord's **billing** customer (`users.stripe_billing_customer_id`)
 - Money destination: **your** Stripe platform account
 - Webhook events: `checkout.session.completed`, `customer.subscription.*`, `invoice.*`
 - Subscription state stored in: `users.subscription_status`, `users.subscription_plan`
+- Free limits on master: up to 2 properties and up to 4 units per property
 
 #### 2 — ACH Rent Collection (Tenant → Landlord directly)
 - Tenant pays rent via ACH bank transfer
@@ -690,13 +692,13 @@ The app uses **two completely separate Stripe payment flows** that must never be
 - Money destination: **landlord's connected bank account** — funds never touch your platform account. Your `STRIPE_SECRET_KEY` facilitates the transfer but you only collect the Stripe platform fee (0.8%, capped at $5 per ACH transaction).
 - Webhook events: `payment_intent.succeeded`, `payment_intent.payment_failed`
 - Payment state stored in: `rent_payments` + `ledger_entries`
-- **ACH is available on all tiers** (Free, Starter, Enterprise) — the only prerequisite is that the landlord completes Stripe Connect onboarding (`requiresConnectOnboarded` middleware)
+- **ACH is available on all tiers** (Free and Paid) — the only prerequisite is that the landlord completes Stripe Connect onboarding (`requiresConnectOnboarded` middleware)
 
 #### Rules
 - Never store raw card numbers — Stripe handles all cardholder data
 - Prefer **Stripe ACH** (`us_bank_account`) for rent (0.8%, capped at $5) over card (2.9% + $0.30)
 - All Stripe events come through `/webhooks/stripe` and must update both `rent_payments` and `ledger_entries`
-- Stripe price nicknames in the Dashboard **must** be set to `starter`, `enterprise`, or `commercial` exactly — the webhook stores `price.nickname` as `subscription_plan` in the DB
+- Stripe paid-plan price nickname in the Dashboard should be `starter` — the webhook stores `price.nickname` as `subscription_plan` in the DB
 
 ### Soft Deletes
 - Add `deleted_at` to: `users`, `tenants`, `leases`, `units`
@@ -1058,6 +1060,9 @@ JWT_SECRET=your_jwt_secret_here
 JWT_REFRESH_SECRET=your_refresh_secret_here
 JWT_EXPIRES_IN=15m           # access token  (short — in-memory on client)
 JWT_REFRESH_EXPIRES_IN=30d   # refresh token (long  — httpOnly cookie)
+# Use in production if API + web app are on different subdomains
+# (example: api.yourdomain.com and www.yourdomain.com)
+COOKIE_DOMAIN=.yourdomain.com
 
 # AWS SES
 AWS_REGION=us-east-1
@@ -1080,8 +1085,11 @@ APP_BASE_URL=https://your-app.railway.app
 # Stripe
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=          # required — from Stripe Dashboard → Webhooks → signing secret
-STRIPE_PRICE_ID_STARTER=price_...   # Starter plan — $15/mo — price nickname must be 'starter'
-STRIPE_PRICE_ID_ENTERPRISE=price_... # Enterprise plan — $49/mo — price nickname must be 'enterprise'
+STRIPE_PRICE_ID_STARTER=price_...   # Paid beta plan — $10/mo — nickname should be 'starter'
+# Legacy vars retained for backwards compatibility only (not used by master checkout)
+STRIPE_PRICE_ID_ENTERPRISE=price_...
+STRIPE_PRICE_ID_COMMERCIAL=price_...
+STRIPE_PRICE_ID_COMMERCIAL_UNIT=price_...
 # Stripe webhook events to enable in the Dashboard:
 #   customer.subscription.created, customer.subscription.updated,
 #   customer.subscription.deleted, customer.subscription.trial_will_end,

@@ -109,24 +109,24 @@ async function requiresConnectOnboarded(req, res, next) {
 /**
  * Per-plan resource limits.
  *   free       — no active subscription
- *   starter    — any active subscription (price nickname = 'starter')
- *   enterprise — active subscription with price nickname = 'enterprise'
- *   commercial — active subscription with price nickname = 'commercial'
+ *   starter    — any active paid subscription (single paid tier for beta)
+ *   enterprise — legacy paid label (treated as paid)
+ *   commercial — legacy paid label (treated as paid)
  *
  * Infinity = no hard cap.
  *
- * Note: multi-family unit cap (max 4 per property) is enforced separately
- * in checkPlanLimit('units') and in unitService.assertMultiFamilyCap().
+ * Unit limits are enforced per property for free landlords:
+ * max 4 units per property. Unit 5+ requires a paid subscription.
  */
 const PLAN_LIMITS = {
-  properties: { free: 1,  starter: 25, enterprise: Infinity, commercial: Infinity },
+  properties: { free: 2,  starter: Infinity, enterprise: Infinity, commercial: Infinity },
   units:      { free: 4,  starter: Infinity, enterprise: Infinity, commercial: Infinity },
   tenants:    { free: 4,  starter: Infinity, enterprise: Infinity, commercial: Infinity },
   employees:  { free: 0,  starter: 0, enterprise: Infinity, commercial: Infinity },
 };
 
 /**
- * Requires the requesting landlord to have an active Commercial subscription.
+ * Requires the requesting landlord to have any active paid subscription.
  * Gates commercial property creation. Admin users bypass this check.
  * Returns 402 with code 'COMMERCIAL_REQUIRED' if the gate is not met.
  *
@@ -143,9 +143,9 @@ async function requiresCommercialPlan(req, res, next) {
 
     const billing = await userRepo.findBillingStatus(resolveOwnerId(req.user));
     const isActive = ACTIVE_STATUSES.includes(billing?.subscription_status);
-    if (!isActive || billing?.subscription_plan !== 'commercial') {
+    if (!isActive) {
       return res.status(402).json({
-        error: 'Commercial properties require a Commercial plan ($79/mo + $2/unit). Upgrade to continue.',
+        error: 'Commercial properties and 5+ units per property require the paid plan ($10/mo). Upgrade to continue.',
         code:  'COMMERCIAL_REQUIRED',
       });
     }
@@ -157,9 +157,8 @@ async function requiresCommercialPlan(req, res, next) {
  * Tier-aware resource count guard. Blocks creation once the user has reached
  * their plan's limit for the given resource.
  *
- *   Free       → properties: 1,  units: 4,  tenants: 4
- *   Starter    → properties: 25, units: ∞,  tenants: ∞
- *   Enterprise → unlimited
+ *   Free       → properties: 2,  units: 4 per property, tenants: 4
+ *   Paid       → unlimited
  *
  * @param {'properties'|'units'|'tenants'} resource
  *
@@ -180,7 +179,8 @@ function checkPlanLimit(resource) {
 
       const billing      = await userRepo.findBillingStatus(resolveOwnerId(req.user));
       const isActive     = ['active', 'trialing'].includes(billing?.subscription_status);
-      const plan         = isActive ? (billing?.subscription_plan ?? 'starter') : 'free';
+      // Beta model: all active subscriptions are treated as the same paid tier.
+      const plan         = isActive ? 'starter' : 'free';
       // enterprise and commercial both get unlimited properties/tenants/units globally
       if (plan === 'enterprise' || plan === 'commercial') return next();
 
@@ -195,17 +195,21 @@ function checkPlanLimit(resource) {
         countQuery  = 'SELECT COUNT(*)::int AS cnt FROM properties WHERE owner_id = $1 AND deleted_at IS NULL';
         countParams = [effectiveOwnerId];
       } else if (resource === 'units') {
-        // Global unit cap applies on Free only. On Starter the global limit is Infinity,
-        // but multi-family per-property cap (4 units) is enforced in unitService.
+        // Free tier unit limit is per property: up to 4 units on each property.
+        const propertyId = req.body?.propertyId ?? req.body?.property_id ?? null;
+        if (!propertyId) {
+          return res.status(400).json({ error: 'propertyId is required to create a unit' });
+        }
         countQuery = `
           SELECT COUNT(*)::int AS cnt
           FROM units u
           JOIN properties p ON p.id = u.property_id
           WHERE p.owner_id = $1
+            AND p.id = $2
             AND u.deleted_at IS NULL
             AND p.deleted_at IS NULL
         `;
-        countParams = [effectiveOwnerId];
+        countParams = [effectiveOwnerId, propertyId];
       } else if (resource === 'employees') {
         // Count active employees under this landlord
         countQuery  = 'SELECT COUNT(*)::int AS cnt FROM users WHERE employer_id = $1 AND deleted_at IS NULL';
@@ -227,10 +231,12 @@ function checkPlanLimit(resource) {
       if (count >= max) {
         const planLabel   = plan === 'starter' ? 'Starter' : 'Free';
         const upgradeHint = plan === 'starter'
-          ? 'Upgrade to Enterprise or Commercial for unlimited access.'
+          ? 'Your paid plan supports this action.'
           : resource === 'employees'
-            ? 'Upgrade to Enterprise or Commercial for unlimited team members.'
-            : `Upgrade to Starter (up to 25 ${resource}) or Enterprise/Commercial (unlimited) to add more.`;
+            ? 'Upgrade to the paid plan ($10/mo) for team members.'
+            : resource === 'units'
+              ? 'Upgrade to the paid plan ($10/mo) for 5+ units per property and commercial access.'
+              : 'Upgrade to the paid plan ($10/mo) to add more.';
         return res.status(402).json({
           error:   `${planLabel} plan is limited to ${max} ${resource}. ${upgradeHint}`,
           code:    'PLAN_LIMIT',

@@ -2,64 +2,30 @@
  * Pricing plan definitions and tier helpers.
  *
  * Tiers (lowest → highest):
- *   0 — free       (no subscription)  1 property, 4 units, 4 tenants. ACH included.
- *   1 — starter    ($15/mo)           up to 25 properties. ACH + analytics.
- *   2 — enterprise ($49/mo)           unlimited residential properties. Growth + future premium features.
- *   3 — commercial ($79/mo + $2/unit) unlimited properties incl. commercial. Per-unit billing for commercial units.
+ *   0 — free       (no subscription)  up to 2 properties, up to 4 units per property.
+ *   1 — starter    ($10/mo)           paid tier with expanded access.
+ *   2 — enterprise legacy paid label (treated as paid)
+ *   3 — commercial legacy paid label (treated as paid)
  *
  * The `plan` string comes from subscription.plan which is populated by the
  * Stripe webhook handler using price.nickname. Make sure your Stripe prices are
- * named 'starter', 'enterprise', and 'commercial' in the Stripe Dashboard.
- *
- * Price history:
- *   enterprise: $50/mo → $49/mo (v1.5.13)
- *   starter:    $20/mo → $15/mo (v1.5.12)
+ * named 'starter' in the Stripe Dashboard for the beta paid tier.
  */
 
 export const PLANS = {
   starter: {
     key:         'starter',
-    label:       'Growth',
-    price:       15,
+    label:       'Paid',
+    price:       10,
     unitAddon:   null,
-    description: 'Up to 25 properties, analytics & portfolio reporting',
+    description: 'Expanded access for growing portfolios',
     features:    [
-      'Up to 25 properties',
-      'Single & multi-family (up to 4 units each)',
-      'Dashboard analytics',
-      'Portfolio income summary',
+      'Everything in Free',
+      '5+ units per property',
+      'Commercial property access',
+      'Expanded analytics and reporting',
       'ACH online rent collection',
-      'All core features',
-    ],
-  },
-  enterprise: {
-    key:         'enterprise',
-    label:       'Enterprise',
-    price:       49,
-    unitAddon:   null,
-    description: 'Unlimited residential properties + team members',
-    features:    [
-      'Unlimited properties',
-      'Single & multi-family (up to 4 units each)',
-      'Everything in Growth',
-      'Team members — add unlimited staff/managers',
-      'AI features (coming soon)',
-      'Document signing (coming soon)',
-    ],
-  },
-  commercial: {
-    key:         'commercial',
-    label:       'Commercial',
-    price:       79,
-    unitAddon:   2,
-    description: 'Unlimited properties including commercial — billed per commercial unit',
-    features:    [
-      'Unlimited properties (all types)',
-      'Commercial properties with unlimited units',
-      'Multi-family up to 4 units each',
-      '$2/unit/mo for commercial units',
-      'Team members — add unlimited staff/managers',
-      'Everything in Enterprise',
+      'Priority billing support',
     ],
   },
 }
