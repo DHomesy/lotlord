@@ -22,7 +22,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - **Profile billing actions consolidated** — payout and subscription actions now route to the in-app Payments & Billing workspace.
 - **Hosted Stripe flows retained as fallbacks** — Checkout, Customer Portal, Account Links, and Express Dashboard remain available for recovery and unsupported edge cases.
 - **Webhook authority preserved** — Checkout completion refreshes status, but paid access remains controlled by signed Stripe webhook updates.
-- **Connect readiness tightened** — new accounts request only the transfers capability used by ACH destination charges, and local payout readiness now follows Stripe capability changes in both directions.
+- **Connect readiness tightened** — new Express accounts request Stripe's standard `card_payments` + `transfers` capability pair, while LotLord continues to offer ACH-only rent payments; local payout readiness follows Stripe capability changes in both directions.
 
 ### Versioning
 - Root package version bumped to `1.13.0`.

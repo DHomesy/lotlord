@@ -583,7 +583,10 @@ async function getOrCreateConnectAccount(userId) {
     type: 'express',
     country: 'US',
     email: user.email,
-    capabilities: { transfers: { requested: true } },
+    capabilities: {
+      card_payments: { requested: true },
+      transfers: { requested: true },
+    },
     metadata: { userId },
   });
 

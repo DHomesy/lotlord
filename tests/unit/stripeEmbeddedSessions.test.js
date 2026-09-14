@@ -70,6 +70,30 @@ describe('createEmbeddedCheckoutSession', () => {
 });
 
 describe('createConnectAccountSession', () => {
+  test('requests Stripe-supported payment and transfer capabilities for a new Express account', async () => {
+    userRepo.findById.mockResolvedValue({ id: 'user-1', email: 'owner@example.com' });
+    userRepo.findConnectStatus.mockResolvedValue({ stripe_account_id: null });
+    stripe.accounts.create.mockResolvedValue({ id: 'acct_new' });
+    stripe.accountSessions.create.mockResolvedValue({ client_secret: 'acct_session_secret' });
+
+    await stripeService.createConnectAccountSession('user-1');
+
+    expect(stripe.accounts.create).toHaveBeenCalledWith({
+      type: 'express',
+      country: 'US',
+      email: 'owner@example.com',
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
+      },
+      metadata: { userId: 'user-1' },
+    });
+    expect(userRepo.updateStripeConnect).toHaveBeenCalledWith('user-1', {
+      accountId: 'acct_new',
+      onboarded: false,
+    });
+  });
+
   test('scopes embedded payout components to the landlord connected account', async () => {
     userRepo.findById.mockResolvedValue({ id: 'user-1' });
     userRepo.findConnectStatus.mockResolvedValue({ stripe_account_id: 'acct_existing' });
