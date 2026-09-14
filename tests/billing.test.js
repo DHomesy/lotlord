@@ -65,6 +65,52 @@ describe('POST /api/v1/billing/checkout', () => {
   });
 });
 
+// ── POST /api/v1/billing/checkout/embedded ───────────────────────────────────
+
+describe('POST /api/v1/billing/checkout/embedded', () => {
+  it('returns 401 with no auth', async () => {
+    const res = await request(app).post('/api/v1/billing/checkout/embedded');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when called by a tenant', async () => {
+    const res = await request(app)
+      .post('/api/v1/billing/checkout/embedded')
+      .set('Authorization', `Bearer ${fx.tenantA.token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 403 when called by an admin', async () => {
+    const res = await request(app)
+      .post('/api/v1/billing/checkout/embedded')
+      .set('Authorization', `Bearer ${fx.admin.token}`);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe.each([
+  '/api/v1/billing/payment-method/setup',
+  '/api/v1/billing/payment-method/complete',
+  '/api/v1/billing/cancel',
+  '/api/v1/billing/reactivate',
+])('landlord-only billing action %s', (path) => {
+  it('returns 401 with no auth', async () => {
+    const res = await request(app).post(path);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for tenants and admins', async () => {
+    const tenantResponse = await request(app)
+      .post(path)
+      .set('Authorization', `Bearer ${fx.tenantA.token}`);
+    const adminResponse = await request(app)
+      .post(path)
+      .set('Authorization', `Bearer ${fx.admin.token}`);
+    expect(tenantResponse.status).toBe(403);
+    expect(adminResponse.status).toBe(403);
+  });
+});
+
 // ── POST /api/v1/billing/portal ───────────────────────────────────────────────
 
 describe('POST /api/v1/billing/portal', () => {

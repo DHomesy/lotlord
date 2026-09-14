@@ -9,6 +9,12 @@ const router = Router();
 router.get( '/status',   authenticate, authorize('landlord'), controller.getMySubscription);
 // POST /billing/checkout — initiate a new subscription via Stripe Checkout
 router.post('/checkout', authenticate, authorize('landlord'), controller.createMyCheckoutSession);
+// POST /billing/checkout/embedded — render subscription checkout inside LotLord
+router.post('/checkout/embedded', authenticate, authorize('landlord'), controller.createMyEmbeddedCheckoutSession);
+router.post('/payment-method/setup', authenticate, authorize('landlord'), controller.createMyBillingSetupIntent);
+router.post('/payment-method/complete', authenticate, authorize('landlord'), controller.setMyBillingPaymentMethod);
+router.post('/cancel', authenticate, authorize('landlord'), controller.cancelMySubscription);
+router.post('/reactivate', authenticate, authorize('landlord'), controller.reactivateMySubscription);
 // POST /billing/portal   — open Stripe Customer Portal to manage/cancel subscription
 router.post('/portal',   authenticate, authorize('landlord'), controller.createMyBillingPortalSession);
 

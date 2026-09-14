@@ -2,15 +2,17 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { TextField, Stack, Button, Alert, Typography, Card, CardContent, Divider, Box, Chip } from '@mui/material'
+import { TextField, Stack, Button, Alert, Typography, Card, CardContent, Divider, Box, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Tooltip } from '@mui/material'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import PageContainer from '../../components/layout/PageContainer'
 import ConnectBankDialog from '../../components/billing/ConnectBankDialog'
+import VerifyBankDialog from '../../components/billing/VerifyBankDialog'
 import { useAuthStore } from '../../store/authStore'
 import { useUpdateMe, useChangePassword } from '../../hooks/useUsers'
-import { useMyPaymentMethods } from '../../hooks/useStripeSetup'
+import { useMyPaymentMethods, useRemoveMyPaymentMethod } from '../../hooks/useStripeSetup'
 
 const profileSchema = z.object({
   name: z.string().min(1),
@@ -28,6 +30,9 @@ export default function TenantProfilePage() {
   const { mutate: changePassword, isPending: changingPw, isSuccess: pwChanged, isError: pwError } = useChangePassword()
   const { data: paymentMethods = [] } = useMyPaymentMethods()
   const [bankOpen, setBankOpen] = useState(false)
+  const [verifyMethod, setVerifyMethod] = useState(null)
+  const [removeMethod, setRemoveMethod] = useState(null)
+  const { mutate: removeBank, isPending: removingBank, error: removeError } = useRemoveMyPaymentMethod()
 
   const profileForm = useForm({ resolver: zodResolver(profileSchema), defaultValues: { name: user?.name || '', phone: user?.phone || '' } })
   const passwordForm = useForm({ resolver: zodResolver(passwordSchema) })
@@ -88,23 +93,31 @@ export default function TenantProfilePage() {
                 {pm.verified ? (
                   <Chip icon={<CheckCircleIcon />} label="Verified" size="small" color="success" variant="outlined" />
                 ) : (
-                  <Stack direction="row" spacing={1} alignItems="center">
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'flex-end', sm: 'center' }}>
                     <Chip icon={<WarningAmberIcon />} label="Verification pending" size="small" color="warning" variant="outlined" />
+                    <Button size="small" variant="outlined" color="warning" onClick={() => setVerifyMethod(pm)}>
+                      Verify
+                    </Button>
                     {pm.hostedVerificationUrl && (
                       <Button
                         size="small"
-                        variant="outlined"
+                        variant="text"
                         color="warning"
                         href={pm.hostedVerificationUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         sx={{ whiteSpace: 'nowrap' }}
                       >
-                        Verify →
+                        Stripe fallback
                       </Button>
                     )}
                   </Stack>
                 )}
+                <Tooltip title="Remove bank account">
+                  <IconButton size="small" aria-label="Remove bank account" onClick={() => setRemoveMethod(pm)}>
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               </CardContent>
             </Card>
           ))}
@@ -112,6 +125,31 @@ export default function TenantProfilePage() {
       )}
 
       <ConnectBankDialog open={bankOpen} onClose={() => setBankOpen(false)} />
+      <VerifyBankDialog paymentMethod={verifyMethod} open={!!verifyMethod} onClose={() => setVerifyMethod(null)} />
+      <Dialog open={!!removeMethod} onClose={removingBank ? undefined : () => setRemoveMethod(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Remove bank account?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            {removeMethod?.bankName} ending in {removeMethod?.last4} will no longer be available for future rent payments.
+          </Typography>
+          {removeError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {removeError?.response?.data?.error ?? 'Could not remove this bank account.'}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRemoveMethod(null)} disabled={removingBank}>Keep account</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={removingBank}
+            onClick={() => removeBank(removeMethod.id, { onSuccess: () => setRemoveMethod(null) })}
+          >
+            {removingBank ? 'Removing...' : 'Remove'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </PageContainer>
   )
 }

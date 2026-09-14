@@ -8,6 +8,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.13.0] — 2026-09-14 — Embedded Payments & Billing
+
+### Added
+- **LotLord Payments & Billing workspace** — landlords can manage plan and payout setup from a dedicated in-app page.
+- **Embedded subscription checkout** — the $10/month paid plan now uses Stripe Embedded Checkout while Stripe continues to own sensitive payment fields.
+- **Embedded Stripe Connect tools** — payout onboarding, account management, notifications, balances, and payouts render inside LotLord using short-lived Account Sessions.
+- **In-app subscription self-service** — landlords can replace their subscription card, schedule cancellation at period end, and reactivate before cancellation takes effect.
+- **In-app tenant bank verification** — tenants can enter Stripe micro-deposit amounts inside LotLord and remove saved bank accounts they own.
+- **Focused Stripe session tests** — unit coverage verifies embedded Checkout and Connect session configuration and client-secret-only responses.
+
+### Changed
+- **Profile billing actions consolidated** — payout and subscription actions now route to the in-app Payments & Billing workspace.
+- **Hosted Stripe flows retained as fallbacks** — Checkout, Customer Portal, Account Links, and Express Dashboard remain available for recovery and unsupported edge cases.
+- **Webhook authority preserved** — Checkout completion refreshes status, but paid access remains controlled by signed Stripe webhook updates.
+- **Connect readiness tightened** — new accounts request only the transfers capability used by ACH destination charges, and local payout readiness now follows Stripe capability changes in both directions.
+
+### Versioning
+- Root package version bumped to `1.13.0`.
+- Frontend package version bumped to `1.13.0`.
+
+---
 ## [1.12.8] — 2026-09-02 — AI Feature Flag + Beta Copy Cleanup
 
 ### Changed

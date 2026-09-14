@@ -9,7 +9,6 @@ import {
 } from '@mui/material'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
-import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import CardMembershipIcon from '@mui/icons-material/CardMembership'
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts'
@@ -18,8 +17,8 @@ import PeopleIcon from '@mui/icons-material/People'
 import PageContainer from '../../components/layout/PageContainer'
 import { useAuthStore } from '../../store/authStore'
 import { useUpdateMe, useChangePassword } from '../../hooks/useUsers'
-import { useConnectStatus, useConnectOnboard, useConnectLogin } from '../../hooks/useStripeSetup'
-import { useMySubscription, useCreateCheckoutSession, useCreateBillingPortalSession } from '../../hooks/useBilling'
+import { useConnectStatus } from '../../hooks/useStripeSetup'
+import { useMySubscription } from '../../hooks/useBilling'
 import { PLANS, hasStarter } from '../../lib/plans'
 
 const profileSchema = z.object({
@@ -42,11 +41,7 @@ export default function AdminProfilePage() {
   const { mutate: updateMe, isPending: savingProfile, isSuccess: profileSaved } = useUpdateMe()
   const { mutate: changePassword, isPending: changingPw, isSuccess: pwChanged, isError: pwError } = useChangePassword()
   const { data: connectStatus } = useConnectStatus()
-  const { mutate: startOnboard, isPending: onboarding, error: onboardError } = useConnectOnboard()
-  const { mutate: openDashboard, isPending: openingDashboard } = useConnectLogin()
   const { data: subscription, isLoading: loadingSubscription } = useMySubscription()
-  const { mutate: startCheckout, isPending: startingCheckout, isError: checkoutFailed } = useCreateCheckoutSession()
-  const { mutate: openPortal, isPending: openingPortal } = useCreateBillingPortalSession()
 
   const [connectBanner, setConnectBanner] = useState(null)
   const [billingBanner, setBillingBanner] = useState(null)
@@ -73,9 +68,7 @@ export default function AdminProfilePage() {
   }, [])
 
   function handleStartOnboard() {
-    startOnboard(undefined, {
-      onSuccess: (data) => { window.location.href = data.url },
-    })
+    navigate('/payments?tab=payouts')
   }
 
   const profileForm = useForm({
@@ -97,10 +90,9 @@ export default function AdminProfilePage() {
               size="small"
               variant="outlined"
               onClick={handleStartOnboard}
-              disabled={onboarding}
               sx={{ whiteSpace: 'nowrap' }}
             >
-              {onboarding ? 'Redirecting...' : connectStatus.connected ? 'Continue Setup' : 'Set Up Payouts'}
+              {connectStatus.connected ? 'Continue Setup' : 'Set Up Payouts'}
             </Button>
           }
         >
@@ -237,12 +229,11 @@ export default function AdminProfilePage() {
               <Button
                 variant="contained"
                 size="small"
-                startIcon={onboarding ? <CircularProgress size={14} color="inherit" /> : <AccountBalanceIcon />}
+                startIcon={<AccountBalanceIcon />}
                 onClick={handleStartOnboard}
-                disabled={onboarding}
                 sx={{ ml: 2, flexShrink: 0 }}
               >
-                {onboarding ? 'Redirecting...' : connectStatus?.connected ? 'Continue Setup' : 'Setup Payouts'}
+                {connectStatus?.connected ? 'Continue Setup' : 'Setup Payouts'}
               </Button>
             )}
           </Stack>
@@ -257,12 +248,6 @@ export default function AdminProfilePage() {
               The setup link expired. Click "Continue Setup" to resume where you left off.
             </Alert>
           )}
-          {onboardError && (
-            <Alert severity="error" sx={{ maxWidth: 460, mt: 1 }}>
-              {onboardError?.response?.data?.error ?? 'Failed to start payout setup. Please try again.'}
-            </Alert>
-          )}
-
           {connectStatus?.connected && !connectStatus?.onboarded && !connectBanner && (
             <Alert severity="warning" sx={{ maxWidth: 460, mt: 1 }}>
               Setup incomplete - click "Continue Setup" to finish verifying your account so payouts can be enabled.
@@ -282,11 +267,9 @@ export default function AdminProfilePage() {
                   </Box>
                   <Button
                     size="small"
-                    endIcon={<OpenInNewIcon fontSize="small" />}
-                    onClick={() => openDashboard(undefined, { onSuccess: (d) => { window.location.href = d.url } })}
-                    disabled={openingDashboard}
+                    onClick={() => navigate('/payments?tab=payouts')}
                   >
-                    {openingDashboard ? 'Loading...' : 'Manage'}
+                    Manage
                   </Button>
                 </CardContent>
               </Card>
@@ -352,12 +335,10 @@ export default function AdminProfilePage() {
               <Button
                 variant="contained"
                 color="warning"
-                endIcon={<OpenInNewIcon fontSize="small" />}
                 sx={{ mt: 1.5 }}
-                onClick={() => openPortal()}
-                disabled={openingPortal}
+                onClick={() => navigate('/payments')}
               >
-                {openingPortal ? 'Loading...' : 'Update Payment Method'}
+                Update Payment Method
               </Button>
             </Box>
           )}
@@ -393,20 +374,14 @@ export default function AdminProfilePage() {
                         size="small"
                         fullWidth
                         sx={{ mt: 2 }}
-                        disabled={startingCheckout}
-                        onClick={() => startCheckout()}
+                        onClick={() => navigate('/payments')}
                       >
-                        {startingCheckout ? 'Redirecting...' : `Subscribe to ${label}`}
+                        {`Subscribe to ${label}`}
                       </Button>
                     </CardContent>
                   </Card>
                 ))}
               </Stack>
-              {checkoutFailed && (
-                <Alert severity="error" sx={{ mt: 2, maxWidth: 720 }}>
-                  Could not start checkout - please try again or contact support.
-                </Alert>
-              )}
             </>
           )}
 
@@ -417,11 +392,9 @@ export default function AdminProfilePage() {
               </Typography>
               <Button
                 variant="outlined"
-                endIcon={<OpenInNewIcon fontSize="small" />}
-                onClick={() => openPortal()}
-                disabled={openingPortal}
+                onClick={() => navigate('/payments')}
               >
-                {openingPortal ? 'Loading...' : 'Manage Subscription'}
+                Manage Subscription
               </Button>
             </Box>
           )}

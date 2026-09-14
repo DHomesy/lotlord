@@ -17,6 +17,44 @@ async function createMyCheckoutSession(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// POST /billing/checkout/embedded — creates a Checkout session rendered inside LotLord
+async function createMyEmbeddedCheckoutSession(req, res, next) {
+  try {
+    const result = await stripeService.createEmbeddedCheckoutSession(req.user.sub);
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
+async function createMyBillingSetupIntent(req, res, next) {
+  try {
+    const result = await stripeService.createBillingSetupIntent(req.user.sub);
+    res.status(201).json(result);
+  } catch (err) { next(err); }
+}
+
+async function setMyBillingPaymentMethod(req, res, next) {
+  try {
+    const { setupIntentId } = req.body;
+    if (!setupIntentId) return res.status(400).json({ error: 'setupIntentId is required' });
+    const result = await stripeService.setBillingPaymentMethod(req.user.sub, setupIntentId);
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
+async function cancelMySubscription(req, res, next) {
+  try {
+    const result = await stripeService.setSubscriptionCancellation(req.user.sub, true);
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
+async function reactivateMySubscription(req, res, next) {
+  try {
+    const result = await stripeService.setSubscriptionCancellation(req.user.sub, false);
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
 // POST /billing/portal — creates a Stripe Customer Portal session for self-service billing management
 async function createMyBillingPortalSession(req, res, next) {
   try {
@@ -36,6 +74,11 @@ async function listLandlordSubscriptions(req, res, next) {
 module.exports = {
   getMySubscription,
   createMyCheckoutSession,
+  createMyEmbeddedCheckoutSession,
+  createMyBillingSetupIntent,
+  setMyBillingPaymentMethod,
+  cancelMySubscription,
+  reactivateMySubscription,
   createMyBillingPortalSession,
   listLandlordSubscriptions,
 };

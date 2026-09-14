@@ -135,7 +135,7 @@ export default function AdminShell() {
           <Button onClick={() => setPlanLimitDialog(null)}>Dismiss</Button>
           <Button
             variant="contained"
-            onClick={() => { setPlanLimitDialog(null); navigate('/profile#subscription') }}
+            onClick={() => { setPlanLimitDialog(null); navigate('/payments') }}
           >
             Upgrade Plan
           </Button>

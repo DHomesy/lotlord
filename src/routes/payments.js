@@ -40,6 +40,8 @@ router.post(
 router.post('/stripe/setup-intent/me',   authenticate, authorize('tenant'), controller.createMySetupIntent);
 // Tenant lists their own saved bank accounts
 router.get('/stripe/payment-methods/me', authenticate, authorize('tenant'), controller.listMyPaymentMethods);
+router.post('/stripe/payment-methods/me/:paymentMethodId/verify', authenticate, authorize('tenant'), controller.verifyMyPaymentMethod);
+router.delete('/stripe/payment-methods/me/:paymentMethodId', authenticate, authorize('tenant'), controller.removeMyPaymentMethod);
 // Tenant self-service payment — lease/charge resolved from JWT, not user-supplied
 router.post('/stripe/payment-intent/me', authenticate, authorize('tenant'), controller.createMyPaymentIntent);
 
@@ -49,6 +51,8 @@ router.get('/stripe/payment-methods/:tenantId', authenticate, authorize('admin')
 // ── Stripe Connect (landlord/admin payout setup) ──────────────────────────────
 // POST: creates/retrieves a Connect Express account and returns a one-time onboarding URL
 router.post('/connect/onboard', authenticate, authorize('admin', 'landlord'), controller.createConnectOnboardingLink);
+// POST: creates a short-lived session for Connect components embedded in LotLord
+router.post('/connect/account-session', authenticate, authorize('landlord'), controller.createConnectAccountSession);
 // POST: returns a one-time login link to the Stripe Express Dashboard (already-onboarded only)
 router.post('/connect/login',   authenticate, authorize('admin', 'landlord'), controller.createConnectLoginLink);
 // GET:  returns the current onboarding status (connected, onboarded, chargesEnabled, etc.)

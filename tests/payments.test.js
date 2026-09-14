@@ -218,6 +218,46 @@ describe('POST /api/v1/payments/stripe/payment-intent/me  (tenant only)', () => 
   });
 });
 
+describe('POST /api/v1/payments/connect/account-session  (landlord only)', () => {
+  it('returns 401 with no auth', async () => {
+    const res = await request(app).post('/api/v1/payments/connect/account-session');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when called by a tenant', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/connect/account-session')
+      .set('Authorization', `Bearer ${fx.tenantA.token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 403 when called by an admin', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/connect/account-session')
+      .set('Authorization', `Bearer ${fx.admin.token}`);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe.each([
+  ['post', '/api/v1/payments/stripe/payment-methods/me/pm_test/verify'],
+  ['delete', '/api/v1/payments/stripe/payment-methods/me/pm_test'],
+])('tenant-only bank action %s %s', (method, path) => {
+  it('returns 401 with no auth', async () => {
+    const res = await request(app)[method](path);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when called by a landlord or admin', async () => {
+    const landlordResponse = await request(app)[method](path)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    const adminResponse = await request(app)[method](path)
+      .set('Authorization', `Bearer ${fx.admin.token}`);
+    expect(landlordResponse.status).toBe(403);
+    expect(adminResponse.status).toBe(403);
+  });
+});
+
 // ── Receipt download ──────────────────────────────────────────────────────────
 
 describe('GET /api/v1/payments/:id/receipt', () => {

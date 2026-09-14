@@ -128,6 +128,28 @@ async function listMyPaymentMethods(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function verifyMyPaymentMethod(req, res, next) {
+  try {
+    const tenant = await tenantRepo.findByUserId(req.user.sub);
+    if (!tenant) return res.status(404).json({ error: 'Tenant profile not found' });
+    const amounts = req.body.amounts?.map(Number);
+    if (!Array.isArray(amounts) || amounts.length !== 2 || amounts.some((amount) => !Number.isInteger(amount) || amount < 1 || amount > 99)) {
+      return res.status(400).json({ error: 'Enter both micro-deposit amounts in cents.' });
+    }
+    const result = await stripeService.verifyPaymentMethodMicrodeposits(tenant.id, req.params.paymentMethodId, amounts);
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
+async function removeMyPaymentMethod(req, res, next) {
+  try {
+    const tenant = await tenantRepo.findByUserId(req.user.sub);
+    if (!tenant) return res.status(404).json({ error: 'Tenant profile not found' });
+    const result = await stripeService.removePaymentMethod(tenant.id, req.params.paymentMethodId);
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
 // ── Tenant self-service: create a PaymentIntent to pay their own charge ────────
 // Resolves the tenant + active lease from JWT; no user-supplied leaseId accepted.
 async function createMyPaymentIntent(req, res, next) {
@@ -206,6 +228,13 @@ async function createMyPaymentIntent(req, res, next) {
 async function createConnectOnboardingLink(req, res, next) {
   try {
     const result = await stripeService.createConnectOnboardingLink(req.user.sub);
+    res.status(201).json(result);
+  } catch (err) { next(err); }
+}
+
+async function createConnectAccountSession(req, res, next) {
+  try {
+    const result = await stripeService.createConnectAccountSession(req.user.sub);
     res.status(201).json(result);
   } catch (err) { next(err); }
 }
@@ -327,8 +356,11 @@ module.exports = {
   listPaymentMethods,
   createMySetupIntent,
   listMyPaymentMethods,
+  verifyMyPaymentMethod,
+  removeMyPaymentMethod,
   createMyPaymentIntent,
   createConnectOnboardingLink,
+  createConnectAccountSession,
   createConnectLoginLink,
   getConnectStatus,
   getReceipt,

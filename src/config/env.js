@@ -57,8 +57,9 @@ module.exports = {
   APP_BASE_URL: optional('APP_BASE_URL', 'http://localhost:3000'),
 
   // Stripe
-  STRIPE_SECRET_KEY:     optional('STRIPE_SECRET_KEY'),
-  STRIPE_WEBHOOK_SECRET: optional('STRIPE_WEBHOOK_SECRET'),
+  STRIPE_SECRET_KEY:             optional('STRIPE_SECRET_KEY'),
+  STRIPE_WEBHOOK_SECRET:         optional('STRIPE_WEBHOOK_SECRET'),
+  STRIPE_CONNECT_WEBHOOK_SECRET: optional('STRIPE_CONNECT_WEBHOOK_SECRET'),
   // Stripe SaaS (beta) — single paid tier (create in Stripe Dashboard → Products)
   // Set nickname to 'starter' on the paid price.
   STRIPE_PRICE_ID_STARTER:         optional('STRIPE_PRICE_ID_STARTER'),

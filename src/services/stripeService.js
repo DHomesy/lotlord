@@ -531,7 +531,38 @@ async function listPaymentMethods(tenantId) {
     accountType:          pm.us_bank_account?.account_type ?? 'checking',
     verified:             !unverifiedMap.has(pm.id),
     hostedVerificationUrl: unverifiedMap.get(pm.id) ?? null,
+    setupIntentId:        siResult.data.find((si) => si.payment_method === pm.id)?.id ?? null,
   }));
+}
+
+async function verifyPaymentMethodMicrodeposits(tenantId, paymentMethodId, amounts) {
+  const customer = await getOrCreateStripeCustomer(tenantId);
+  const setupIntents = await getStripe().setupIntents.list({ customer: customer.id, limit: 20 });
+  const setupIntent = setupIntents.data.find(
+    (candidate) => candidate.payment_method === paymentMethodId && candidate.status === 'requires_action',
+  );
+
+  if (!setupIntent) {
+    throw Object.assign(new Error('No pending bank verification was found for this account.'), { status: 404 });
+  }
+
+  const verified = await getStripe().setupIntents.verifyMicrodeposits(setupIntent.id, { amounts });
+  return { verified: verified.status === 'succeeded', status: verified.status };
+}
+
+async function removePaymentMethod(tenantId, paymentMethodId) {
+  const customer = await getOrCreateStripeCustomer(tenantId);
+  const paymentMethod = await getStripe().paymentMethods.retrieve(paymentMethodId);
+  const paymentMethodCustomer = typeof paymentMethod.customer === 'string'
+    ? paymentMethod.customer
+    : paymentMethod.customer?.id;
+
+  if (paymentMethodCustomer !== customer.id) {
+    throw Object.assign(new Error('Bank account not found.'), { status: 404 });
+  }
+
+  await getStripe().paymentMethods.detach(paymentMethodId);
+  return { removed: true };
 }
 
 // ── Stripe Connect ─────────────────────────────────────────────────────────
@@ -552,7 +583,7 @@ async function getOrCreateConnectAccount(userId) {
     type: 'express',
     country: 'US',
     email: user.email,
-    capabilities: { transfers: { requested: true }, card_payments: { requested: true } },
+    capabilities: { transfers: { requested: true } },
     metadata: { userId },
   });
 
@@ -573,6 +604,26 @@ async function createConnectOnboardingLink(userId) {
     type:        'account_onboarding',
   });
   return { url: link.url, accountId };
+}
+
+/**
+ * Create a short-lived session for Stripe Connect components embedded in LotLord.
+ * Stripe still owns identity, bank-account, and payout data inside its secure UI.
+ */
+async function createConnectAccountSession(userId) {
+  const accountId = await getOrCreateConnectAccount(userId);
+  const accountSession = await getStripe().accountSessions.create({
+    account: accountId,
+    components: {
+      account_onboarding: { enabled: true },
+      account_management: { enabled: true },
+      notification_banner: { enabled: true },
+      balances: { enabled: true },
+      payouts: { enabled: true },
+    },
+  });
+
+  return { clientSecret: accountSession.client_secret };
 }
 
 /**
@@ -604,9 +655,10 @@ async function getConnectStatus(userId) {
     return { connected: false, onboarded: false };
   }
 
-  const onboarded = !!(account.charges_enabled && account.details_submitted);
-  if (onboarded && !row.stripe_account_onboarded) {
-    await userRepo.updateStripeConnect(userId, { accountId: row.stripe_account_id, onboarded: true });
+  const transfersEnabled = account.capabilities?.transfers === 'active';
+  const onboarded = !!(account.details_submitted && account.payouts_enabled && transfersEnabled);
+  if (onboarded !== !!row.stripe_account_onboarded) {
+    await userRepo.updateStripeConnect(userId, { accountId: row.stripe_account_id, onboarded });
   }
 
   return {
@@ -614,6 +666,7 @@ async function getConnectStatus(userId) {
     onboarded,
     accountId:        row.stripe_account_id,
     chargesEnabled:   account.charges_enabled,
+    transfersEnabled,
     detailsSubmitted: account.details_submitted,
     payoutsEnabled:   account.payouts_enabled,
   };
@@ -622,15 +675,19 @@ async function getConnectStatus(userId) {
 // ── Private Connect webhook handlers ─────────────────────────────────────────
 
 async function onConnectAccountUpdated(account) {
-  if (!account.charges_enabled || !account.details_submitted) return;
   const user = await userRepo.findByStripeAccountId(account.id);
   if (!user) {
     console.warn(`[stripe connect] account.updated — no user for account ${account.id}`);
     return;
   }
-  if (user.stripe_account_onboarded) return; // idempotent
-  await userRepo.updateStripeConnect(user.id, { accountId: account.id, onboarded: true });
-  console.info(`[stripe connect] Landlord ${user.id} (${user.email}) onboarding complete`);
+  const onboarded = !!(
+    account.details_submitted &&
+    account.payouts_enabled &&
+    account.capabilities?.transfers === 'active'
+  );
+  if (onboarded === !!user.stripe_account_onboarded) return;
+  await userRepo.updateStripeConnect(user.id, { accountId: account.id, onboarded });
+  console.info(`[stripe connect] Landlord ${user.id} (${user.email}) payout readiness: ${onboarded}`);
 }
 
 async function onConnectAccountDeauthorized(stripeAccountId) {
@@ -675,6 +732,10 @@ async function createCheckoutSession(userId) {
       { status: 500 },
     );
   }
+  const billing = await userRepo.findBillingStatus(userId);
+  if (billing?.subscription_id && ['active', 'trialing'].includes(billing.subscription_status)) {
+    throw Object.assign(new Error('You already have an active paid subscription.'), { status: 409 });
+  }
   const customer = await getOrCreateBillingCustomer(userId);
   const session  = await getStripe().checkout.sessions.create({
     mode:       'subscription',
@@ -685,6 +746,117 @@ async function createCheckoutSession(userId) {
     metadata:    { userId, requestedPlan: normalizedPlan },
   });
   return { url: session.url, sessionId: session.id };
+}
+
+async function createEmbeddedCheckoutSession(userId) {
+  const priceId = env.STRIPE_PRICE_ID_STARTER;
+
+  if (!priceId) {
+    throw Object.assign(
+      new Error('STRIPE_PRICE_ID_STARTER is not configured. Create a Product + Price in the Stripe Dashboard, then add the env var to your deployment.'),
+      { status: 500 },
+    );
+  }
+
+  const billing = await userRepo.findBillingStatus(userId);
+  if (billing?.subscription_id && ['active', 'trialing'].includes(billing.subscription_status)) {
+    throw Object.assign(new Error('You already have an active paid subscription.'), { status: 409 });
+  }
+
+  const customer = await getOrCreateBillingCustomer(userId);
+  const session = await getStripe().checkout.sessions.create({
+    mode: 'subscription',
+    ui_mode: 'embedded',
+    customer: customer.id,
+    line_items: [{ price: priceId, quantity: 1 }],
+    return_url: `${env.FRONTEND_URL}/payments?checkout=return&session_id={CHECKOUT_SESSION_ID}`,
+    metadata: { userId, requestedPlan: 'starter' },
+  });
+
+  return { clientSecret: session.client_secret };
+}
+
+async function createBillingSetupIntent(userId) {
+  const customer = await getOrCreateBillingCustomer(userId);
+  const setupIntent = await getStripe().setupIntents.create({
+    customer: customer.id,
+    usage: 'off_session',
+    payment_method_types: ['card'],
+    metadata: { userId, purpose: 'subscription_billing' },
+  });
+
+  return { clientSecret: setupIntent.client_secret, setupIntentId: setupIntent.id };
+}
+
+async function setBillingPaymentMethod(userId, setupIntentId) {
+  const billing = await userRepo.findBillingStatus(userId);
+  if (!billing?.stripe_billing_customer_id) {
+    throw Object.assign(new Error('No billing account found.'), { status: 400 });
+  }
+
+  const setupIntent = await getStripe().setupIntents.retrieve(setupIntentId);
+  const setupCustomerId = typeof setupIntent.customer === 'string'
+    ? setupIntent.customer
+    : setupIntent.customer?.id;
+
+  if (
+    setupCustomerId !== billing.stripe_billing_customer_id ||
+    setupIntent.metadata?.userId !== userId ||
+    setupIntent.metadata?.purpose !== 'subscription_billing'
+  ) {
+    throw Object.assign(new Error('Billing setup session not found.'), { status: 404 });
+  }
+  if (setupIntent.status !== 'succeeded' || !setupIntent.payment_method) {
+    throw Object.assign(new Error('Payment method setup is not complete.'), { status: 409 });
+  }
+
+  const paymentMethodId = typeof setupIntent.payment_method === 'string'
+    ? setupIntent.payment_method
+    : setupIntent.payment_method.id;
+  await getStripe().customers.update(billing.stripe_billing_customer_id, {
+    invoice_settings: { default_payment_method: paymentMethodId },
+  });
+  if (billing.subscription_id) {
+    await getStripe().subscriptions.update(billing.subscription_id, {
+      default_payment_method: paymentMethodId,
+    });
+  }
+
+  const paymentMethod = await getStripe().paymentMethods.retrieve(paymentMethodId);
+  return { paymentMethod: serializeBillingPaymentMethod(paymentMethod) };
+}
+
+async function setSubscriptionCancellation(userId, cancelAtPeriodEnd) {
+  const billing = await userRepo.findBillingStatus(userId);
+  if (!billing?.subscription_id) {
+    throw Object.assign(new Error('No active subscription found.'), { status: 400 });
+  }
+
+  const subscription = await getStripe().subscriptions.update(billing.subscription_id, {
+    cancel_at_period_end: cancelAtPeriodEnd,
+  });
+  return {
+    status: subscription.status,
+    cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    currentPeriodEnd: subscription.current_period_end
+      ? new Date(subscription.current_period_end * 1000).toISOString()
+      : null,
+  };
+}
+
+function serializeBillingPaymentMethod(paymentMethod) {
+  if (!paymentMethod) return null;
+  if (paymentMethod.card) {
+    return {
+      id: paymentMethod.id,
+      type: 'card',
+      brand: paymentMethod.card.brand,
+      last4: paymentMethod.card.last4,
+      expiresMonth: paymentMethod.card.exp_month,
+      expiresYear: paymentMethod.card.exp_year,
+    };
+  }
+  return { id: paymentMethod.id, type: paymentMethod.type };
 }
 
 /**
@@ -766,11 +938,45 @@ async function createBillingPortalSession(userId) {
 
 async function getSubscriptionStatus(userId) {
   const billing = await userRepo.findBillingStatus(userId);
-  return {
+  const result = {
     status:     billing?.subscription_status          ?? 'none',
     plan:       billing?.subscription_plan            ?? null,
     customerId: billing?.stripe_billing_customer_id   ?? null,
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: null,
+    paymentMethod: null,
   };
+
+  if (!billing?.subscription_id) return result;
+
+  try {
+    const subscription = await getStripe().subscriptions.retrieve(billing.subscription_id, {
+      expand: ['default_payment_method'],
+    });
+    let paymentMethod = subscription.default_payment_method;
+    if (!paymentMethod && billing.stripe_billing_customer_id) {
+      const customer = await getStripe().customers.retrieve(billing.stripe_billing_customer_id, {
+        expand: ['invoice_settings.default_payment_method'],
+      });
+      if (!customer.deleted) paymentMethod = customer.invoice_settings?.default_payment_method;
+    }
+    if (typeof paymentMethod === 'string') {
+      paymentMethod = await getStripe().paymentMethods.retrieve(paymentMethod);
+    }
+
+    return {
+      ...result,
+      status: subscription.status,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      currentPeriodEnd: subscription.current_period_end
+        ? new Date(subscription.current_period_end * 1000).toISOString()
+        : null,
+      paymentMethod: serializeBillingPaymentMethod(paymentMethod),
+    };
+  } catch (err) {
+    console.warn(`[stripe billing] Could not refresh subscription ${billing.subscription_id}: ${err.message}`);
+    return result;
+  }
 }
 
 // ── Private billing webhook handlers ─────────────────────────────────────────
@@ -825,11 +1031,18 @@ module.exports = {
   createSetupIntent,
   createPaymentIntent,
   listPaymentMethods,
+  verifyPaymentMethodMicrodeposits,
+  removePaymentMethod,
   handleWebhookEvent,
   createConnectOnboardingLink,
+  createConnectAccountSession,
   createConnectLoginLink,
   getConnectStatus,
   createCheckoutSession,
+  createEmbeddedCheckoutSession,
+  createBillingSetupIntent,
+  setBillingPaymentMethod,
+  setSubscriptionCancellation,
   createBillingPortalSession,
   getSubscriptionStatus,
   syncCommercialUnitQuantity,

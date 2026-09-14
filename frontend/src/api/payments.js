@@ -21,9 +21,12 @@ export const createMySetupIntent        = ()          => http.post(`${base}/stri
 export const getPaymentMethods          = (tenantId)  => http.get(`${base}/stripe/payment-methods/${tenantId}`).then((r) => r.data)
 // Tenant lists their own saved bank accounts
 export const getMyPaymentMethods        = ()          => http.get(`${base}/stripe/payment-methods/me`).then((r) => r.data)
+export const verifyMyPaymentMethod      = ({ paymentMethodId, amounts }) => http.post(`${base}/stripe/payment-methods/me/${paymentMethodId}/verify`, { amounts }).then((r) => r.data)
+export const removeMyPaymentMethod      = (paymentMethodId) => http.delete(`${base}/stripe/payment-methods/me/${paymentMethodId}`).then((r) => r.data)
 
 // ── Stripe Connect (landlord/admin payout setup) ───────────────────────────
 export const createConnectOnboardingLink = ()         => http.post(`${base}/connect/onboard`).then((r) => r.data)
+export const createConnectAccountSession = ()         => http.post(`${base}/connect/account-session`).then((r) => r.data)
 export const createConnectLoginLink      = ()         => http.post(`${base}/connect/login`).then((r) => r.data)
 export const getConnectStatus            = ()         => http.get(`${base}/connect/status`).then((r) => r.data)
 

@@ -56,3 +56,19 @@ export function useCreateMySetupIntent() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['my-payment-methods'] }),
   })
 }
+
+export function useVerifyMyPaymentMethod() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.verifyMyPaymentMethod,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-payment-methods'] }),
+  })
+}
+
+export function useRemoveMyPaymentMethod() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.removeMyPaymentMethod,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-payment-methods'] }),
+  })
+}

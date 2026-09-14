@@ -43,11 +43,22 @@ async function createPaymentIntent({ amountCents, customerId, metadata }) {
  * @returns {import('stripe').Stripe.Event}
  */
 function constructWebhookEvent(rawBody, signature) {
-  return getStripe().webhooks.constructEvent(
-    rawBody,
-    signature,
+  const secrets = [
     env.STRIPE_WEBHOOK_SECRET,
-  );
+    env.STRIPE_CONNECT_WEBHOOK_SECRET,
+  ].filter((secret, index, all) => secret && all.indexOf(secret) === index);
+
+  let signatureError;
+  for (const secret of secrets) {
+    try {
+      return getStripe().webhooks.constructEvent(rawBody, signature, secret);
+    } catch (err) {
+      signatureError = err;
+    }
+  }
+
+  if (signatureError) throw signatureError;
+  throw new Error('Stripe webhook signing secret is not configured');
 }
 
 module.exports = { createPaymentIntent, constructWebhookEvent, getStripe };

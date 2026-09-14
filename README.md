@@ -2,7 +2,7 @@
 
 A full-stack property management platform built for landlords to manage tenants, units, leases, maintenance, documents, payments, and communications.
 
-**Version:** 1.12.8 — see [CHANGELOG.md](CHANGELOG.md) for release history.
+**Version:** 1.13.0 — see [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -680,27 +680,40 @@ The app uses **two completely separate Stripe payment flows** that must never be
 
 #### 1 — SaaS Subscription Billing (Landlord → LotLord platform)
 - Landlord pays for their platform tier (Free / Paid $10)
-- Handled by: `billingController.js`, `stripeService.createCheckoutSession()`, `stripeService.handleWebhookEvent()` subscription events
+- The primary upgrade flow uses Stripe Checkout embedded inside LotLord; hosted Checkout remains a recovery fallback
+- Handled by: `billingController.js`, `stripeService.createEmbeddedCheckoutSession()`, `stripeService.handleWebhookEvent()` subscription events
 - Stripe entity: landlord's **billing** customer (`users.stripe_billing_customer_id`)
 - Money destination: **your** Stripe platform account
 - Webhook events: `checkout.session.completed`, `customer.subscription.*`, `invoice.*`
 - Subscription state stored in: `users.subscription_status`, `users.subscription_plan`
 - Free limits on master: up to 2 properties and up to 4 units per property
 
-#### 2 — ACH Rent Collection (Tenant → Landlord directly)
+#### 2 — Landlord Payout Account (Stripe Connect)
+- Landlord completes payout onboarding and manages payout details inside LotLord using Stripe Connect embedded components
+- Stripe-hosted Account Links and the Express Dashboard remain recovery fallbacks
+- Stripe identity and bank fields remain Stripe-controlled; LotLord receives only short-lived AccountSession client secrets
+
+#### 3 — ACH Rent Collection (Tenant → Landlord directly)
 - Tenant pays rent via ACH bank transfer
 - Handled by: `paymentController.js`, `stripeService.createPaymentIntent()` with `transfer_data: { destination: landlordConnect.stripe_account_id }`
 - Stripe entity: tenant's **customer** (`tenants.stripe_customer_id`) + landlord's **Connect Express** account (`users.stripe_account_id`)
-- Money destination: **landlord's connected bank account** — funds never touch your platform account. Your `STRIPE_SECRET_KEY` facilitates the transfer but you only collect the Stripe platform fee (0.8%, capped at $5 per ACH transaction).
+- Money destination: **landlord's connected account** through a Stripe destination charge. Stripe creates the charge on the LotLord platform and transfers the rent portion to the landlord; the platform remains responsible for Stripe fees, refunds, and disputes.
 - Webhook events: `payment_intent.succeeded`, `payment_intent.payment_failed`
 - Payment state stored in: `rent_payments` + `ledger_entries`
 - **ACH is available on all tiers** (Free and Paid) — the only prerequisite is that the landlord completes Stripe Connect onboarding (`requiresConnectOnboarded` middleware)
 
 #### Rules
 - Never store raw card numbers — Stripe handles all cardholder data
+- Never persist Checkout or AccountSession client secrets; create them on demand for the authenticated landlord
 - Prefer **Stripe ACH** (`us_bank_account`) for rent (0.8%, capped at $5) over card (2.9% + $0.30)
 - All Stripe events come through `/webhooks/stripe` and must update both `rent_payments` and `ledger_entries`
 - Stripe paid-plan price nickname in the Dashboard should be `starter` — the webhook stores `price.nickname` as `subscription_plan` in the DB
+
+#### Embedded financial feature boundaries
+- Included in LotLord: subscription checkout, subscription card replacement, period-end cancellation/reactivation, Connect onboarding/account management, payout balances/actions, tenant bank linking, micro-deposit verification, ACH rent initiation, and payment status/history.
+- Stripe may still open required authentication or bank-consent windows for Financial Connections, identity verification, or sensitive Connect changes.
+- Not included: invoice-history UI, rent payment by card, refunds/dispute workflows, international bank methods, instant-settlement guarantees, or accounting/tax filing.
+- ACH initiation is asynchronous. A successful submission means processing started; only Stripe webhooks mark the payment completed and update the ledger.
 
 ### Soft Deletes
 - Add `deleted_at` to: `users`, `tenants`, `leases`, `units`
@@ -1085,19 +1098,28 @@ TWILIO_PHONE_NUMBER=
 APP_BASE_URL=https://your-app.railway.app
 
 # Stripe
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=          # required — from Stripe Dashboard → Webhooks → signing secret
+STRIPE_SECRET_KEY=sk_test_...   # backend; must match the frontend key's account and mode
+STRIPE_WEBHOOK_SECRET=whsec_... # "Your account" webhook destination
+STRIPE_CONNECT_WEBHOOK_SECRET=whsec_... # separate "Connected accounts" destination
 STRIPE_PRICE_ID_STARTER=price_...   # Paid beta plan — $10/mo — nickname should be 'starter'
 # Legacy vars retained for backwards compatibility only (not used by master checkout)
 STRIPE_PRICE_ID_ENTERPRISE=price_...
 STRIPE_PRICE_ID_COMMERCIAL=price_...
 STRIPE_PRICE_ID_COMMERCIAL_UNIT=price_...
 # Stripe webhook events to enable in the Dashboard:
+#   checkout.session.completed,
 #   customer.subscription.created, customer.subscription.updated,
 #   customer.subscription.deleted, customer.subscription.trial_will_end,
-#   invoice.payment_failed
-# ACH micro-deposit verification uses Stripe Financial Connections (automatic,
-# no extra config) or manual micro-deposits — both work out of the box.
+#   invoice.payment_failed, payment_intent.succeeded,
+#   payment_intent.payment_failed, payment_intent.canceled
+# Connected-account webhook events:
+#   account.updated, account.application.deauthorized,
+#   payout.paid, payout.failed
+# Frontend deployment also requires VITE_STRIPE_PUBLISHABLE_KEY=pk_test_....
+# Enable Stripe Connect embedded components for the platform account. LotLord uses
+# Account Onboarding, Account Management, Notification Banner, Balances, and Payouts.
+# Enable ACH Direct Debit and Financial Connections in the Stripe Dashboard.
+# Financial Connections can fall back to manual micro-deposit verification.
 
 # OpenAI
 OPENAI_API_KEY=

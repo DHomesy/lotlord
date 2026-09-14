@@ -47,8 +47,9 @@ const NAV_GROUPS = [
   {
     label: 'Finance',
     items: [
-      { label: 'Ledger',  path: '/ledger',  icon: <AccountBalanceIcon /> },
-      { label: 'Charges', path: '/charges', icon: <RequestQuoteIcon /> },
+      { label: 'Ledger',             path: '/ledger',   icon: <AccountBalanceIcon /> },
+      { label: 'Charges',            path: '/charges',  icon: <RequestQuoteIcon /> },
+      { label: 'Payments & Billing', path: '/payments', icon: <CardMembershipIcon />, roles: ['landlord'] },
     ],
   },
   {
