@@ -7,7 +7,7 @@ jest.mock('stripe', () => jest.fn(() => ({
 jest.mock('../../src/config/env', () => ({
   STRIPE_SECRET_KEY: 'sk_test_platform',
   STRIPE_WEBHOOK_SECRET: 'whsec_platform',
-  STRIPE_CONNECT_WEBHOOK_SECRET: 'whsec_connect',
+  STRIPE_CONNECT_WEBHOOK_SECRET: '  whsec_connect  ',
 }));
 
 const { constructWebhookEvent } = require('../../src/integrations/stripe');

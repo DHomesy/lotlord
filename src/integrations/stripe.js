@@ -46,7 +46,9 @@ function constructWebhookEvent(rawBody, signature) {
   const secrets = [
     env.STRIPE_WEBHOOK_SECRET,
     env.STRIPE_CONNECT_WEBHOOK_SECRET,
-  ].filter((secret, index, all) => secret && all.indexOf(secret) === index);
+  ]
+    .map((secret) => secret?.trim())
+    .filter((secret, index, all) => secret && all.indexOf(secret) === index);
 
   let signatureError;
   for (const secret of secrets) {

@@ -38,7 +38,12 @@ router.post('/stripe', async (req, res) => {
   } catch (err) {
     if (err?.type === 'StripeSignatureVerificationError') {
       // Stripe should NOT retry on a bad signature — return 400
-      console.error('[stripe webhook] Invalid signature:', err.message);
+      console.error('[stripe webhook] Invalid signature:', err.message, {
+        platformSecretConfigured: !!env.STRIPE_WEBHOOK_SECRET?.trim(),
+        connectSecretConfigured:  !!env.STRIPE_CONNECT_WEBHOOK_SECRET?.trim(),
+        rawBodyReceived:          Buffer.isBuffer(req.body),
+        contentType:              req.headers['content-type'],
+      });
       return res.status(400).json({ error: 'Invalid Stripe signature' });
     }
     // Any other error (DB failure, coding error) → 500 so Stripe retries
