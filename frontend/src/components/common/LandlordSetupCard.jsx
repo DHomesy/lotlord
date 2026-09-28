@@ -74,8 +74,8 @@ export default function LandlordSetupCard() {
     {
       label: 'Connect your bank account for rent payouts',
       done: connectStatus?.onboarded === true,
-      action: () => navigate('/profile'),
-      actionLabel: 'Open Profile',
+      action: () => navigate('/payments?tab=payouts'),
+      actionLabel: 'Open Payments & Billing',
     },
   ]
 

@@ -186,12 +186,12 @@ export default function TeamPage() {
           severity="info"
           sx={{ mb: 3 }}
           action={
-            <Button size="small" variant="contained" onClick={() => navigate('/profile?upgrade=1')}>
+            <Button size="small" variant="contained" onClick={() => navigate('/payments')}>
               Upgrade
             </Button>
           }
         >
-          Adding team members requires the <strong>Growth plan ($15/mo)</strong>. Upgrade to invite up to 5 employees.
+          Adding team members requires the <strong>Paid plan ($10/mo)</strong>. Upgrade to invite up to 5 employees.
         </Alert>
       )}
 

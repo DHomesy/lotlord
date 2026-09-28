@@ -64,6 +64,13 @@ frontend/src/
 4. `router/` has a `<RequireAuth>` guard that checks the Zustand store; unauthenticated users are redirected to `/login`.
 5. Role-based redirects: `admin`/`landlord` → `/admin/dashboard`; `tenant` → `/tenant/dashboard`.
 
+## Billing Route Ownership
+
+- `/payments` is the landlord's authoritative **Payments & Billing** workspace.
+- **Plan & Billing** contains subscription checkout, payment-method replacement, cancellation, and reactivation.
+- **Rent Payouts** (`/payments?tab=payouts`) contains Stripe Connect onboarding, account management, balances, and payouts.
+- `/profile` contains account and security settings. Legacy `billing`, `connect`, and `upgrade` query links redirect to `/payments`.
+
 ---
 
 ## Adding a New Page

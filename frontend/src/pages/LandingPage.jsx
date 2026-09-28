@@ -95,7 +95,7 @@ const FAQ = [
   },
   {
     q: 'Can I cancel or change my plan anytime?',
-    a: "Yes — no contracts, no cancellation fees. You can downgrade or cancel from your profile page at any time. You'll retain access until the end of your current billing cycle.",
+    a: "Yes — no contracts, no cancellation fees. You can downgrade or cancel from Payments & Billing at any time. You'll retain access until the end of your current billing cycle.",
   },
   {
     q: 'Do I need technical knowledge to get started?',

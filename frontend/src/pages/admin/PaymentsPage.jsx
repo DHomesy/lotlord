@@ -319,7 +319,15 @@ export default function PaymentsPage() {
     queryClient.invalidateQueries({ queryKey: SUBSCRIPTION_KEY })
   }
 
+  function clearReturnStatus(name) {
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete(name)
+    setSearchParams(nextParams, { replace: true })
+  }
+
   const paid = hasStarter(subscription)
+  const connectReturn = searchParams.get('connect')
+  const billingReturn = searchParams.get('billing')
 
   return (
     <PageContainer title="Payments & Billing">
@@ -331,6 +339,26 @@ export default function PaymentsPage() {
       {billingMessage && (
         <Alert severity={billingMessage === 'Payment method updated.' ? 'success' : 'error'} sx={{ mb: 2 }} onClose={() => setBillingMessage(null)}>
           {billingMessage}
+        </Alert>
+      )}
+      {connectReturn === 'success' && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => clearReturnStatus('connect')}>
+          Payout account setup complete. Stripe will enable payouts after verification finishes.
+        </Alert>
+      )}
+      {connectReturn === 'refresh' && (
+        <Alert severity="info" sx={{ mb: 2 }} onClose={() => clearReturnStatus('connect')}>
+          The Stripe setup link expired. Continue setup below to resume where you left off.
+        </Alert>
+      )}
+      {billingReturn === 'success' && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => clearReturnStatus('billing')}>
+          Subscription checkout completed. Paid access will appear after Stripe confirms payment.
+        </Alert>
+      )}
+      {billingReturn === 'canceled' && (
+        <Alert severity="info" sx={{ mb: 2 }} onClose={() => clearReturnStatus('billing')}>
+          Checkout canceled. You have not been charged.
         </Alert>
       )}
 

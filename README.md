@@ -678,8 +678,11 @@ Base URL: `/api/v1`
 
 The app uses **two completely separate Stripe payment flows** that must never be confused:
 
+Landlords manage both platform subscriptions and rent payout setup from **Payments & Billing** at `/payments`. The **Plan & Billing** tab owns subscription checkout and self-service; the **Rent Payouts** tab owns Stripe Connect onboarding, balances, payouts, and account management. Profile is reserved for account and security settings, while legacy Profile billing callback URLs redirect to `/payments` for compatibility.
+
 #### 1 — SaaS Subscription Billing (Landlord → LotLord platform)
 - Landlord pays for their platform tier (Free / Paid $10)
+- Landlord UI: `/payments` → **Plan & Billing**
 - The primary upgrade flow uses Stripe Checkout embedded inside LotLord; hosted Checkout remains a recovery fallback
 - Handled by: `billingController.js`, `stripeService.createEmbeddedCheckoutSession()`, `stripeService.handleWebhookEvent()` subscription events
 - Stripe entity: landlord's **billing** customer (`users.stripe_billing_customer_id`)
@@ -690,6 +693,7 @@ The app uses **two completely separate Stripe payment flows** that must never be
 
 #### 2 — Landlord Payout Account (Stripe Connect)
 - Landlord completes payout onboarding and manages payout details inside LotLord using Stripe Connect embedded components
+- Landlord UI: `/payments?tab=payouts` → **Rent Payouts**
 - Stripe-hosted Account Links and the Express Dashboard remain recovery fallbacks
 - Stripe identity and bank fields remain Stripe-controlled; LotLord receives only short-lived AccountSession client secrets
 

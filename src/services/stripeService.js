@@ -604,8 +604,8 @@ async function createConnectOnboardingLink(userId) {
   const accountId = await getOrCreateConnectAccount(userId);
   const link = await getStripe().accountLinks.create({
     account:     accountId,
-    return_url:  `${env.FRONTEND_URL}/profile?connect=success`,
-    refresh_url: `${env.FRONTEND_URL}/profile?connect=refresh`,
+    return_url:  `${env.FRONTEND_URL}/payments?tab=payouts&connect=success`,
+    refresh_url: `${env.FRONTEND_URL}/payments?tab=payouts&connect=refresh`,
     type:        'account_onboarding',
   });
   return { url: link.url, accountId };
@@ -746,8 +746,8 @@ async function createCheckoutSession(userId) {
     mode:       'subscription',
     customer:   customer.id,
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${env.FRONTEND_URL}/profile?billing=success`,
-    cancel_url:  `${env.FRONTEND_URL}/profile?billing=canceled`,
+    success_url: `${env.FRONTEND_URL}/payments?billing=success`,
+    cancel_url:  `${env.FRONTEND_URL}/payments?billing=canceled`,
     metadata:    { userId, requestedPlan: normalizedPlan },
   });
   return { url: session.url, sessionId: session.id };
@@ -936,7 +936,7 @@ async function createBillingPortalSession(userId) {
   }
   const session = await getStripe().billingPortal.sessions.create({
     customer:   billing.stripe_billing_customer_id,
-    return_url: `${env.FRONTEND_URL}/profile`,
+    return_url: `${env.FRONTEND_URL}/payments`,
   });
   return { url: session.url };
 }

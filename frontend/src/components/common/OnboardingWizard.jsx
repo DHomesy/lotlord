@@ -52,7 +52,7 @@ const STEPS = [
           It only takes a few minutes.
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Head to <strong>Profile → Stripe Payouts</strong> whenever you're ready.
+          Head to <strong>Payments &amp; Billing → Rent Payouts</strong> whenever you're ready.
         </Typography>
       </Stack>
     ),
@@ -84,10 +84,10 @@ export default function OnboardingWizard({ open, onClose, onAddProperty, storage
     onClose()
   }
 
-  const handleGoToProfile = () => {
+  const handleGoToPayments = () => {
     localStorage.setItem(storageKey, '1')
     onClose()
-    navigate('/profile')
+    navigate('/payments?tab=payouts')
   }
 
   const handleAddProperty = () => {
@@ -137,8 +137,8 @@ export default function OnboardingWizard({ open, onClose, onAddProperty, storage
 
         {/* Step-specific CTAs */}
         {step === 1 && (
-          <Button size="small" variant="outlined" onClick={handleGoToProfile}>
-            Go to Profile
+          <Button size="small" variant="outlined" onClick={handleGoToPayments}>
+            Open Payments &amp; Billing
           </Button>
         )}
         {isLast ? (

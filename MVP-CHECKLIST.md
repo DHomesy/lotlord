@@ -55,8 +55,8 @@ These must be set before the app can function at all.
 
 ### Stripe Dashboard setup
 
-- [ ] Three products created: **Starter** ($15/mo), **Enterprise** ($49/mo), **Commercial** ($79/mo + $2/unit)
-- [ ] Each price has the correct **nickname** set (`starter` / `enterprise` / `commercial` / `commercial_unit`)
+- [ ] One paid product created at **$10/month**
+- [ ] The paid price has the **nickname** `starter`
       — the webhook uses the nickname to set `subscription_plan` in the DB; wrong nickname = broken plan-gating
 - [ ] Webhook endpoint registered at `https://<your-api-domain>/api/v1/webhooks/stripe`
 - [ ] Webhook listens to these events:
@@ -68,7 +68,6 @@ These must be set before the app can function at all.
   - `customer.subscription.trial_will_end`
   - `account.updated`
 - [ ] **Customer Portal** enabled (Billing → Customer portal) with:
-  - Allow customers to switch plans (all three plans listed)
   - Allow customers to cancel
   - Allow customers to update payment methods
 
@@ -92,14 +91,15 @@ before switching to live keys. Use Stripe test cards:
 
 ### 2A — SaaS subscription lifecycle
 
-- [ ] Landlord signs up → navigates to Profile → Subscription section loads without blank state
-- [ ] Clicks "Subscribe to Starter" → redirected to Stripe Checkout → completes payment
-- [ ] Returns to `/profile?billing=success` → success banner shown → plan chip updates to "starter"
+- [ ] Landlord signs up → opens Payments & Billing → Plan & Billing loads without a blank state
+- [ ] Clicks "Upgrade to Paid" → embedded Stripe Checkout opens inside LotLord → completes payment
+- [ ] Embedded checkout returns to `/payments?checkout=return` → success feedback shown → status updates to Paid
+- [ ] Hosted Checkout fallback returns to `/payments?billing=success` → success feedback shown
 - [ ] Plan-gated features (Analytics, Portfolio) are now accessible
-- [ ] Landlord opens Stripe Customer Portal → upgrades to Enterprise → returns to profile → chip updates
-- [ ] Simulate `invoice.payment_failed` via Stripe CLI → `past_due` status → profile shows warning + "Update Payment Method" button
-- [ ] Landlord cancels via portal → returns → plan chip shows "canceled" → plan-gated features are blocked
-- [ ] Landlord re-subscribes → access restored
+- [ ] Landlord replaces the subscription card in-app
+- [ ] Simulate `invoice.payment_failed` via Stripe CLI → `past_due` status → Payments & Billing shows payment recovery guidance
+- [ ] Landlord schedules cancellation in-app → paid access remains through the period end
+- [ ] Landlord reactivates before period end → scheduled cancellation is cleared
 
 **Stripe CLI commands to test webhook events locally:**
 ```bash
@@ -110,9 +110,10 @@ stripe trigger customer.subscription.deleted
 
 ### 2B — Stripe Connect (landlord payout account)
 
-- [ ] Free landlord signs up → profile shows "Set Up Payouts" warning
-- [ ] Clicks button → redirected to Stripe Connect onboarding
-- [ ] Completes onboarding → returns to `/profile?connect=success` → banner shown, warning gone
+- [ ] Free landlord signs up → opens Payments & Billing → Rent Payouts
+- [ ] Stripe Connect onboarding renders inside LotLord
+- [ ] Hosted onboarding fallback returns to `/payments?tab=payouts&connect=success` → success feedback shown
+- [ ] Expired hosted onboarding returns to `/payments?tab=payouts&connect=refresh` → resume guidance shown
 - [ ] `stripe_account_onboarded = true` is set in DB (verify via admin panel or DB)
 
 ### 2C — ACH rent payment (tenant → landlord)
@@ -241,14 +242,14 @@ Use a **clean account** (fresh email, no existing data). This simulates a real n
 - [ ] Entries list shows dated rows with correct effective dates
 
 ### Step 8 — Payout setup (Stripe Connect)
-- [ ] Profile → "Set Up Payouts" warning is visible
-- [ ] Click → Stripe Connect onboarding → complete
-- [ ] Return to profile → warning gone → connect section shows "Connected"
+- [ ] Payments & Billing → Rent Payouts shows setup status
+- [ ] Complete embedded Stripe Connect onboarding
+- [ ] Return to Rent Payouts → status shows "Connected"
 
 ### Step 9 — Subscription (if testing paid features)
-- [ ] Profile → Subscription section shows plan cards (no blank state, no loading flash)
-- [ ] Click "Subscribe to Starter" → Stripe Checkout → complete with test card
-- [ ] Return → plan chip shows "starter" → Analytics tab unlocked
+- [ ] Payments & Billing → Plan & Billing shows the Free and Paid states without a blank state
+- [ ] Click "Upgrade to Paid" → complete embedded Checkout with the test card
+- [ ] Return → status shows Paid → Analytics tab unlocked
 
 ---
 

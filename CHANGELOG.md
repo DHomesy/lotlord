@@ -7,6 +7,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
+### Changed
+- **Unified Payments & Billing workspace** — landlords now manage subscriptions and rent payout setup in one dedicated workspace; Profile retains account and security settings, with legacy billing return links redirected for compatibility.
+- **Accurate plan messaging** — upgrade prompts consistently identify the single Paid plan at $10/month.
+
 ---
 ## [1.14.0] — 2026-09-28 — Beta Ledger & Communications Reliability
 

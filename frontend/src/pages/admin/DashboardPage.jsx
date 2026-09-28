@@ -189,7 +189,7 @@ export default function DashboardPage() {
                 ? 'Portfolio analytics require an active subscription. Contact your employer to upgrade.'
                 : "You're on the Free plan. Upgrade to Paid ($10/mo) to unlock full dashboard analytics and expanded limits."}
               {!isEmployee && (
-                <Button size="small" variant="contained" sx={{ ml: 2 }} onClick={() => navigate('/profile#subscription')}>
+                <Button size="small" variant="contained" sx={{ ml: 2 }} onClick={() => navigate('/payments')}>
                   Upgrade Now
                 </Button>
               )}
@@ -238,7 +238,7 @@ export default function DashboardPage() {
                 </Grid>
                 <Divider sx={{ my: 3 }} />
                 <Stack direction="row" justifyContent="center">
-                  <Button variant="contained" size="large" onClick={() => navigate('/profile#subscription')}>
+                  <Button variant="contained" size="large" onClick={() => navigate('/payments')}>
                     Upgrade to Paid — $10/mo
                   </Button>
                 </Stack>

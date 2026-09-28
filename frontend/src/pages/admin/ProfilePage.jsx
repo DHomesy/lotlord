@@ -1,14 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   TextField, Stack, Button, Alert, Typography,
-  Card, CardContent, CardActionArea, Divider, Box, CircularProgress, Chip, Grid,
+  Card, CardContent, CardActionArea, Divider, Grid,
 } from '@mui/material'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
-import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CardMembershipIcon from '@mui/icons-material/CardMembership'
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts'
@@ -19,7 +18,7 @@ import { useAuthStore } from '../../store/authStore'
 import { useUpdateMe, useChangePassword } from '../../hooks/useUsers'
 import { useConnectStatus } from '../../hooks/useStripeSetup'
 import { useMySubscription } from '../../hooks/useBilling'
-import { PLANS, hasStarter } from '../../lib/plans'
+import { hasStarter } from '../../lib/plans'
 
 const profileSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -41,31 +40,24 @@ export default function AdminProfilePage() {
   const { mutate: updateMe, isPending: savingProfile, isSuccess: profileSaved } = useUpdateMe()
   const { mutate: changePassword, isPending: changingPw, isSuccess: pwChanged, isError: pwError } = useChangePassword()
   const { data: connectStatus } = useConnectStatus()
-  const { data: subscription, isLoading: loadingSubscription } = useMySubscription()
-
-  const [connectBanner, setConnectBanner] = useState(null)
-  const [billingBanner, setBillingBanner] = useState(null)
-  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
-  const subscriptionRef = useRef(null)
+  const { data: subscription } = useMySubscription()
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const connect = params.get('connect')
     if (connect === 'success' || connect === 'refresh') {
-      setConnectBanner(connect)
-      window.history.replaceState({}, '', window.location.pathname)
+      navigate(`/payments?tab=payouts&connect=${connect}`, { replace: true })
+      return
     }
     const billing = params.get('billing')
     if (billing === 'success' || billing === 'canceled') {
-      setBillingBanner(billing)
-      window.history.replaceState({}, '', window.location.pathname)
+      navigate(`/payments?billing=${billing}`, { replace: true })
+      return
     }
     if (params.get('upgrade') === '1') {
-      setShowUpgradePrompt(true)
-      window.history.replaceState({}, '', window.location.pathname)
-      setTimeout(() => subscriptionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+      navigate('/payments', { replace: true })
     }
-  }, [])
+  }, [navigate])
 
   function handleStartOnboard() {
     navigate('/payments?tab=payouts')
@@ -110,7 +102,7 @@ export default function AdminProfilePage() {
               color="inherit"
               size="small"
               variant="outlined"
-              onClick={() => subscriptionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              onClick={() => navigate('/payments')}
               sx={{ whiteSpace: 'nowrap' }}
             >
               Upgrade Plan
@@ -203,201 +195,6 @@ export default function AdminProfilePage() {
             You are a team member operating under your employer&apos;s account. Billing, payout
             settings, and subscription management are handled by your employer.
           </Alert>
-        </>
-      )}
-
-      {isLandlord && (
-        <>
-          <Divider sx={{ my: 4 }} />
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
-            <Box>
-              <Typography variant="h6">Payout Account</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                Connect your bank account so rent payments from tenants are deposited directly to you.
-                Stripe handles secure bank verification and payouts (0.8% fee, capped at $5 per payment).
-              </Typography>
-            </Box>
-            {connectStatus?.onboarded ? (
-              <Chip
-                icon={<CheckCircleIcon />}
-                label="Connected"
-                color="success"
-                variant="outlined"
-                sx={{ ml: 2, flexShrink: 0 }}
-              />
-            ) : (
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={<AccountBalanceIcon />}
-                onClick={handleStartOnboard}
-                sx={{ ml: 2, flexShrink: 0 }}
-              >
-                {connectStatus?.connected ? 'Continue Setup' : 'Setup Payouts'}
-              </Button>
-            )}
-          </Stack>
-
-          {connectBanner === 'success' && (
-            <Alert severity="success" sx={{ maxWidth: 460, mt: 1 }} onClose={() => setConnectBanner(null)}>
-              Payout account setup complete! Rent payments will now be deposited to your bank.
-            </Alert>
-          )}
-          {connectBanner === 'refresh' && (
-            <Alert severity="info" sx={{ maxWidth: 460, mt: 1 }} onClose={() => setConnectBanner(null)}>
-              The setup link expired. Click "Continue Setup" to resume where you left off.
-            </Alert>
-          )}
-          {connectStatus?.connected && !connectStatus?.onboarded && !connectBanner && (
-            <Alert severity="warning" sx={{ maxWidth: 460, mt: 1 }}>
-              Setup incomplete - click "Continue Setup" to finish verifying your account so payouts can be enabled.
-            </Alert>
-          )}
-
-          {connectStatus?.onboarded && (
-            <Stack spacing={1} sx={{ maxWidth: 460, mt: 2 }}>
-              <Card variant="outlined">
-                <CardContent sx={{ py: '8px !important', display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <CheckCircleIcon fontSize="small" color="success" />
-                  <Box sx={{ flex: 1 }}>
-                    <Typography variant="body2" fontWeight={500}>Bank account verified</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Payouts {connectStatus.payoutsEnabled ? 'enabled' : 'pending activation'}
-                    </Typography>
-                  </Box>
-                  <Button
-                    size="small"
-                    onClick={() => navigate('/payments?tab=payouts')}
-                  >
-                    Manage
-                  </Button>
-                </CardContent>
-              </Card>
-            </Stack>
-          )}
-        </>
-      )}
-
-      {isLandlord && (
-        <>
-          <Divider sx={{ my: 4 }} ref={subscriptionRef} />
-
-          {showUpgradePrompt && !hasStarter(subscription) && (
-            <Alert severity="info" sx={{ mb: 2 }} onClose={() => setShowUpgradePrompt(false)}>
-              Choose the paid plan below to unlock higher limits.
-            </Alert>
-          )}
-
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
-            <Box>
-              <Typography variant="h6">Subscription</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                Free includes up to 2 properties and up to 4 units per property. Paid unlocks higher limits.
-              </Typography>
-            </Box>
-            <Chip
-              icon={<CardMembershipIcon />}
-              label={subscription?.plan ? subscription.plan : (subscription?.status ?? 'free')}
-              color={
-                subscription?.status === 'active' ? 'success' :
-                subscription?.status === 'trialing' ? 'info' :
-                subscription?.status === 'past_due' ? 'warning' :
-                subscription?.status === 'canceled' ? 'error' : 'default'
-              }
-              variant="outlined"
-              sx={{ ml: 2, flexShrink: 0, textTransform: 'capitalize' }}
-            />
-          </Stack>
-
-          {loadingSubscription && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
-              <CircularProgress size={16} />
-              <Typography variant="body2" color="text.secondary">Loading plan options...</Typography>
-            </Box>
-          )}
-
-          {billingBanner === 'success' && (
-            <Alert severity="success" sx={{ maxWidth: 560, mt: 1 }} onClose={() => setBillingBanner(null)}>
-              You&apos;re subscribed! Your plan is now active.
-            </Alert>
-          )}
-          {billingBanner === 'canceled' && (
-            <Alert severity="info" sx={{ maxWidth: 560, mt: 1 }} onClose={() => setBillingBanner(null)}>
-              Checkout canceled - you have not been charged.
-            </Alert>
-          )}
-
-          {subscription?.status === 'past_due' && (
-            <Box sx={{ mt: 1 }}>
-              <Alert severity="warning" sx={{ maxWidth: 560 }}>
-                Your last payment failed. Please update your payment method to restore full access.
-              </Alert>
-              <Button
-                variant="contained"
-                color="warning"
-                sx={{ mt: 1.5 }}
-                onClick={() => navigate('/payments')}
-              >
-                Update Payment Method
-              </Button>
-            </Box>
-          )}
-
-          {!loadingSubscription && !hasStarter(subscription) && subscription?.status !== 'past_due' && (
-            <>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2, maxWidth: 720 }}>
-                {Object.values(PLANS).map(({ key, label, price, description, features }) => (
-                  <Card
-                    key={key}
-                    variant="outlined"
-                    sx={{
-                      flex: 1,
-                      transition: 'border-color 0.15s',
-                      '&:hover': { borderColor: 'primary.main' },
-                    }}
-                  >
-                    <CardContent>
-                      <Typography variant="subtitle1" fontWeight={700}>{label}</Typography>
-                      <Typography variant="h5" fontWeight={800} color="primary.main" sx={{ my: 0.5 }}>
-                        ${price}<Typography component="span" variant="caption" color="text.secondary">/mo</Typography>
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                        {description}
-                      </Typography>
-                      {features.map((f) => (
-                        <Typography key={f} variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
-                          {`- ${f}`}
-                        </Typography>
-                      ))}
-                      <Button
-                        variant="contained"
-                        size="small"
-                        fullWidth
-                        sx={{ mt: 2 }}
-                        onClick={() => navigate('/payments')}
-                      >
-                        {`Subscribe to ${label}`}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Stack>
-            </>
-          )}
-
-          {hasStarter(subscription) && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                Current plan: <strong style={{ textTransform: 'capitalize' }}>{subscription?.plan ?? 'active'}</strong>
-              </Typography>
-              <Button
-                variant="outlined"
-                onClick={() => navigate('/payments')}
-              >
-                Manage Subscription
-              </Button>
-            </Box>
-          )}
         </>
       )}
     </PageContainer>

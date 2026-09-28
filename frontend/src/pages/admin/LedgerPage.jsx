@@ -93,13 +93,13 @@ function PortfolioTab() {
             <Button
               variant="contained"
               size="small"
-              onClick={() => navigate('/profile')}
+              onClick={() => navigate('/payments')}
             >
               Upgrade Plan
             </Button>
           }
         >
-          <strong>Portfolio Summary</strong> is a Growth plan feature. Upgrade to view cross-property
+          <strong>Portfolio Summary</strong> is a Paid plan feature. Upgrade to view cross-property
           income, outstanding balances, and net income analytics.
         </Alert>
       )}
