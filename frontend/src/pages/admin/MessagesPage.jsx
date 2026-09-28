@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -27,9 +26,6 @@ import {
   useSendMessage,
   useNotificationLog,
 } from '../../hooks/useNotifications'
-import { useMySubscription } from '../../hooks/useBilling'
-import { hasStarter } from '../../lib/plans'
-import { useAuthStore } from '../../store/authStore'
 
 const schema = z.object({
   subject: z.string().min(1, 'Subject is required'),
@@ -383,23 +379,9 @@ const AUTOMATIONS = [
   },
 ]
 
-function AutomationTab({ navigate, isPaid }) {
+function AutomationTab() {
   return (
     <Stack spacing={2}>
-      {!isPaid && (
-        <Alert
-          severity="info"
-          action={
-            <Button size="small" variant="contained" onClick={() => navigate('/profile?upgrade=1')}>
-              Upgrade
-            </Button>
-          }
-        >
-          Automated notifications are delivered to tenants on the <strong>Paid plan ($10/mo)</strong>.
-          On the free plan the jobs still run but no messages are delivered.
-        </Alert>
-      )}
-
       <Typography variant="body2" color="text.secondary">
         The following jobs run automatically on a schedule. Templates for these automations can be
         managed under <strong>Communication -&gt; Templates</strong>.
@@ -443,7 +425,6 @@ function AutomationTab({ navigate, isPaid }) {
 
 export default function MessagesPage() {
   const theme = useTheme()
-  const navigate = useNavigate()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
 
   const [tab, setTab] = useState(0)
@@ -452,10 +433,7 @@ export default function MessagesPage() {
 
   const { data: conversations = [], isLoading: loadingConvs } = useConversations()
   const { data: logData, isLoading: loadingLog } = useNotificationLog()
-  const { data: subscription } = useMySubscription()
-  const user = useAuthStore((s) => s.user)
 
-  const isPaid = hasStarter(subscription) || user?.role === 'admin'
   const logRows = Array.isArray(logData) ? logData : (logData?.log ?? [])
 
   if (loadingConvs && tab === 0) return <LoadingOverlay />
@@ -548,7 +526,7 @@ export default function MessagesPage() {
       )}
 
       {tab === 2 && (
-        <AutomationTab navigate={navigate} isPaid={isPaid} />
+        <AutomationTab />
       )}
     </PageContainer>
   )
