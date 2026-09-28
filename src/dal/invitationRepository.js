@@ -19,7 +19,11 @@ async function findByToken(token) {
     `SELECT i.*,
             u.unit_number,
             p.name          AS property_name,
-            p.address_line1 AS property_address
+            p.address_line1 AS property_address,
+            p.address_line2,
+            p.city,
+            p.state,
+            p.zip
        FROM tenant_invitations i
        LEFT JOIN units      u ON u.id = i.unit_id
        LEFT JOIN properties p ON p.id = u.property_id
@@ -72,7 +76,11 @@ async function findById(id) {
     `SELECT i.*,
             u.unit_number,
             p.name          AS property_name,
-            p.address_line1 AS property_address
+            p.address_line1 AS property_address,
+            p.address_line2,
+            p.city,
+            p.state,
+            p.zip
        FROM tenant_invitations i
        LEFT JOIN units      u ON u.id = i.unit_id
        LEFT JOIN properties p ON p.id = u.property_id

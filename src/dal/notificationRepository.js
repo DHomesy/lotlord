@@ -224,11 +224,15 @@ async function findConversations(ownerId = null) {
     JOIN   users u   ON u.id = t.user_id
     JOIN   last_msg lm ON lm.recipient_id = u.id
     LEFT JOIN unread ur ON ur.recipient_id = u.id
-    ${ownerId ? `
-    JOIN leases ls ON ls.tenant_id = t.id
-    JOIN units un ON un.id = ls.unit_id
-    JOIN properties p ON p.id = un.property_id AND p.owner_id = $1` : ''}
     WHERE  t.deleted_at IS NULL
+    ${ownerId ? `AND EXISTS (
+      SELECT 1
+        FROM leases ls
+        JOIN units un ON un.id = ls.unit_id
+        JOIN properties p ON p.id = un.property_id
+       WHERE ls.tenant_id = t.id
+         AND p.owner_id = $1
+    )` : ''}
     ORDER  BY lm.created_at DESC
   `, ownerId ? [ownerId] : []);
   return rows;

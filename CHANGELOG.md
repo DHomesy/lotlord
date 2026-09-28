@@ -8,6 +8,34 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ---
+## [1.14.0] — 2026-09-28 — Beta Ledger & Communications Reliability
+
+### Added
+- **Lease ledger date filtering** — landlords can filter a lease ledger by effective date and see opening balance, activity during the selected period, and ending balance.
+- **Tenant communication identity** — tenant-facing property emails now include the landlord name in the subject, full property address, and a landlord signature delivered via LotLord.
+- **Detailed late-fee notices** — late-fee emails identify the original rent amount, original due date, date the fee was applied, fee amount, property, and unit.
+- **Focused regression coverage** — added tests for charge lease resolution, chronological ledger balances, conversation deduplication, property email context, and late-fee variables.
+
+### Changed
+- **Chronological ledger balances** — displayed and exported running balances are calculated from signed ledger entries ordered by charge due date or payment date instead of insertion order. Immutable audit rows remain unchanged.
+- **Effective-date financial filtering** — lease statements, statement PDFs, and portfolio summaries now filter charges and payments by their business dates rather than ledger creation timestamps.
+- **Tenant invitations branded by landlord** — invitation and reminder subjects use the "Landlord via LotLord" convention and include property/unit address context.
+- **Messages beta UX clarified** — the Messages page explains that sent history is available while incoming replies are not, and temporarily hides SMS-specific controls and indicators. Existing backend SMS delivery behavior is unchanged.
+
+### Fixed
+- **Charge creation without a selected lease** — removed invalid `leases.deleted_at` predicates that caused PostgreSQL error `42703`; active or pending leases are now resolved automatically.
+- **Terminated leases available for new charges** — inactive leases are removed from the charge picker and rejected by both single and batch charge APIs.
+- **Duplicate tenant conversations** — owner-scoped conversation queries now use `EXISTS`, returning one conversation per tenant even when the tenant has multiple leases.
+- **Stale running-balance snapshots** — current balances and charge reversals now derive from append-only signed amounts instead of trusting the last insertion-time snapshot.
+
+### Migration
+- `036_tenant_email_context.sql` — updates tenant-facing notification subjects and bodies with landlord identity, property address, signature, and expanded late-fee details.
+
+### Versioning
+- Root package version bumped to `1.14.0`.
+- Frontend package version bumped to `1.14.0`.
+
+---
 ## [1.13.0] — 2026-09-14 — Embedded Payments & Billing
 
 ### Added

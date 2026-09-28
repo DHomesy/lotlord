@@ -7,6 +7,8 @@ const { getClient, query } = require('../config/db');
 const audit = require('../services/auditService');
 const { resolveOwnerId } = require('../lib/authHelpers');
 
+const CHARGEABLE_LEASE_STATUSES = new Set(['active', 'pending']);
+
 /**
  * Verify that the unit belongs to a property owned by the requesting landlord.
  * Throws a 403 error if the check fails, so controllers can await this guard.
@@ -168,19 +170,25 @@ async function createCharge(req, res, next) {
 
     // Resolve active lease — required for all charges (ledger is lease-centric)
     if (leaseId) {
-      // Explicit leaseId: verify it belongs to the same unit
+      // Explicit leaseId: verify it belongs to the same unit and is chargeable.
       const { rows: leaseRows } = await query(
-        'SELECT unit_id FROM leases WHERE id = $1 LIMIT 1',
+        'SELECT unit_id, status FROM leases WHERE id = $1 LIMIT 1',
         [leaseId],
       );
       if (!leaseRows[0]) return res.status(404).json({ error: 'Lease not found' });
       if (leaseRows[0].unit_id !== unitId) {
         return res.status(400).json({ error: 'leaseId does not belong to the supplied unitId' });
       }
+      if (!CHARGEABLE_LEASE_STATUSES.has(leaseRows[0].status)) {
+        return res.status(422).json({
+          error: 'Charges can only be added to an active or pending lease.',
+          code:  'LEASE_NOT_CHARGEABLE',
+        });
+      }
     } else {
       // Auto-resolve: find the active/pending lease on this unit
       const { rows: activeRows } = await query(
-        `SELECT id FROM leases WHERE unit_id = $1 AND status IN ('active', 'pending') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1`,
+        `SELECT id FROM leases WHERE unit_id = $1 AND status IN ('active', 'pending') ORDER BY created_at DESC LIMIT 1`,
         [unitId],
       );
       if (!activeRows[0]) {
@@ -329,15 +337,21 @@ async function createChargesBatch(req, res, next) {
     const uniqueLeaseIds = [...new Set(charges.map((c) => c.leaseId).filter(Boolean))];
     if (uniqueLeaseIds.length > 0) {
       const { rows: leaseRows } = await query(
-        'SELECT id, unit_id FROM leases WHERE id = ANY($1::uuid[])',
+        'SELECT id, unit_id, status FROM leases WHERE id = ANY($1::uuid[])',
         [uniqueLeaseIds],
       );
-      const leaseMap = Object.fromEntries(leaseRows.map((r) => [r.id, r.unit_id]));
+      const leaseMap = Object.fromEntries(leaseRows.map((r) => [r.id, r]));
       for (const c of charges) {
         if (!c.leaseId) continue;
         if (!leaseMap[c.leaseId]) return res.status(404).json({ error: `Lease ${c.leaseId} not found` });
-        if (leaseMap[c.leaseId] !== c.unitId) {
+        if (leaseMap[c.leaseId].unit_id !== c.unitId) {
           return res.status(400).json({ error: 'leaseId does not belong to the supplied unitId' });
+        }
+        if (!CHARGEABLE_LEASE_STATUSES.has(leaseMap[c.leaseId].status)) {
+          return res.status(422).json({
+            error: 'Charges can only be added to an active or pending lease.',
+            code:  'LEASE_NOT_CHARGEABLE',
+          });
         }
       }
     }
@@ -349,7 +363,7 @@ async function createChargesBatch(req, res, next) {
       const needsResolution = charges.some((c) => c.unitId === unitId && !c.leaseId);
       if (!needsResolution) continue;
       const { rows } = await query(
-        `SELECT id FROM leases WHERE unit_id = $1 AND status IN ('active', 'pending') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1`,
+        `SELECT id FROM leases WHERE unit_id = $1 AND status IN ('active', 'pending') ORDER BY created_at DESC LIMIT 1`,
         [unitId],
       );
       if (!rows[0]) {
@@ -465,10 +479,12 @@ async function voidChargesByUnit(req, res, next) {
         if (c.lease_id) {
           if (balanceCache[c.lease_id] === undefined) {
             const { rows: bal } = await client.query(
-              `SELECT balance_after FROM ledger_entries WHERE lease_id = $1 ORDER BY created_at DESC LIMIT 1`,
+              `SELECT COALESCE(SUM(amount), 0) AS balance
+                 FROM ledger_entries
+                WHERE lease_id = $1`,
               [c.lease_id],
             );
-            balanceCache[c.lease_id] = bal[0] ? parseFloat(bal[0].balance_after) : 0;
+            balanceCache[c.lease_id] = bal[0] ? parseFloat(bal[0].balance) : 0;
           }
           balanceCache[c.lease_id] = parseFloat(
             (balanceCache[c.lease_id] - parseFloat(c.amount)).toFixed(2),

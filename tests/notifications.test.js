@@ -31,6 +31,13 @@ beforeAll(async () => {
      VALUES ($1, $2, 'email', 'sent', 'Test message for tenantB')`,
     [uuidv4(), fx.tenantB.id],
   );
+
+  // A prior lease for tenantA must not multiply their conversation row.
+  await fx.pool.query(
+    `INSERT INTO leases (id, unit_id, tenant_id, status, start_date, end_date, monthly_rent)
+     VALUES ($1, $2, $3, 'terminated', CURRENT_DATE - INTERVAL '2 years', CURRENT_DATE - INTERVAL '1 year', 900)`,
+    [uuidv4(), fx.unitA.id, fx.tenantA.tenantProfileId],
+  );
 });
 
 afterAll(async () => { if (fx) await fx.teardown(); });
@@ -64,6 +71,14 @@ describe('GET /api/v1/notifications/messages (conversations)', () => {
     const ids = res.body.map((c) => c.user_id);
     expect(ids).toContain(fx.tenantA.id);
     expect(ids).not.toContain(fx.tenantB.id);
+  });
+
+  it('returns one conversation when the same tenant has multiple leases', async () => {
+    const res = await request(app)
+      .get('/api/v1/notifications/messages')
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.filter((conversation) => conversation.user_id === fx.tenantA.id)).toHaveLength(1);
   });
 
   it('landlordB can only see their own tenants — not landlordA tenants', async () => {

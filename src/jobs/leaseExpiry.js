@@ -17,6 +17,7 @@
 
 const leaseRepo = require('../dal/leaseRepository');
 const notificationService = require('../services/notificationService');
+const { buildPropertyEmailContext } = require('../lib/propertyEmailContext');
 
 /** Format a Date or date string as YYYY-MM-DD */
 function formatDate(d) {
@@ -52,6 +53,7 @@ async function sendWarnings(leases, tier) {
           days_remaining: String(days),
           unit:           lease.unit_number,
           property:       lease.property_name,
+          ...buildPropertyEmailContext(lease),
         },
       });
       result === null ? skipped++ : sent++;

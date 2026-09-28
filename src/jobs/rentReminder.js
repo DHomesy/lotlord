@@ -12,6 +12,7 @@
 
 const ledgerRepo = require('../dal/ledgerRepository');
 const notificationService = require('../services/notificationService');
+const { buildPropertyEmailContext } = require('../lib/propertyEmailContext');
 
 async function run() {
   console.log('[rentReminder] Starting...');
@@ -49,6 +50,7 @@ async function run() {
           amount:       `$${parseFloat(charge.amount).toFixed(2)}`,
           unit:         charge.unit_number,
           property:     charge.property_name,
+          ...buildPropertyEmailContext(charge),
         },
       });
 

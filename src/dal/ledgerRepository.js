@@ -1,6 +1,14 @@
 const { query, getClient } = require('../config/db');
 const { v4: uuidv4 } = require('uuid');
 
+const EFFECTIVE_DATE_SQL = `COALESCE(
+  CASE
+    WHEN le.entry_type = 'charge'  THEN rc.due_date
+    WHEN le.entry_type = 'payment' THEN rp.payment_date
+  END,
+  le.created_at::date
+)`;
+
 /** Append-only — NEVER update or delete entries from this table. */
 async function appendEntry(client, { id, leaseId, entryType, amount, balanceAfter, description, referenceId, createdBy }) {
   const { rows } = await client.query(
@@ -11,13 +19,15 @@ async function appendEntry(client, { id, leaseId, entryType, amount, balanceAfte
   return rows[0];
 }
 
-/** Get the current outstanding balance for a lease (most recent balance_after). */
+/** Get the current outstanding balance from the append-only signed amounts. */
 async function getCurrentBalance(leaseId) {
   const { rows } = await query(
-    `SELECT balance_after FROM ledger_entries WHERE lease_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    `SELECT COALESCE(SUM(amount), 0) AS balance
+       FROM ledger_entries
+      WHERE lease_id = $1`,
     [leaseId],
   );
-  return rows[0] ? parseFloat(rows[0].balance_after) : 0;
+  return rows[0] ? parseFloat(rows[0].balance) : 0;
 }
 
 /**
@@ -58,26 +68,67 @@ async function getAmountDueNow(leaseId) {
  *   payment → payment_date from the linked rent_payment
  *   credit / adjustment → falls back to created_at
  */
-async function findByLeaseId(leaseId) {
+async function findByLeaseId(leaseId, { from, to } = {}) {
+  const values = [leaseId];
+  const conditions = [];
+  if (from) conditions.push(`effective_date >= $${values.push(from)}::date`);
+  if (to)   conditions.push(`effective_date <= $${values.push(to)}::date`);
+  const rangeFilter = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
   const { rows } = await query(
-    `SELECT le.*,
-            COALESCE(
-              CASE
-                WHEN le.entry_type = 'charge'  THEN rc.due_date::TEXT
-                WHEN le.entry_type = 'payment' THEN rp.payment_date::TEXT
-              END,
-              le.created_at::DATE::TEXT
-            ) AS effective_date,
-            u.first_name || ' ' || u.last_name AS created_by_name
-     FROM ledger_entries le
-     LEFT JOIN users u         ON u.id  = le.created_by
-     LEFT JOIN rent_charges rc ON rc.id = le.reference_id AND le.entry_type = 'charge'
-     LEFT JOIN rent_payments rp ON rp.id = le.reference_id AND le.entry_type = 'payment'
-     WHERE le.lease_id = $1
-     ORDER BY effective_date ASC, le.created_at ASC`,
-    [leaseId],
+    `WITH dated_entries AS (
+       SELECT le.id,
+              le.lease_id,
+              le.entry_type,
+              le.amount,
+              le.description,
+              le.reference_id,
+              le.created_by,
+              le.created_at,
+              ${EFFECTIVE_DATE_SQL} AS effective_date,
+              u.first_name || ' ' || u.last_name AS created_by_name
+         FROM ledger_entries le
+         LEFT JOIN users u          ON u.id = le.created_by
+         LEFT JOIN rent_charges rc  ON rc.id = le.reference_id AND le.entry_type = 'charge'
+         LEFT JOIN rent_payments rp ON rp.id = le.reference_id AND le.entry_type = 'payment'
+        WHERE le.lease_id = $1
+     ), running_entries AS (
+       SELECT dated_entries.*,
+              SUM(amount) OVER (
+                ORDER BY effective_date ASC, created_at ASC, id ASC
+              ) AS computed_balance
+         FROM dated_entries
+     )
+     SELECT id,
+            lease_id,
+            entry_type,
+            amount,
+            computed_balance AS balance_after,
+            description,
+            reference_id,
+            created_by,
+            created_at,
+            effective_date::TEXT AS effective_date,
+            created_by_name
+       FROM running_entries
+       ${rangeFilter}
+      ORDER BY effective_date ASC, created_at ASC, id ASC`,
+    values,
   );
   return rows;
+}
+
+async function getBalanceBeforeDate(leaseId, date) {
+  const { rows } = await query(
+    `SELECT COALESCE(SUM(le.amount), 0) AS balance
+       FROM ledger_entries le
+       LEFT JOIN rent_charges rc  ON rc.id = le.reference_id AND le.entry_type = 'charge'
+       LEFT JOIN rent_payments rp ON rp.id = le.reference_id AND le.entry_type = 'payment'
+      WHERE le.lease_id = $1
+        AND ${EFFECTIVE_DATE_SQL} < $2::date`,
+    [leaseId, date],
+  );
+  return rows[0] ? parseFloat(rows[0].balance) : 0;
 }
 
 /** Find rent charges due on or before a date that have no completed payment.
@@ -142,6 +193,13 @@ async function findChargesDueTomorrow() {
             u.unit_number,
             p.id             AS property_id,
             p.name           AS property_name,
+            p.address_line1,
+            p.address_line2,
+            p.city,
+            p.state,
+            p.zip,
+            owner.first_name AS landlord_first_name,
+            owner.last_name  AS landlord_last_name,
             t.id             AS tenant_id,
             us.id            AS user_id,
             us.first_name,
@@ -151,6 +209,7 @@ async function findChargesDueTomorrow() {
        JOIN leases l   ON l.id = rc.lease_id
        JOIN units u    ON u.id = rc.unit_id
        JOIN properties p ON p.id = u.property_id
+      JOIN users owner ON owner.id = p.owner_id
        JOIN tenants t  ON t.id = l.tenant_id
        JOIN users us   ON us.id = t.user_id
       WHERE l.status = 'active'
@@ -186,6 +245,13 @@ async function findOverdueUnpaidCharges() {
             u.unit_number,
             p.id                AS property_id,
             p.name              AS property_name,
+            p.address_line1,
+            p.address_line2,
+            p.city,
+            p.state,
+            p.zip,
+            owner.first_name    AS landlord_first_name,
+            owner.last_name     AS landlord_last_name,
             t.id                AS tenant_id,
             us.id               AS user_id,
             us.first_name,
@@ -195,6 +261,7 @@ async function findOverdueUnpaidCharges() {
        JOIN leases l   ON l.id = rc.lease_id
        JOIN units u    ON u.id = rc.unit_id
        JOIN properties p ON p.id = u.property_id
+      JOIN users owner ON owner.id = p.owner_id
        JOIN tenants t  ON t.id = l.tenant_id
        JOIN users us   ON us.id = t.user_id
       WHERE l.status = 'active'
@@ -420,10 +487,12 @@ async function voidCharge({ chargeId, leaseId, amount, voidedBy, chargeType }) {
     let ledgerEntry = null;
     if (leaseId) {
       const { rows: bal } = await client.query(
-        `SELECT balance_after FROM ledger_entries WHERE lease_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        `SELECT COALESCE(SUM(amount), 0) AS balance
+           FROM ledger_entries
+          WHERE lease_id = $1`,
         [leaseId],
       );
-      const currentBalance = bal[0] ? parseFloat(bal[0].balance_after) : 0;
+      const currentBalance = bal[0] ? parseFloat(bal[0].balance) : 0;
       const balanceAfter   = parseFloat((currentBalance - amount).toFixed(2));
 
       const { rows: le } = await client.query(
@@ -487,11 +556,11 @@ async function getPortfolioIncomeSummary({ propertyId, fromDate, toDate, ownerId
   }
   if (fromDate) {
     values.push(fromDate);
-    conditions.push(`le.created_at >= $${values.length}::date`);
+    conditions.push(`${EFFECTIVE_DATE_SQL} >= $${values.length}::date`);
   }
   if (toDate) {
     values.push(toDate);
-    conditions.push(`le.created_at <  ($${values.length}::date + INTERVAL '1 day')`);
+    conditions.push(`${EFFECTIVE_DATE_SQL} <= $${values.length}::date`);
   }
 
   const where = conditions.join(' AND ');
@@ -516,6 +585,8 @@ async function getPortfolioIncomeSummary({ propertyId, fromDate, toDate, ownerId
      JOIN leases l      ON l.id  = le.lease_id
      JOIN units u       ON u.id  = l.unit_id
      JOIN properties p  ON p.id  = u.property_id
+    LEFT JOIN rent_charges rc  ON rc.id = le.reference_id AND le.entry_type = 'charge'
+    LEFT JOIN rent_payments rp ON rp.id = le.reference_id AND le.entry_type = 'payment'
      WHERE ${where}
      GROUP BY p.id, p.name, p.address_line1, p.city, p.state
      ORDER BY p.name ASC`,
@@ -538,6 +609,8 @@ async function getPortfolioIncomeSummary({ propertyId, fromDate, toDate, ownerId
      JOIN leases l      ON l.id  = le.lease_id
      JOIN units u       ON u.id  = l.unit_id
      JOIN properties p  ON p.id  = u.property_id
+    LEFT JOIN rent_charges rc  ON rc.id = le.reference_id AND le.entry_type = 'charge'
+    LEFT JOIN rent_payments rp ON rp.id = le.reference_id AND le.entry_type = 'payment'
      WHERE ${where}
      GROUP BY u.id, u.unit_number, p.id
      ORDER BY p.name ASC, u.unit_number ASC`,
@@ -585,31 +658,22 @@ async function getPortfolioIncomeSummary({ propertyId, fromDate, toDate, ownerId
  * Used for the tenant/landlord statement export.
  */
 async function findStatementEntries(leaseId, { from, to } = {}) {
-  const values = [leaseId];
-  const conditions = ['le.lease_id = $1'];
-  if (from) conditions.push(`le.created_at >= $${values.push(from)}`);
-  if (to)   conditions.push(`le.created_at <  $${values.push(to)}::date + INTERVAL '1 day'`);
-  const { rows } = await query(
-    `SELECT
-       le.id,
-       le.entry_type   AS type,
-       le.description,
-       le.amount,
-       le.balance_after AS balance,
-       le.created_at   AS date
-     FROM ledger_entries le
-     WHERE ${conditions.join(' AND ')}
-     ORDER BY le.created_at ASC
-     LIMIT 5000`,
-    values,
-  );
-  return rows;
+  const entries = await findByLeaseId(leaseId, { from, to });
+  return entries.slice(0, 5000).map((entry) => ({
+    id:          entry.id,
+    type:        entry.entry_type,
+    description: entry.description,
+    amount:      entry.amount,
+    balance:     entry.balance_after,
+    date:        entry.effective_date,
+  }));
 }
 
 module.exports = {
   getTotalPaid,
   appendEntry,
   getCurrentBalance,
+  getBalanceBeforeDate,
   getAmountDueNow,
   findByLeaseId,
   findStatementEntries,

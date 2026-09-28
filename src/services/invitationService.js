@@ -26,6 +26,7 @@ const { sendSms } = require('../integrations/twilio');
 const { FRONTEND_URL } = require('../config/env');
 const { resolveOwnerId } = require('../lib/authHelpers');
 const { escapeHtml } = require('../lib/templateUtils');
+const { buildPropertyEmailContext } = require('../lib/propertyEmailContext');
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -45,12 +46,16 @@ async function createInvitation({ invitedBy, firstName, lastName, email, phone, 
     throw appErr('At least one of email or phone is required to send an invitation', 400);
   }
 
-  // Validate unit ownership before creating the invitation
-  if (unitId && (user?.role === 'landlord' || user?.role === 'employee')) {
-    const unit = await unitRepo.findById(unitId);
+  let invitationUnit = null;
+  let invitationProperty = null;
+  if (unitId) {
+    invitationUnit = await unitRepo.findById(unitId);
+    const unit = invitationUnit;
     if (!unit) throw appErr('Unit not found', 404);
-    const property = await propertyRepo.findById(unit.property_id);
-    if (!property || property.owner_id !== resolveOwnerId(user)) {
+    invitationProperty = await propertyRepo.findById(unit.property_id);
+    if (!invitationProperty) throw appErr('Property not found', 404);
+    if ((user?.role === 'landlord' || user?.role === 'employee')
+        && invitationProperty.owner_id !== resolveOwnerId(user)) {
       throw appErr('You do not have permission to invite tenants to this unit', 403);
     }
   }
@@ -100,7 +105,7 @@ async function createInvitation({ invitedBy, firstName, lastName, email, phone, 
       const landlord = await userRepo.findById(invitedBy);
       if (landlord) {
         const full = [landlord.first_name, landlord.last_name].filter(Boolean).join(' ');
-        if (full) landlordName = escapeHtml(full);
+        if (full) landlordName = full;
       }
     } catch (_) { /* non-fatal */ }
   }
@@ -108,21 +113,32 @@ async function createInvitation({ invitedBy, firstName, lastName, email, phone, 
   // Delivery failures are non-fatal — the invitation row is already saved and
   // the admin can share the link manually. Catch and surface as a warning.
   const deliveryErrors = [];
+  const landlordNameHtml = escapeHtml(landlordName);
+  const propertyName = escapeHtml(invitationProperty?.name || 'Your rental property');
+  const unitLabel = invitationUnit?.unit_number ? ` - Unit ${escapeHtml(invitationUnit.unit_number)}` : '';
+  const propertyAddress = escapeHtml(buildPropertyEmailContext(invitationProperty).property_address);
+  const propertyContextHtml = invitationProperty
+    ? `<p><strong>${propertyName}${unitLabel}</strong><br>${propertyAddress}</p>`
+    : '';
+  const propertyContextText = invitationProperty
+    ? `${invitationProperty.name}${invitationUnit?.unit_number ? ` - Unit ${invitationUnit.unit_number}` : ''}, ${buildPropertyEmailContext(invitationProperty).property_address}. `
+    : '';
 
   if (email) {
     try {
       await sendEmail({
         to: email,
-        subject: "You've been invited to your rental portal",
+        subject: `${landlordName} via LotLord: Rental portal invitation`,
         html: `
           <p>${name}</p>
-          <p>${landlordName} has invited you to set up access to your rental account.</p>
+          <p>${landlordNameHtml} has invited you to set up access to your rental account.</p>
+          ${propertyContextHtml}
           <p>Click the link below to create your account. This link expires in <strong>7 days</strong>.</p>
           <p><a href="${signupUrl}" style="font-size:16px;">Accept Invitation →</a></p>
           <p style="color:#888;font-size:12px;">If you did not expect this email, you can safely ignore it.</p>
-          <p style="color:#888;font-size:12px;">Sent on behalf of ${landlordName} via LotLord.</p>
+          <p style="color:#888;font-size:12px;">Sent on behalf of ${landlordNameHtml} via LotLord.</p>
         `,
-        text: `${name} ${landlordName} has invited you to your rental portal. Sign up here: ${signupUrl} (expires in 7 days)`,
+        text: `${name} ${landlordName} has invited you to your rental portal. ${propertyContextText}Sign up here: ${signupUrl} (expires in 7 days)`,
       });
     } catch (err) {
       console.error('[invitations] email delivery failed:', err.message);
@@ -289,27 +305,32 @@ async function resendInvitation(id, user) {
       const landlord = await userRepo.findById(inv.invited_by);
       if (landlord) {
         const full = [landlord.first_name, landlord.last_name].filter(Boolean).join(' ');
-        if (full) landlordName = escapeHtml(full);
+        if (full) landlordName = full;
       }
     } catch (_) { /* non-fatal */ }
   }
 
   const deliveryErrors = [];
+  const landlordNameHtml = escapeHtml(landlordName);
+  const propertyAddress = escapeHtml(buildPropertyEmailContext(inv).property_address);
+  const propertyName = escapeHtml(inv.property_name || 'Your rental property');
+  const unitLabel = inv.unit_number ? ` - Unit ${escapeHtml(inv.unit_number)}` : '';
 
   if (inv.email) {
     try {
       await sendEmail({
         to:      inv.email,
-        subject: "Reminder: You've been invited to your rental portal",
+        subject: `${landlordName} via LotLord: Rental portal invitation reminder`,
         html: `
           <p>${name}</p>
-          <p>This is a reminder from ${landlordName} to set up access to your rental account.</p>
+          <p>This is a reminder from ${landlordNameHtml} to set up access to your rental account.</p>
+          <p><strong>${propertyName}${unitLabel}</strong><br>${propertyAddress}</p>
           <p>Click the link below to create your account. This link expires in <strong>7 days</strong>.</p>
           <p><a href="${signupUrl}" style="font-size:16px;">Accept Invitation →</a></p>
           <p style="color:#888;font-size:12px;">If you did not expect this email, you can safely ignore it.</p>
-          <p style="color:#888;font-size:12px;">Sent on behalf of ${landlordName} via LotLord.</p>
+          <p style="color:#888;font-size:12px;">Sent on behalf of ${landlordNameHtml} via LotLord.</p>
         `,
-        text: `${name} Reminder from ${landlordName}: you've been invited to your rental portal. Sign up here: ${signupUrl} (expires in 7 days)`,
+        text: `${name} Reminder from ${landlordName}: you've been invited to your rental portal for ${inv.property_name || 'your rental property'}${inv.unit_number ? ` - Unit ${inv.unit_number}` : ''}, ${buildPropertyEmailContext(inv).property_address}. Sign up here: ${signupUrl} (expires in 7 days)`,
       });
     } catch (err) {
       console.error('[invitations] resend email delivery failed:', err.message);

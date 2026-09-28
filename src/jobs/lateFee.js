@@ -18,6 +18,7 @@
 const ledgerRepo = require('../dal/ledgerRepository');
 const ledgerService = require('../services/ledgerService');
 const notificationService = require('../services/notificationService');
+const { buildPropertyEmailContext } = require('../lib/propertyEmailContext');
 
 // System user sentinel — late fees applied by the job have no createdBy user.
 // You can create a dedicated system user in the DB and use that UUID instead.
@@ -78,11 +79,17 @@ async function run() {
             first_name:   charge.first_name,
             tenant_name:  `${charge.first_name} ${charge.last_name}`,
             amount:       `$${parseFloat(result.fee).toFixed(2)}`,
+            rent_amount:  `$${parseFloat(charge.rent_amount).toFixed(2)}`,
             due_date:     charge.due_date instanceof Date
                             ? charge.due_date.toISOString().split('T')[0]
                             : String(charge.due_date),
+            original_due_date: charge.due_date instanceof Date
+                            ? charge.due_date.toISOString().split('T')[0]
+                            : String(charge.due_date),
+            late_fee_date: result.appliedDate,
             unit:         charge.unit_number,
             property:     charge.property_name,
+            ...buildPropertyEmailContext(charge),
           },
         });
       } catch (notifErr) {

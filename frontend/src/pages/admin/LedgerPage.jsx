@@ -164,12 +164,20 @@ function PortfolioTab() {
 
 function LedgerTab() {
   const [leaseId, setLeaseId] = useState(null)
-  const { data, isLoading } = useLedger(leaseId ? { leaseId } : undefined)
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+  const params = leaseId ? {
+    leaseId,
+    ...(fromDate ? { fromDate } : {}),
+    ...(toDate ? { toDate } : {}),
+  } : undefined
+  const { data, isLoading } = useLedger(params)
 
   const entries      = Array.isArray(data) ? data : (data?.entries ?? [])
   const amountDueNow = data?.amountDueNow ?? null
   const totalPaid    = data?.totalPaid ?? null
   const lease        = data?.lease ?? null
+  const isFiltered   = Boolean(fromDate || toDate)
 
   return (
     <Stack spacing={2}>
@@ -180,6 +188,33 @@ function LedgerTab() {
         helperText="Choose a lease to load its full transaction history"
         onlyActive={false}
       />
+
+      {leaseId && (
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
+          <TextField
+            label="From"
+            type="date"
+            InputLabelProps={{ shrink: true }}
+            value={fromDate}
+            onChange={(event) => setFromDate(event.target.value)}
+            sx={{ width: { sm: 170 } }}
+          />
+          <TextField
+            label="To"
+            type="date"
+            InputLabelProps={{ shrink: true }}
+            value={toDate}
+            onChange={(event) => setToDate(event.target.value)}
+            inputProps={{ min: fromDate || undefined }}
+            sx={{ width: { sm: 170 } }}
+          />
+          {isFiltered && (
+            <Button variant="text" onClick={() => { setFromDate(''); setToDate('') }}>
+              Clear Dates
+            </Button>
+          )}
+        </Stack>
+      )}
 
       {leaseId && !isLoading && !data && (
         <Typography color="text.secondary">No ledger entries found for this lease.</Typography>
@@ -218,6 +253,21 @@ function LedgerTab() {
               {totalPaid !== null ? fmtMoney(totalPaid) : '—'}
             </Typography>
           </Paper>
+        </Stack>
+      )}
+
+      {lease && isFiltered && (
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} flexWrap="wrap">
+          {[
+            { label: 'Opening Balance', value: data.openingBalance },
+            { label: 'Period Activity', value: data.periodActivity },
+            { label: 'Ending Balance', value: data.endingBalance },
+          ].map(({ label, value }) => (
+            <Paper key={label} variant="outlined" sx={{ px: 2.5, py: 1.5, minWidth: 180 }}>
+              <Typography variant="caption" color="text.secondary">{label}</Typography>
+              <Typography variant="body1" fontWeight={600}>{fmtMoney(value)}</Typography>
+            </Paper>
+          ))}
         </Stack>
       )}
 

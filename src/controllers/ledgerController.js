@@ -8,9 +8,14 @@ const { resolveOwnerId } = require('../lib/authHelpers');
 
 async function getLedger(req, res, next) {
   try {
-    const { leaseId } = req.query;
+    const { leaseId, fromDate, toDate } = req.query;
     if (!leaseId) return res.status(400).json({ error: 'leaseId query param is required' });
-    const data = await ledgerService.getLedger(leaseId);
+    if (fromDate && !isValidDate(fromDate)) return res.status(400).json({ error: 'Invalid fromDate' });
+    if (toDate && !isValidDate(toDate)) return res.status(400).json({ error: 'Invalid toDate' });
+    if (fromDate && toDate && fromDate > toDate) {
+      return res.status(400).json({ error: 'fromDate must be on or before toDate' });
+    }
+    const data = await ledgerService.getLedger(leaseId, { fromDate, toDate });
     if (req.user.role === 'tenant') {
       const tenantRecord = await tenantRepo.findByUserId(req.user.sub);
       if (!tenantRecord) return res.status(403).json({ error: 'Forbidden' });

@@ -60,7 +60,7 @@ function CreateChargeForm({ onSubmit, loading }) {
             value={field.value ?? null}
             onChange={field.onChange}
             label="Link to Lease (optional)"
-            onlyActive={false}
+            onlyActive
             error={!!errors.leaseId}
             helperText={errors.leaseId?.message}
           />

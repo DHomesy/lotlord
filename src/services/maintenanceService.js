@@ -9,6 +9,7 @@ const storage = require('../integrations/storage');
 const audit = require('./auditService');
 const { assertMimeMatchesBytes } = require('../lib/mimeUtils');
 const { resolveOwnerId } = require('../lib/authHelpers');
+const { buildPropertyEmailContext } = require('../lib/propertyEmailContext');
 
 // ── Allowed MIME types for attachments ────────────────────────────────────────
 const ALLOWED_MIME_TYPES = new Set([
@@ -210,6 +211,7 @@ async function updateRequest(id, data, user) {
         unit:     request.unit_number,
         property: request.property_name,
         status:   data.status,
+        ...buildPropertyEmailContext(request),
       },
     }).catch((err) =>
       console.warn(`[maintenance] Failed to send ${STATUS_TRIGGER[data.status]} notification:`, err.message),

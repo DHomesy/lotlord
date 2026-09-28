@@ -48,10 +48,17 @@ async function findById(id) {
             p.id            AS property_id,
             p.property_type,
             p.address_line1 AS property_address,
-            p.owner_id
+              p.address_line2,
+              p.city,
+              p.state,
+              p.zip,
+              p.owner_id,
+              owner.first_name AS landlord_first_name,
+              owner.last_name AS landlord_last_name
        FROM maintenance_requests r
        JOIN units      u ON u.id = r.unit_id
        JOIN properties p ON p.id = u.property_id
+            JOIN users owner ON owner.id = p.owner_id
       WHERE r.id = $1
       LIMIT 1`,
     [id],

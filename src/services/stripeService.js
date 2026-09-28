@@ -24,6 +24,7 @@ const env             = require('../config/env');
 const notificationService = require('./notificationService');
 const audit           = require('./auditService');
 const { achFeeBreakdown } = require('../lib/stripeFees');
+const { buildPropertyEmailContext } = require('../lib/propertyEmailContext');
 
 // ── Customer ──────────────────────────────────────────────────────────────────
 
@@ -447,6 +448,7 @@ async function onPaymentSucceeded(paymentIntent) {
         unit:         lease.unit_number,
         property:     lease.property_name,
         payment_date: paymentDateLabel,
+        ...buildPropertyEmailContext(lease),
       },
     }).catch((err) => console.error('[stripe] payment_received (tenant) notification failed:', err.message));
   }

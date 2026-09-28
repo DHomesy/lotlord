@@ -43,6 +43,20 @@ describe('GET /api/v1/charges/:id', () => {
 });
 
 describe('POST /api/v1/charges — cross-unit guard', () => {
+  it('auto-resolves the active lease when leaseId is omitted', async () => {
+    const res = await request(app)
+      .post('/api/v1/charges')
+      .set('Authorization', `Bearer ${fx.landlordA.token}`)
+      .send({
+        unitId: fx.unitA.id,
+        chargeType: 'utility',
+        amount: 75,
+        dueDate: nextMonth(),
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.charge.lease_id).toBe(fx.leaseA.id);
+  });
+
   it('landlordA cannot create a charge on landlordB unit', async () => {
     const res = await request(app)
       .post('/api/v1/charges')
@@ -56,6 +70,26 @@ describe('POST /api/v1/charges — cross-unit guard', () => {
       });
     expect(res.status).toBe(403);
   });
+
+  it('rejects an explicitly selected terminated lease', async () => {
+    await fx.pool.query(`UPDATE leases SET status = 'terminated' WHERE id = $1`, [fx.leaseA.id]);
+    try {
+      const res = await request(app)
+        .post('/api/v1/charges')
+        .set('Authorization', `Bearer ${fx.landlordA.token}`)
+        .send({
+          unitId: fx.unitA.id,
+          leaseId: fx.leaseA.id,
+          chargeType: 'rent',
+          amount: 1000,
+          dueDate: nextMonth(),
+        });
+      expect(res.status).toBe(422);
+      expect(res.body.code).toBe('LEASE_NOT_CHARGEABLE');
+    } finally {
+      await fx.pool.query(`UPDATE leases SET status = 'active' WHERE id = $1`, [fx.leaseA.id]);
+    }
+  });
 });
 
 // ── POST /api/v1/charges/batch ────────────────────────────────────────────────
@@ -67,6 +101,19 @@ function nextMonth() {
 }
 
 describe('POST /api/v1/charges/batch', () => {
+  it('auto-resolves active leases omitted from batch items', async () => {
+    const res = await request(app)
+      .post('/api/v1/charges/batch')
+      .set('Authorization', `Bearer ${fx.landlordA.token}`)
+      .send({
+        charges: [
+          { unitId: fx.unitA.id, chargeType: 'utility', amount: 50, dueDate: nextMonth() },
+        ],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.charges[0].lease_id).toBe(fx.leaseA.id);
+  });
+
   it('landlordA creates a batch of charges for own unit+lease', async () => {
     const res = await request(app)
       .post('/api/v1/charges/batch')

@@ -33,13 +33,17 @@ async function findById(id) {
   const { rows } = await query(
     `SELECT l.*,
             u.unit_number, u.rent_amount AS unit_rent,
-            p.name AS property_name, p.address_line1, p.property_type, p.owner_id,
+          p.name AS property_name, p.address_line1, p.address_line2,
+          p.city, p.state, p.zip, p.property_type, p.owner_id,
+          owner.first_name AS landlord_first_name,
+          owner.last_name AS landlord_last_name,
             tn.id AS tenant_record_id,
             us.id AS user_id,
             us.first_name, us.last_name, us.email, us.phone
      FROM leases l
      JOIN units u ON u.id = l.unit_id
      JOIN properties p ON p.id = u.property_id
+    JOIN users owner ON owner.id = p.owner_id
      JOIN tenants tn ON tn.id = l.tenant_id
      JOIN users us ON us.id = tn.user_id
      WHERE l.id = $1 LIMIT 1`,
@@ -91,12 +95,16 @@ async function update(id, fields, client = null) {
 async function findExpiringWithin(days) {
   const { rows } = await query(
     `SELECT l.*, us.id AS user_id, us.email, us.first_name, us.last_name, us.phone,
-            u.unit_number, p.name AS property_name
+            u.unit_number, p.name AS property_name,
+            p.address_line1, p.address_line2, p.city, p.state, p.zip,
+            owner.first_name AS landlord_first_name,
+            owner.last_name AS landlord_last_name
      FROM leases l
      JOIN tenants t ON t.id = l.tenant_id
      JOIN users us ON us.id = t.user_id
      JOIN units u ON u.id = l.unit_id
      JOIN properties p ON p.id = u.property_id
+    JOIN users owner ON owner.id = p.owner_id
      WHERE l.status = 'active'
        AND l.end_date BETWEEN NOW() AND NOW() + ($1 || ' days')::INTERVAL`,
     [days],

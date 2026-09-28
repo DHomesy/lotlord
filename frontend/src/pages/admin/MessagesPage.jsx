@@ -13,7 +13,6 @@ import AddIcon from '@mui/icons-material/Add'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import SendIcon from '@mui/icons-material/Send'
 import EmailIcon from '@mui/icons-material/Email'
-import SmsIcon from '@mui/icons-material/Sms'
 import NotificationsIcon from '@mui/icons-material/Notifications'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 
@@ -54,12 +53,10 @@ function initials(row) {
 }
 
 function channelIcon(channel) {
-  return channel === 'sms'
-    ? <SmsIcon sx={{ fontSize: 14 }} />
-    : <EmailIcon sx={{ fontSize: 14 }} />
+  return channel === 'email' ? <EmailIcon sx={{ fontSize: 14 }} /> : null
 }
 
-function OptInChips({ emailOptIn, smsOptIn }) {
+function OptInChips({ emailOptIn }) {
   return (
     <Stack direction="row" spacing={0.5}>
       <Chip
@@ -68,14 +65,6 @@ function OptInChips({ emailOptIn, smsOptIn }) {
         size="small"
         color={emailOptIn ? 'success' : 'default'}
         variant={emailOptIn ? 'filled' : 'outlined'}
-        sx={{ height: 20, fontSize: 11 }}
-      />
-      <Chip
-        icon={<SmsIcon sx={{ fontSize: 12 }} />}
-        label="SMS"
-        size="small"
-        color={smsOptIn ? 'success' : 'default'}
-        variant={smsOptIn ? 'filled' : 'outlined'}
         sx={{ height: 20, fontSize: 11 }}
       />
     </Stack>
@@ -202,7 +191,7 @@ function ConversationList({ conversations, selectedTenantId, onSelect }) {
                       {c.last_subject || (c.last_body?.slice(0, 40) + '...')}
                     </Typography>
                   </Stack>
-                  <OptInChips emailOptIn={c.email_opt_in} smsOptIn={c.sms_opt_in} />
+                  <OptInChips emailOptIn={c.email_opt_in} />
                 </Stack>
               }
               secondaryTypographyProps={{ component: 'div' }}
@@ -250,7 +239,7 @@ function ThreadView({ tenantId, onBack }) {
             {tenant.first_name} {tenant.last_name}
           </Typography>
           <Stack direction="row" spacing={0.5} alignItems="center">
-            <OptInChips emailOptIn={tenant.email_opt_in} smsOptIn={tenant.sms_opt_in} />
+            <OptInChips emailOptIn={tenant.email_opt_in} />
           </Stack>
         </Box>
       </Box>
@@ -369,7 +358,6 @@ function ThreadView({ tenantId, onBack }) {
 
 const LOG_COLUMNS = [
   { field: 'created_at', headerName: 'Sent', width: 150, valueFormatter: (v) => v?.slice(0, 16).replace('T', ' ') },
-  { field: 'channel', headerName: 'Channel', width: 90 },
   { field: 'subject', headerName: 'Subject', flex: 1.5 },
   { field: 'status', headerName: 'Status', width: 110, renderCell: ({ value }) => <StatusChip status={value} /> },
 ]
@@ -490,6 +478,12 @@ export default function MessagesPage() {
         ) : null
       }
     >
+      <Alert severity="info" sx={{ mb: 2 }}>
+        <strong>Messages is in beta.</strong> You can send email and review sent history here.
+        Incoming replies are not available yet, and SMS controls are temporarily hidden.
+        Existing notification preferences still determine delivery.
+      </Alert>
+
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
         <Tab label="Conversations" />
         <Tab label="Notification Log" />

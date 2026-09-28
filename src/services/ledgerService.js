@@ -8,13 +8,14 @@ const audit = require('./auditService');
 /**
  * Get the full ledger history + current balance for a lease.
  */
-async function getLedger(leaseId) {
-  const [lease, entries, balance, amountDueNow, totalPaid] = await Promise.all([
+async function getLedger(leaseId, { fromDate, toDate } = {}) {
+  const [lease, entries, balance, amountDueNow, totalPaid, openingBalance] = await Promise.all([
     leaseRepo.findById(leaseId),
-    ledgerRepo.findByLeaseId(leaseId),
+    ledgerRepo.findByLeaseId(leaseId, { from: fromDate, to: toDate }),
     ledgerRepo.getCurrentBalance(leaseId),
     ledgerRepo.getAmountDueNow(leaseId),
     ledgerRepo.getTotalPaid(leaseId),
+    fromDate ? ledgerRepo.getBalanceBeforeDate(leaseId, fromDate) : 0,
   ]);
 
   if (!lease) {
@@ -23,7 +24,24 @@ async function getLedger(leaseId) {
     throw err;
   }
 
-  return { lease, entries, currentBalance: balance, amountDueNow, totalPaid };
+  const periodActivity = parseFloat(entries.reduce(
+    (total, entry) => total + parseFloat(entry.amount),
+    0,
+  ).toFixed(2));
+  const endingBalance = entries.length
+    ? parseFloat(entries[entries.length - 1].balance_after)
+    : openingBalance;
+
+  return {
+    lease,
+    entries,
+    currentBalance: balance,
+    amountDueNow,
+    totalPaid,
+    openingBalance,
+    periodActivity,
+    endingBalance,
+  };
 }
 
 /**
@@ -180,12 +198,13 @@ async function applyLateFee({ leaseId, createdBy }) {
     await client.query('BEGIN');
 
     const chargeId = uuidv4();
+    const appliedDate = new Date().toISOString().split('T')[0];
     await ledgerRepo.createCharge(client, {
       id: chargeId,
       unitId:    lease.unit_id,
       leaseId,
       tenantId:  lease.tenant_id,
-      dueDate:   new Date().toISOString().split('T')[0],
+      dueDate:   appliedDate,
       amount:    fee,
       chargeType: 'late_fee',
       description: 'Late fee applied',
@@ -207,7 +226,7 @@ async function applyLateFee({ leaseId, createdBy }) {
     });
 
     await client.query('COMMIT');
-    return { chargeId, fee, balanceAfter };
+    return { chargeId, fee, balanceAfter, appliedDate };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

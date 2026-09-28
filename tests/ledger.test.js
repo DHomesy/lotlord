@@ -100,6 +100,35 @@ describe('GET /api/v1/ledger', () => {
     expect(res.status).toBe(200);
   });
 
+  it('calculates each displayed balance in effective-date order', async () => {
+    const res = await request(app)
+      .get(`/api/v1/ledger?leaseId=${fx.leaseA.id}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+
+    let runningBalance = 0;
+    for (const entry of res.body.entries) {
+      runningBalance += Number(entry.amount);
+      expect(Number(entry.balance_after)).toBeCloseTo(runningBalance, 2);
+    }
+  });
+
+  it('returns opening, activity, and ending balances for a date filter', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const res = await request(app)
+      .get(`/api/v1/ledger?leaseId=${fx.leaseA.id}&fromDate=${today}&toDate=${today}`)
+      .set('Authorization', `Bearer ${fx.landlordA.token}`);
+    expect(res.status).toBe(200);
+    expect(typeof res.body.openingBalance).toBe('number');
+    expect(typeof res.body.periodActivity).toBe('number');
+    expect(typeof res.body.endingBalance).toBe('number');
+    expect(res.body.endingBalance).toBeCloseTo(
+      res.body.openingBalance + res.body.periodActivity,
+      2,
+    );
+    expect(res.body.entries.every((entry) => entry.effective_date === today)).toBe(true);
+  });
+
   it('landlordA cannot fetch ledger for landlordB lease', async () => {
     const res = await request(app)
       .get(`/api/v1/ledger?leaseId=${fx.leaseB.id}`)
